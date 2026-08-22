@@ -277,6 +277,16 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <p className="text-sm text-slate-700">{item.static_linkage}</p>
             </div>
           ) : null}
+          {item.static_notes ? (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                Static notes
+              </p>
+              <div className="prose-notes text-sm">
+                <Markdown>{item.static_notes}</Markdown>
+              </div>
+            </div>
+          ) : null}
           {item.prelims_facts ? (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">

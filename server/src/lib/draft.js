@@ -76,11 +76,12 @@ function findingsFor(db, article) {
     )
     .all(article.id);
 
-  // Which paper units the matched topics already feed. This is the cross-paper
-  // reuse map doing real work rather than being a view: the drafter is handed
-  // the units this event's topics are known to serve, so a Polavaram story
-  // arrives already knowing it belongs to Paper II, Paper IV and the essay.
   // Units the matched topics can feed — CANDIDATES, deliberately few.
+  //
+  // This is the cross-paper reuse map doing real work rather than being a view:
+  // the drafter is handed the units this event's topics are known to serve, so a
+  // Polavaram story arrives already knowing it may belong to Paper II, Paper IV
+  // and the essay.
   //
   // This list used to be every unit every matched topic touches, introduced as
   // "tag at least these". Both halves were wrong, and together they produced the
@@ -348,7 +349,7 @@ function toText(value) {
 // insert rather than merely looking odd.
 const TEXT_FIELDS = [
   'headline', 'event_date', 'bucket', 'subject_tag', 'notes_markdown',
-  'static_linkage', 'prelims_facts', 'g1_bank', 'g1_fact', 'g1_angle',
+  'static_linkage', 'static_notes', 'prelims_facts', 'g1_bank', 'g1_fact', 'g1_angle',
   'g1_theme', 'g1_sub_theme', 'g1_why_news', 'g1_background', 'g1_ap_angle',
   'g1_linked', 'g1_bridges', 'g1_way_forward', 'verify_note', 'discard_reason',
 ];
@@ -431,13 +432,13 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
 
     const insItem = db.prepare(
       `INSERT INTO ca_items (day_id, headline, event_date, bucket, subject_tag,
-         notes_markdown, static_linkage, prelims_facts, g1_bank, g1_fact, g1_angle,
+         notes_markdown, static_linkage, static_notes, prelims_facts, g1_bank, g1_fact, g1_angle,
          g1_theme, g1_sub_theme, g1_why_news, g1_background, g1_ap_angle,
          g1_linked, g1_bridges, g1_way_forward,
          importance, relevance_g1, relevance_g2, needs_verify, verify_note,
          order_index, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
-         @notes_markdown, @static_linkage, @prelims_facts, @g1_bank, @g1_fact, @g1_angle,
+         @notes_markdown, @static_linkage, @static_notes, @prelims_facts, @g1_bank, @g1_fact, @g1_angle,
          @g1_theme, @g1_sub_theme, @g1_why_news, @g1_background, @g1_ap_angle,
          @g1_linked, @g1_bridges, @g1_way_forward,
          @importance, @relevance_g1, @relevance_g2, @needs_verify, @verify_note,
@@ -519,6 +520,7 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         subject_tag: r.subject_tag || '',
         notes_markdown: r.notes_markdown || '',
         static_linkage: r.static_linkage || '',
+        static_notes: r.static_notes || '',
         prelims_facts: r.prelims_facts || '',
         g1_bank: r.g1_bank || null,
         g1_fact: r.g1_fact || '',

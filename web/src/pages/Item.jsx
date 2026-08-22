@@ -142,6 +142,22 @@ export default function Item() {
         </section>
       ) : null}
 
+      {/* The static material itself. `static_linkage` says which syllabus topic
+          the news updates; this is that topic, set out so the news can actually
+          be used in an answer without going elsewhere first. Given its own
+          section rather than folded into the notes, because it is the part that
+          does NOT change with the day. */}
+      {item.static_notes ? (
+        <section className="mb-5 rounded-lg border border-slate-300 bg-surface p-4">
+          <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+            Static notes — the standing material behind this
+          </h2>
+          <div className="prose-notes text-sm">
+            <Markdown>{item.static_notes}</Markdown>
+          </div>
+        </section>
+      ) : null}
+
       {/* ---- Group-II lane ---- */}
       {showG2 && item.relevance_g2 ? (
         <section className="mb-5 rounded-lg border border-brand-200 bg-brand-50 p-4">

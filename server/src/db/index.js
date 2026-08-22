@@ -33,6 +33,17 @@ db.exec(schema);
       ['g1_linked', "TEXT NOT NULL DEFAULT ''"],
       ['g1_bridges', "TEXT NOT NULL DEFAULT ''"],
       ['g1_way_forward', "TEXT NOT NULL DEFAULT ''"],
+      // The STATIC syllabus content the news sits on top of.
+      //
+      // `static_linkage` names the topic a news item updates — "this updates the
+      // static topics of inter-State river-water disputes, riparian rights,
+      // tribunals". That tells a candidate what to go and read, and then leaves
+      // them to find it. A news item is unusable in an answer without the
+      // standing material underneath it: nobody writes a Mains answer on a
+      // Krishna water dispute out of one day's report.
+      //
+      // So this carries the reading itself, exam-shaped, alongside the news.
+      ['static_notes', "TEXT NOT NULL DEFAULT ''"],
     ],
     // Whether `stem` is the question as printed, or only a description of it.
     //

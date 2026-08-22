@@ -19,6 +19,7 @@ const VISIBLE = `i.status = 'published' AND d.status = 'published'`;
 function itemColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
           ${alias}.subject_tag, ${alias}.notes_markdown, ${alias}.static_linkage,
+          ${alias}.static_notes,
           ${alias}.prelims_facts, ${alias}.g1_bank, ${alias}.g1_fact, ${alias}.g1_angle,
           ${alias}.g1_theme, ${alias}.g1_sub_theme, ${alias}.g1_why_news,
           ${alias}.g1_background, ${alias}.g1_ap_angle, ${alias}.g1_linked,

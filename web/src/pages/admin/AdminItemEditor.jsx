@@ -28,6 +28,7 @@ const BLANK = {
   subject_tag: '',
   notes_markdown: '',
   static_linkage: '',
+  static_notes: '',
   prelims_facts: '',
   g1_bank: '',
   g1_fact: '',
@@ -358,6 +359,17 @@ function ItemForm({ initial, dayId, meta, onDone, onCancel }) {
           value={form.static_linkage}
           onChange={(e) => set('static_linkage', e.target.value)}
           placeholder="Which static syllabus unit does this news update?"
+          className={input}
+        />
+      </label>
+
+      <label className="block">
+        <span className={label}>Static notes</span>
+        <textarea
+          rows={10}
+          value={form.static_notes}
+          onChange={(e) => set('static_notes', e.target.value)}
+          placeholder="The standing syllabus material this news sits on — Articles, cases, bodies, the AP dimension. Markdown."
           className={input}
         />
       </label>
