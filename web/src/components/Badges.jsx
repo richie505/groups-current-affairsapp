@@ -56,15 +56,31 @@ export function KeywordBadge({ keyword }) {
 // code alone ('P4-U4') means nothing until you have learnt the map, and the
 // whole point of the tag is that current affairs become updates to a skeleton
 // the student already has.
+// A paper unit, named rather than coded.
+//
+// This used to show "P3-U7" and hide "Policy process, implementation, scheme
+// design and failure" in a tooltip — so a row of six chips read P1 P3-U1 P3-U5
+// P3-U7 P4-U6 P4-U11 and told a reader nothing without six hovers.
+//
+// The code stays, in monospace, because it is the canonical handle: it is what
+// the drafting prompt uses, what ref_units is keyed on, and what a person types
+// when they want to query one. The label sits beside it.
+//
+// The full label, not a shortened one. Truncating to the first clause was tried
+// and is worse than the code: six different units all shorten to "AP history",
+// which makes P2-U2 (Satavahanas and Ikshvakus) and P2-U6 (colonial
+// administration) indistinguishable. At a median of 54 characters the labels are
+// short enough to show whole.
 export function UnitBadge({ unit }) {
   const code = typeof unit === 'string' ? unit : unit.unit_code;
   const label = typeof unit === 'string' ? '' : unit.label;
   return (
     <Chip
-      className="bg-green-100 text-green-800 border-green-300 font-mono"
+      className="bg-green-100 text-green-800 border-green-300"
       title={label ? `${code} — ${label}` : code}
     >
-      {code}
+      <span className="font-mono text-[10px] opacity-70">{code}</span>
+      {label ? <span className="ml-1">{label}</span> : null}
     </Chip>
   );
 }

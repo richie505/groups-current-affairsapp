@@ -247,7 +247,7 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
           <KeywordBadge key={k} keyword={k} />
         ))}
         {item.units.map((u) => (
-          <UnitBadge key={u} unit={u} />
+          <UnitBadge key={u.unit_code || u} unit={u} />
         ))}
       </div>
 

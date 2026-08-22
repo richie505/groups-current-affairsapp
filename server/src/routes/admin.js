@@ -179,8 +179,14 @@ router.get('/queue', (req, res) => {
     }
     for (const r of db.prepare(`SELECT item_id, keyword FROM ca_item_keywords WHERE item_id IN (${holes})`).all(...ids))
       byId.get(r.item_id)?.keywords.push(r.keyword);
-    for (const r of db.prepare(`SELECT item_id, unit_code FROM ca_item_units WHERE item_id IN (${holes})`).all(...ids))
-      byId.get(r.item_id)?.units.push(r.unit_code);
+    for (const r of db
+      .prepare(
+        `SELECT u.item_id, u.unit_code, r.label, r.paper
+           FROM ca_item_units u LEFT JOIN ref_units r ON r.unit_code = u.unit_code
+          WHERE u.item_id IN (${holes}) ORDER BY u.unit_code`
+      )
+      .all(...ids))
+      byId.get(r.item_id)?.units.push({ unit_code: r.unit_code, label: r.label, paper: r.paper });
     for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids))
       byId.get(r.item_id)?.themes.push(r.theme);
     for (const r of db
@@ -245,7 +251,13 @@ router.get('/days/:id/items', (req, res) => {
   const items = db.prepare('SELECT * FROM ca_items WHERE day_id = ? ORDER BY order_index, id').all(req.params.id);
   for (const it of items) {
     it.keywords = db.prepare('SELECT keyword FROM ca_item_keywords WHERE item_id = ?').all(it.id).map((r) => r.keyword);
-    it.units = db.prepare('SELECT unit_code FROM ca_item_units WHERE item_id = ?').all(it.id).map((r) => r.unit_code);
+    it.units = db
+      .prepare(
+        `SELECT u.unit_code, r.label, r.paper
+           FROM ca_item_units u LEFT JOIN ref_units r ON r.unit_code = u.unit_code
+          WHERE u.item_id = ? ORDER BY u.unit_code`
+      )
+      .all(it.id);
     it.themes = db.prepare('SELECT theme FROM ca_item_themes WHERE item_id = ?').all(it.id).map((r) => r.theme);
     it.sources = db
       .prepare('SELECT id, url, publisher, is_primary FROM ca_item_sources WHERE item_id = ? ORDER BY is_primary DESC, id')
