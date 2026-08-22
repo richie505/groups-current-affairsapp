@@ -745,25 +745,4 @@ router.get('/search', (req, res) => {
   res.json({ items, query: q });
 });
 
-// ---- Flagging a bad question -------------------------------------------
-
-router.post('/mcqs/:id/flag', (req, res) => {
-  const { reason, note } = req.body || {};
-  const reasons = ['wrong_answer', 'outdated', 'unclear', 'typo', 'not_in_notes', 'other'];
-  if (!reasons.includes(reason)) return res.status(400).json({ error: 'Pick a reason.' });
-  try {
-    db.prepare(
-      `INSERT INTO ca_mcq_flags (user_id, mcq_id, reason, note) VALUES (?, ?, ?, ?)`
-    ).run(req.user.id, req.params.id, reason, String(note || '').slice(0, 1000));
-  } catch (e) {
-    // The partial unique index means a second open report on the same question
-    // is a conflict, not a failure the student should see as an error.
-    if (String(e.message).includes('UNIQUE')) {
-      return res.json({ ok: true, already: true });
-    }
-    throw e;
-  }
-  res.json({ ok: true });
-});
-
 module.exports = router;

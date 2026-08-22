@@ -31,10 +31,7 @@ import AdminQueue from './pages/admin/AdminQueue';
 import AdminEditions from './pages/admin/AdminEditions';
 import AdminDays from './pages/admin/AdminDays';
 import AdminItemEditor from './pages/admin/AdminItemEditor';
-import AdminFlags from './pages/admin/AdminFlags';
-import AdminRuns from './pages/admin/AdminRuns';
 import AdminStudents from './pages/admin/AdminStudents';
-import AdminCorrections from './pages/admin/AdminCorrections';
 
 export default function App() {
   return (
@@ -77,10 +74,7 @@ export default function App() {
                     <Route path="/admin/editions/:id" element={<AdminEditions />} />
                     <Route path="/admin/days" element={<AdminDays />} />
                     <Route path="/admin/days/:dayId" element={<AdminItemEditor />} />
-                    <Route path="/admin/flags" element={<AdminFlags />} />
-                    <Route path="/admin/runs" element={<AdminRuns />} />
                     <Route path="/admin/students" element={<AdminStudents />} />
-                    <Route path="/admin/corrections" element={<AdminCorrections />} />
                   </Route>
 
                   <Route path="/index.html" element={<Navigate to="/" replace />} />

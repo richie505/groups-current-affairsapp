@@ -46,9 +46,6 @@ const ADMIN_LINKS = [
   { to: '/admin/editions', label: 'Newspaper import', icon: IconBook },
   { to: '/admin/queue', label: 'Review queue', icon: IconList },
   { to: '/admin/days', label: 'Digests', icon: IconCalendar },
-  { to: '/admin/runs', label: 'Pipeline runs', icon: IconRepeat },
-  { to: '/admin/flags', label: 'Flags', icon: IconAlert },
-  { to: '/admin/corrections', label: 'Corrections', icon: IconAlert },
   { to: '/admin/students', label: 'Students', icon: IconUsers },
 ];
 

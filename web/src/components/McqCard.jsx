@@ -4,7 +4,6 @@ import remarkBreaks from 'remark-breaks';
 import { api } from '../api/client';
 import { autoFormatMcqText } from '../lib/mcqFormat';
 import Markdown from './Markdown';
-import ReportMcq from './ReportMcq';
 
 const LETTERS = ['a', 'b', 'c', 'd'];
 const MCQ_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
@@ -109,7 +108,6 @@ export default function McqCard({ mcq, index, onAnswered }) {
           always-visible report link invites noise. */}
       {result && (
         <div className="mt-3 flex justify-end">
-          <ReportMcq mcqId={mcq.id} />
         </div>
       )}
     </div>

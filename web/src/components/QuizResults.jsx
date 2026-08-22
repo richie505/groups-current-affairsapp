@@ -3,7 +3,6 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { autoFormatMcqText } from '../lib/mcqFormat';
 import Markdown from './Markdown';
-import ReportMcq from './ReportMcq';
 import { IconCheck, IconX, IconRepeat } from './Icon';
 
 // The score, then the whole paper marked up. Reviewing what you got wrong is
@@ -123,7 +122,6 @@ export default function QuizResults({ result, onRetake, label }) {
               <Link to={`/item/${r.item_id}`} className="truncate text-xs text-brand-700 hover:underline">
                 Back to the item: {r.headline}
               </Link>
-              <ReportMcq mcqId={r.mcq_id} />
             </div>
           </li>
         ))}

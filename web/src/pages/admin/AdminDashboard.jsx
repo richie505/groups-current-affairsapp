@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import useResource from '../../hooks/useResource';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
-import { IconAlert, IconList, IconRepeat } from '../../components/Icon';
+import { IconAlert, IconList } from '../../components/Icon';
 
 function Tile({ label, value, to, tone = 'slate', sub }) {
   const tones = {
@@ -66,12 +66,6 @@ export default function AdminDashboard() {
       icon: IconAlert,
       tone: 'amber',
     },
-    c.open_flags > 0 && {
-      label: `${c.open_flags} question${c.open_flags === 1 ? '' : 's'} reported by students`,
-      to: '/admin/flags',
-      icon: IconAlert,
-      tone: 'red',
-    },
   ].filter(Boolean);
 
   return (
@@ -123,62 +117,6 @@ export default function AdminDashboard() {
         <Tile label="Draft digests" value={c.draft_days} to="/admin/queue" />
       </div>
 
-      <section>
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-600">
-          <IconRepeat /> Recent pipeline runs
-        </h2>
-        {data.runs.length === 0 ? (
-          <p className="rounded-lg border border-slate-200 bg-surface p-4 text-sm text-slate-500">
-            No runs recorded yet. See{' '}
-            <code className="rounded bg-slate-100 px-1">content-pipeline/ca-daily/README.md</code>{' '}
-            for how to start one.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-surface">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Window</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Found</th>
-                  <th className="px-3 py-2">Drafted</th>
-                  <th className="px-3 py-2">Discarded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.runs.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-3 py-2 text-slate-800">
-                      {r.window_start === r.window_end
-                        ? r.window_start
-                        : `${r.window_start} → ${r.window_end}`}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={
-                          r.status === 'done'
-                            ? 'text-green-700'
-                            : r.status === 'failed'
-                              ? 'text-red-700'
-                              : 'text-slate-600'
-                        }
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{r.candidates}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.drafted}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.discarded}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Link to="/admin/runs" className="mt-2 inline-block text-sm font-medium text-brand-700 hover:underline">
-          All runs →
-        </Link>
-      </section>
     </div>
   );
 }
