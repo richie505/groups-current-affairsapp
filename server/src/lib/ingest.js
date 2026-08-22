@@ -202,10 +202,41 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
     const insert = db.prepare(
       `INSERT INTO np_articles
          (edition_id, page, headline, standfirst, byline, dateline, body, chars,
-          language, extraction, ocr_confidence, prominence, ap, status, discard_reason)
+          language, extraction, ocr_confidence, prominence, ap, status, discard_reason,
+          continues_on)
        VALUES (@edition_id, @page, @headline, @standfirst, @byline, @dateline, @body,
                @chars, @language, @extraction, @ocr_confidence, @prominence, @ap,
-               @status, @discard_reason)`
+               @status, @discard_reason, @continues_on)`
+    );
+
+    // Provenance has to survive a re-process.
+    //
+    // The insert below replaces every article for this edition, which is right —
+    // two generations side by side would be worse. But `item_id` is the link
+    // from a newspaper article to the knowledge item it produced, and deleting
+    // the row silently breaks it: the items live on with no way back to the page
+    // they came from, and re-running the drafter would produce a second copy of
+    // every one of them.
+    //
+    // So the links are lifted before the delete and put back after, matched on
+    // page plus a normalised headline. Headlines are stable across a re-process
+    // unless segmentation changed that specific story — which is exactly the
+    // case where the old link SHOULD be dropped, because the article is no
+    // longer the same article. Whatever cannot be matched is reported rather
+    // than quietly lost.
+    const keyOf = (page, headline) =>
+      `${page}:${String(headline || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60)}`;
+    const priorLinks = new Map();
+    for (const row of db
+      .prepare(
+        `SELECT page, headline, item_id, status FROM np_articles
+          WHERE edition_id = ? AND item_id IS NOT NULL`
+      )
+      .all(ed.id)) {
+      priorLinks.set(keyOf(row.page, row.headline), row);
+    }
+    const relink = db.prepare(
+      "UPDATE np_articles SET item_id = ?, status = 'drafted' WHERE id = ?"
     );
     const setMerged = db.prepare('UPDATE np_articles SET merged_into = ? WHERE id = ?');
 
@@ -235,7 +266,27 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
           ap: isAp(a) ? 1 : 0,
           status: isLead ? 'new' : 'duplicate',
           discard_reason: isLead ? '' : 'same event as another article in this edition',
+          continues_on: a.continues_on ?? null,
         }).lastInsertRowid;
+      }
+
+      // Put the provenance back.
+      let relinked = 0;
+      const matched = new Set();
+      for (let i = 0; i < all.length; i++) {
+        const prior = priorLinks.get(keyOf(all[i].page, all[i].headline));
+        if (!prior || matched.has(prior.item_id)) continue;
+        matched.add(prior.item_id);
+        relink.run(prior.item_id, ids[i]);
+        relinked += 1;
+      }
+      if (priorLinks.size) {
+        log(
+          `Re-linked ${relinked} of ${priorLinks.size} article(s) to the items they produced` +
+            (relinked < priorLinks.size
+              ? ` — ${priorLinks.size - relinked} could not be matched and their items are now orphaned`
+              : '')
+        );
       }
       for (let i = 0; i < all.length; i++) {
         const lead = leadOf.get(i);

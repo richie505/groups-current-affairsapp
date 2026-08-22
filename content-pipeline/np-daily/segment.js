@@ -76,6 +76,66 @@ const width = (b) => b.bbox[2] - b.bbox[0];
 // role classification
 // ---------------------------------------------------------------------------
 
+// Page-pointer lines — "CONTINUED ON » PAGE 8", "SPORT » PAGE 15".
+//
+// Typographically these are terminators and navigation: they are furniture, not
+// prose. Left in the body they end up inside a note, and worse, inside the text
+// the relevance scorer and the entity extractor read.
+//
+// There are two kinds, and conflating them would be a factual error rather than
+// a tidiness one. Page 7 of the test edition carries both:
+//
+//   CONTINUED ON » PAGE 8            this story runs on to page 8
+//   JUDGE BACKS DEFINITION » PAGE 8  a DIFFERENT story about the same case
+//   SPORT » PAGE 15                  a pointer to an unrelated section
+//
+// Only the first is a continuation. Recording "SPORT » PAGE 15" as where a
+// Supreme Court story continues would invent a jump that does not exist. All
+// three are stripped from the prose; only the first sets `continues_on`.
+const POINTER_LINE = /(?:CONTINUED\s+ON|[A-Z][A-Z\s'’.]{3,40})\s*»\s*PAGE\s*(\d{1,3})/gi;
+const CONTINUATION = /CONTINUED\s+ON\s*»\s*PAGE\s*(\d{1,3})/gi;
+const JUMP_ONLY = /^\s*(?:(?:CONTINUED\s+ON|[A-Z][A-Z\s'’.]{3,40})\s*»\s*PAGE\s*\d{1,3}\s*)+$/i;
+
+// The modal width of a body block on this page — one column, in points.
+//
+// WHY THIS IS NEEDED
+//
+// Because the PDF text layer occasionally emits ONE block spanning several
+// columns, merging text from unrelated stories that happen to share a vertical
+// band. On page 7 of the 21 August edition, 40 of 44 body blocks were exactly
+// 105pt wide and one was 886pt — and that one carried a Supreme Court story's
+// jump line followed by the lead paragraph of an entirely different report on
+// core-sector growth. Assigned wholesale to the SC article, it became that
+// article's opening paragraph, and the core-sector article was left starting at
+// its own second paragraph.
+//
+// The damage ran past the text. The article's relevance score, its extracted
+// entities and its keyword tags were all computed over the mixture. It also
+// silently decapitated the story: the drop-cap re-attach below is guarded on the
+// body starting lowercase, and a foreign paragraph in front of it made that
+// false, so "In a verdict" was stored as "n a verdict".
+//
+// Modal rather than mean, because the mean is exactly what one 886pt outlier
+// destroys.
+function columnWidth(blocks) {
+  const weight = new Map();
+  for (const b of blocks) {
+    if (b.role !== 'body') continue;
+    const w = Math.round((b.bbox[2] - b.bbox[0]) / 5) * 5;
+    if (w <= 0) continue;
+    weight.set(w, (weight.get(w) || 0) + 1);
+  }
+  let best = 0;
+  let bestN = -1;
+  for (const [w, n] of weight) {
+    if (n > bestN) {
+      best = w;
+      bestN = n;
+    }
+  }
+  return best || 0;
+}
+
 // The size that most of the page's characters are set in. Everything else is
 // judged relative to this rather than to an absolute point size, so the same
 // code works on a text-layer page and on an OCR'd page whose sizes are
@@ -234,6 +294,34 @@ function segmentPage(page, profile, opts = {}) {
   const ctx = { profile, body, page };
   for (const b of blocks) b.role = classify(b, ctx);
 
+  // A block that is nothing but jump lines is furniture, whatever face it is
+  // set in. Reclassified before ownership so it is never attached to a story.
+  for (const b of blocks) {
+    // Not conditioned on role 'body'. These are set in the publication's
+    // sans face rather than its body face, so they arrive classified as
+    // whatever that face implies — never as body.
+    if (b.role !== 'headline' && JUMP_ONLY.test(b.text)) b.role = 'jumpline';
+  }
+
+  // Column-spanning blocks cannot belong to one article, so they are refused
+  // ownership rather than handed to whichever headline happens to claim their
+  // left edge. See columnWidth() for the page this was found on.
+  //
+  // The threshold is deliberately loose, and was set by measuring the whole
+  // edition rather than by taste. Against a 105pt column:
+  //
+  //   8.4x  p7   jump line + an unrelated story's lead   <- artifact
+  //   6.0x  p15  a pull-quote welded to a story's lead   <- artifact
+  //   2.1x  p16  a genuine two-column measure            <- legitimate
+  //   1.8x  p16  a genuine two-column measure            <- legitimate
+  //
+  // A first attempt at 1.9x refused the p16 block, which is real prose. 3x sits
+  // in the gap with room on both sides. Refusing a genuine block costs a
+  // paragraph and says so in `dropped`; accepting a merged one silently rewrites
+  // an article's opening and everything computed from it.
+  const colW = columnWidth(blocks);
+  const maxBodyWidth = colW ? colW * 3 : Infinity;
+
   const dropped = [];
   const headlines = blocks.filter((b) => b.role === 'headline').sort((a, b) => y0(a) - y0(b));
 
@@ -258,13 +346,18 @@ function segmentPage(page, profile, opts = {}) {
     captions: [],
     bodyBlocks: [],
     dropcaps: [],
+    jumps: [],
     bbox: [x0(h), y0(h), x1(h), y1(h)],
     _h: h,
   }));
   const byHeadline = new Map(articles.map((a) => [a._h, a]));
 
   function attach(owner, b) {
-    if (b.role === 'dropcap') owner.dropcaps.push(b);
+    // A jump line is a fact ABOUT the story — where it continues — not a
+    // sentence in it. Recorded on the article and kept out of the prose.
+    if (b.role === 'jumpline') {
+      for (const m of b.text.matchAll(CONTINUATION)) owner.jumps.push(Number(m[1]));
+    } else if (b.role === 'dropcap') owner.dropcaps.push(b);
     else if (b.role === 'caption') owner.captions.push(b.text);
     else if (b.role === 'byline' && !owner.byline) owner.byline = b.text;
     else if (b.role === 'secondary') {
@@ -287,6 +380,16 @@ function segmentPage(page, profile, opts = {}) {
     }
     if (b.role === 'classified') {
       dropped.push({ reason: 'classified advertisement', text: b.text.slice(0, 80) });
+      continue;
+    }
+
+    if (b.role === 'body' && width(b) > maxBodyWidth) {
+      dropped.push({
+        reason:
+          `body block spans ${Math.round(width(b))}pt against a ${colW}pt column ` +
+          '— the text layer merged several columns, so it belongs to no single story',
+        text: b.text.slice(0, 80),
+      });
       continue;
     }
 
@@ -362,6 +465,13 @@ function segmentPage(page, profile, opts = {}) {
 
     let text = ordered.map((b) => b.text).join(' ');
 
+    // Any jump marker still embedded in the prose is stripped, and where it
+    // goes is kept. A story that continues on another page is a fact about the
+    // story, not a sentence in it.
+    const jumps = [...text.matchAll(CONTINUATION)].map((m) => Number(m[1]));
+    const continuesOn = a.jumps.length ? a.jumps[0] : jumps.length ? jumps[0] : null;
+    text = text.replace(POINTER_LINE, ' ');
+
     // Re-attach the drop cap to the word it belongs to. The body block after it
     // begins mid-word and lowercase ("rofessor at the Paari School"), which is
     // both how it is recognised and why leaving it alone is not an option.
@@ -390,6 +500,10 @@ function segmentPage(page, profile, opts = {}) {
       dateline: datelineFrom(a.byline),
       body: text,
       chars,
+      // The page this story runs on to, where it says so. Not yet used to join
+      // the continuation — but a jump that is recorded can be joined later,
+      // and one that was silently deleted cannot.
+      continues_on: continuesOn,
       captions: a.captions,
       prominence: a.prominence,
       headline_size: a.headlineSize,

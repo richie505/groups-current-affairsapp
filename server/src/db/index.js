@@ -60,6 +60,11 @@ db.exec(schema);
       ['subjects', "TEXT NOT NULL DEFAULT ''"],
       ['breakdown', "TEXT NOT NULL DEFAULT ''"],
       ['scored_at', 'TEXT'],
+      // The page a story runs on to, where the page said so ("CONTINUED ON »
+      // PAGE 8"). Recorded rather than acted on: the jump is not yet used to
+      // join the continuation, but a jump that is stored can be joined later
+      // and one that was stripped and forgotten cannot.
+      ['continues_on', 'INTEGER'],
     ],
   };
 
