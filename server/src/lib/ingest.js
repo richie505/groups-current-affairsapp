@@ -293,6 +293,55 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
         if (lead !== i && ids[lead]) setMerged.run(ids[lead], ids[i]);
       }
 
+      // Fold a jump's continuation into its origin.
+      //
+      // This catches what same-event detection cannot. The two halves of a jumped
+      // story are written as separate pieces with separate headlines — "1978
+      // 'industry' definition void under new code: SC" on the origin page and "SC
+      // says 1978 'industry' definition rendered void" on the jump page — so
+      // headline similarity scores them apart, and both were drafted as knowledge
+      // items with eight questions between them about one event.
+      //
+      // The jump line says which page, and the segmenter has already resolved the
+      // printed page number to a PDF index and required shared vocabulary before
+      // proposing the link. Applied only where the continuation is not already
+      // merged, so the same-event pass keeps precedence where both agree.
+      let joined = 0;
+      for (let i = 0; i < all.length; i++) {
+        const link = all[i].continuation_of;
+        if (!link || !ids[i]) continue;
+        if (leadOf.get(i) !== i) continue;   // already merged by the same-event pass
+        const originIdx = all.findIndex(
+          (x, j) => j !== i && x.page === link.page && x.headline === link.headline
+        );
+        if (originIdx === -1 || !ids[originIdx]) continue;
+        setMerged.run(ids[originIdx], ids[i]);
+        db.prepare(
+          `UPDATE np_articles SET status = 'duplicate',
+             discard_reason = 'continuation of the story that jumped from page ' || ?
+            WHERE id = ?`
+        ).run(String(link.page), ids[i]);
+        joined += 1;
+
+        // A continuation that already produced a knowledge item leaves that item
+        // in the review queue as a second write-up of one event. Superseded, with
+        // the reason on the row — and only while it is still a draft, because a
+        // published item is knowledge in its own right and is not withdrawn by a
+        // re-run, the same rule the redraft and the edition delete both follow.
+        const prior = db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(ids[i]);
+        if (prior && prior.item_id) {
+          const n = db
+            .prepare(
+              `UPDATE ca_items SET status = 'discarded', updated_at = datetime('now'),
+                 discard_reason = 'Duplicate: this is the jump continuation of the story drafted from page ' || ?
+                WHERE id = ? AND status = 'draft'`
+            )
+            .run(String(link.page), prior.item_id).changes;
+          if (n) log(`  superseded draft item #${prior.item_id} — same story as the origin`);
+        }
+      }
+      if (joined) log(`${joined} jump continuation(s) folded into the story they continue`);
+
       db.prepare(
         `UPDATE np_editions
             SET status = 'processed', pages = @pages, profile = @profile,

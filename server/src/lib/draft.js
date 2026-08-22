@@ -240,6 +240,26 @@ Two consequences, both binding:
 
 Use the established findings above for the bucket, the keyword angles and the
 unit tags. You are writing the note, not re-classifying the article.
+
+=== CHOOSING THE BANK ===
+
+Most items fit more than one bank, so pick by what THE FACT you wrote actually
+is — not by what the story is about:
+
+  the fact IS a figure, with a source and a year        -> D
+  the fact IS a named scheme, Act, Bill, rules or body  -> S
+  the fact IS an instance you could narrate in an answer -> E
+  the fact IS a sentence worth quoting verbatim          -> Q
+
+A story about a scheme whose fact is a figure belongs in D, not S. Measured on
+the first twenty-five items filed this way: S and E took nine each, Q two and D
+ONE — while twenty-one of the twenty-five carried a figure in their notes. D is
+the largest target of the four and it is the one that starves, because almost
+any numeric item can also be described as a scheme or an example and keeps being
+filed as one.
+
+Use null only when the item genuinely fits none of the four. An item worth
+routing to Group I at all usually fits one.
 `;
 
 async function draftArticle(db, { article, edition, model, vocabulary, prompt }) {

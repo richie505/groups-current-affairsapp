@@ -531,8 +531,55 @@ function datelineFrom(byline) {
   return place.length >= 4 && place.length <= 40 ? place : '';
 }
 
+// The printed page number, read off the running head: "9 Friday, August 21,
+// 2026 Vijayawada News" and "THE HINDU 10 Friday, August 21, 2026".
+const RUNNING_HEAD_PAGE = /^(?:THE\s+HINDU\s+)?(\d{1,3})\s+[A-Z][a-z]+day,/;
+
+function printedPageOf(page) {
+  for (const b of page.blocks || []) {
+    const m = String(b.text || '').replace(/\s+/g, ' ').trim().match(RUNNING_HEAD_PAGE);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+// How far the PDF index runs ahead of the printed page number.
+//
+// A jump line says "CONTINUED ON » PAGE 8" and means printed page 8, which is
+// not PDF page 8: this edition opens with six pages of advertising wrap, so
+// printed 8 is PDF 14. Without this, a recorded jump points at the wrong page
+// and can never be joined.
+//
+// Taken as the MODE across the edition rather than per page, because per-page
+// reading is not reliable enough to depend on — it resolved on only 18 of 28
+// pages of the test edition, and page 7, which carries the jump that prompted
+// all this, was one of the misses. One advertising page also reported an offset
+// of 0 against seventeen pages reporting 6, so the mode is doing real work
+// rather than just averaging agreement.
+function pageOffsetOf(ir) {
+  const votes = new Map();
+  for (const page of ir.pages || []) {
+    const printed = printedPageOf(page);
+    if (printed == null) continue;
+    const off = page.page - printed;
+    if (off < 0) continue;
+    votes.set(off, (votes.get(off) || 0) + 1);
+  }
+  let best = 0;
+  let bestN = 0;
+  for (const [off, n] of votes) {
+    if (n > bestN) {
+      best = off;
+      bestN = n;
+    }
+  }
+  // A single vote is a coincidence, not a measurement.
+  return bestN >= 3 ? best : 0;
+}
+
 function segment(ir, opts = {}) {
   const profile = detect(ir, opts.profile);
+  const pageOffset = pageOffsetOf(ir);
   const pages = [];
   const skipped = [];
 
@@ -551,12 +598,71 @@ function segment(ir, opts = {}) {
     pages.push(segmentPage(page, pageProfile, opts));
   }
 
+  // `continues_on` is a PRINTED page number as the paper wrote it. Resolved here
+  // to the PDF index everything else in the pipeline uses, so a consumer never
+  // has to know the difference — and kept alongside the original, so a wrong
+  // offset is visible rather than baked in.
+  const articles = pages.flatMap((p) => p.articles);
+  for (const a of articles) {
+    a.printed_page = a.page - pageOffset;
+    a.continues_on_pdf = a.continues_on == null ? null : a.continues_on + pageOffset;
+  }
+
+  // Join a jump to what it jumps to.
+  //
+  // Without this, the two halves of one story are drafted as two knowledge items
+  // — observed on the test edition, where a Supreme Court ruling produced two
+  // items and eight questions about a single event.
+  //
+  // The page alone is not enough of a signal: the target page carries several
+  // unrelated stories. So a candidate must also SHARE VOCABULARY with the
+  // origin's headline — two or more significant tokens. On the test edition the
+  // origin read "1978 'industry' definition void under new code: SC" and the
+  // continuation "SC says 1978 'industry' definition rendered void", sharing
+  // 1978, industry and definition; the other stories on that page share nothing.
+  //
+  // The link is advisory: `continuation_of` marks it, and it is left to the
+  // caller whether to merge. This file segments, and deciding that one story is
+  // another is a judgement the merge step already owns.
+  const significant = (headline) =>
+    new Set(
+      String(headline || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 4 || /^\d{4}$/.test(w))
+    );
+
+  const byPage = new Map();
+  for (const a of articles) {
+    if (!byPage.has(a.page)) byPage.set(a.page, []);
+    byPage.get(a.page).push(a);
+  }
+  for (const a of articles) {
+    if (a.continues_on_pdf == null || a.continues_on_pdf === a.page) continue;
+    const origin = significant(a.headline);
+    let best = null;
+    let bestShared = 0;
+    for (const cand of byPage.get(a.continues_on_pdf) || []) {
+      if (cand === a || cand.continuation_of) continue;
+      const shared = [...significant(cand.headline)].filter((w) => origin.has(w)).length;
+      if (shared > bestShared) {
+        bestShared = shared;
+        best = cand;
+      }
+    }
+    if (best && bestShared >= 2) {
+      best.continuation_of = { page: a.page, headline: a.headline, shared: bestShared };
+    }
+  }
+
   return {
     profile: profile.id,
     language: profile.language,
+    page_offset: pageOffset,
     pages,
     skipped,
-    articles: pages.flatMap((p) => p.articles),
+    articles,
   };
 }
 
