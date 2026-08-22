@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useResource from '../../hooks/useResource';
 import { api } from '../../api/client';
@@ -21,6 +21,10 @@ export default function AdminQueue() {
   const { data, error, loading, reload } = useResource('/admin/queue');
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState('');
+  // Content shown, not hidden. A reviewer is here to read the item and decide;
+  // a queue that shows only headlines makes them click every card to do the one
+  // job the screen exists for. The toggle stays for when the day is long.
+  const [expandAll, setExpandAll] = useState(true);
 
   if (loading) return <Loading label="Loading the queue…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -93,10 +97,19 @@ export default function AdminQueue() {
   return (
     <div>
       <h1 className="mb-1 text-2xl font-bold text-slate-900">Review queue</h1>
-      <p className="mb-4 text-sm text-slate-600">
-        {data.items.length} draft item{data.items.length === 1 ? '' : 's'}. Nothing reaches a
-        student until it is approved here.
-      </p>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <p className="text-sm text-slate-600">
+          {data.items.length} draft item{data.items.length === 1 ? '' : 's'}. Nothing reaches a
+          student until it is approved here.
+        </p>
+        <button
+          type="button"
+          onClick={() => setExpandAll((v) => !v)}
+          className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          {expandAll ? 'Collapse all' : 'Expand all'}
+        </button>
+      </div>
 
       {actionError ? (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
@@ -142,6 +155,7 @@ export default function AdminQueue() {
                     busy={busy === it.id}
                     onPublish={() => publishItem(it.id)}
                     onDiscard={() => discardItem(it.id)}
+                    defaultOpen={expandAll}
                   />
                 ))}
               </div>
@@ -153,8 +167,11 @@ export default function AdminQueue() {
   );
 }
 
-function QueueItem({ item, busy, onPublish, onDiscard }) {
-  const [open, setOpen] = useState(false);
+function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // Follows the page-level Expand all / Collapse all, while still allowing a
+  // single card to be toggled on its own afterwards.
+  useEffect(() => setOpen(defaultOpen), [defaultOpen]);
   const highHits = (item.correction_hits || []).filter((h) => h.severity === 'high');
   const lowHits = (item.correction_hits || []).filter((h) => h.severity === 'low');
 

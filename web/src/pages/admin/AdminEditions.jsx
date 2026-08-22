@@ -124,6 +124,28 @@ function Breakdown({ raw }) {
   );
 }
 
+// `ca_runs` timestamps are SQLite `datetime('now')`, which is UTC with no zone
+// marker. Parsed as UTC explicitly — read as local time a run would appear to
+// have started hours before it did.
+function runTime(sqlDatetime) {
+  if (!sqlDatetime) return null;
+  const d = new Date(`${String(sqlDatetime).replace(' ', 'T')}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function clockOf(sqlDatetime) {
+  const d = runTime(sqlDatetime);
+  return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+}
+
+function durationOf(from, to) {
+  const a = runTime(from);
+  const b = runTime(to);
+  if (!a || !b) return null;
+  const secs = Math.max(0, Math.round((b - a) / 1000));
+  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
 function mb(bytes) {
   return bytes ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : '—';
 }
@@ -583,7 +605,15 @@ function DraftPanel({ editionId, articles, onFinished }) {
     try {
       const qs = `min_score=${minScore}` + (capped ? `&limit=${limit}` : '');
       await api.post(`/admin/editions/${editionId}/draft?${qs}`, {});
-      setMsg({ kind: 'ok', text: 'Drafting started. This takes a few seconds per article.' });
+      const now = new Date();
+      const done = new Date(now.getTime() + todo * 33 * 1000);
+      const hhmm = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setMsg({
+        kind: 'ok',
+        text:
+          `Started at ${hhmm(now)} — ${todo} article(s), expected to finish about ${hhmm(done)}. ` +
+          'You can leave this page; the run keeps going.',
+      });
       await loadRun();
     } catch (err) {
       setMsg({ kind: 'error', text: err.message });
@@ -694,6 +724,34 @@ function DraftPanel({ editionId, articles, onFinished }) {
               {run.model}
             </span>
           </div>
+
+          {/* When it started, when it stopped, how long it took. A run that takes
+              minutes should say so afterwards, not only while it is going. */}
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
+            <span>Started {clockOf(run.created_at)}</span>
+            {run.finished_at ? <span>Finished {clockOf(run.finished_at)}</span> : null}
+            {durationOf(run.created_at, run.finished_at) ? (
+              <span>Took {durationOf(run.created_at, run.finished_at)}</span>
+            ) : null}
+          </div>
+          {run.status === 'done' ? (
+            <p className="mt-2 rounded bg-green-50 px-2 py-1.5 text-xs font-semibold text-green-800 dark:bg-green-900/20 dark:text-green-300">
+              {run.drafted > 0
+                ? `Done — ${run.drafted} item${run.drafted === 1 ? '' : 's'} inserted into the review queue` +
+                  (run.discarded ? `, ${run.discarded} discarded` : '') +
+                  '. Nothing is visible to students until you approve it there.'
+                : 'Done — nothing was drafted. Every article the model saw was discarded as not examinable.'}
+              {run.drafted > 0 ? (
+                <>
+                  {' '}
+                  <Link to="/admin/queue" className="underline">
+                    Open the review queue →
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
           {run.log ? (
             <details className="mt-2">
               <summary className="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">
