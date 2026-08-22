@@ -83,58 +83,140 @@ function normaliseFormat(label) {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
-  return FORMAT_MAP.get(key) || null;
+  if (FORMAT_MAP.has(key)) return FORMAT_MAP.get(key);
+  // A trailing parenthetical annotates the same format rather than naming a
+  // different one — "Multi-statement correctness (list I-VI)" is a
+  // multi-statement question that happens to carry six statements. Stripping it
+  // and retrying handles the whole family instead of one spelling at a time.
+  const bare = key.replace(/\s*\([^)]*\)\s*$/, '');
+  return FORMAT_MAP.get(bare) || null;
 }
 
 // ---------------------------------------------------------------------------
 // parse
 // ---------------------------------------------------------------------------
 
-// Paper identity comes from the bank's own H1, so a second bank for a different
-// paper lands as a different row rather than overwriting this one.
-function parseHeader(text) {
-  const h1 = /^#\s+(.+)$/m.exec(text);
-  const title = h1 ? h1[1].trim() : 'PYQ bank';
+// A bank file holds MORE THAN ONE PAPER. The first version of this seeder took
+// its identity from the H1 alone, which was true of the 150-question bank it was
+// written against and false of the 1,127-question one that replaced it. Reading
+// the larger file with the old parser would have put all eight papers under a
+// single paper_id, where UNIQUE (paper_id, q_no) plus INSERT OR REPLACE means Q1
+// of each paper overwrites the last — 1,127 rows collapsing to about 150,
+// silently, and looking like a successful seed.
+//
+// So papers are split out here. Structure of the file:
+//
+//   # PYQ Bank — ... Paper I, 2025     <- H1: the first paper
+//   ## Section A: ...                  <- a SUBSECTION of it
+//   ## Duplicate uploads — not appended  <- prose; must not become a paper
+//   ## Section: APPSC Group II Screening Test ...   <- a NEW paper
+//   *Source: `SomePaper.pdf`*          <- ties the paper to the scanned PDF
+//   ### Section A: Indian History      <- a subsection again
+//
+// The distinguishing mark of a paper heading is the colon straight after
+// "Section", which the subsection headings ("Section A:") do not have.
+const PAPER_HEAD = /^##\s+Section:\s*(.+)$/;
+const IGNORE_HEAD = /^##\s+Duplicate/i;
+const SOURCE_LINE = /^\*Source:\s*`([^`]+)`/;
+const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5 };
+
+// Two headings can describe one paper — 2018 Mains Paper I arrives as "AP
+// History (Q1-75)" and "Indian Polity & Governance (Q76-150)" — so identity is
+// derived and rows are grouped by it rather than by heading.
+function identity(title) {
   const year = (/(20\d{2})/.exec(title) || [])[1];
   const mains = /mains/i.test(title);
-  const paperNo = (/paper\s*-?\s*([IVX0-9]+)/i.exec(title) || [])[1] || '';
+  const raw = ((/paper\s*[-–]?\s*([IVXivx]+|\d+)/i.exec(title) || [])[1] || '').toLowerCase();
+  const num = ROMAN[raw] || (/^\d+$/.test(raw) ? Number(raw) : null);
   return {
-    title,
     year: year ? Number(year) : null,
     stage: mains ? 'mains' : 'prelims',
-    paper: paperNo ? `paper-${paperNo.toLowerCase()}` : 'paper-1',
+    // Roman numerals are normalised to digits, and a screening paper is called
+    // 'screening' — both so these slugs line up with the ones the OCR pipeline
+    // uses in content-pipeline/pyq/extract.js for the very same papers.
+    paper: mains ? `paper-${num || 1}` : 'screening',
   };
 }
 
-function parseRows(text) {
-  const rows = [];
+function parseRow(line, section) {
+  // | 1 | gloss | keyword, keyword | Format |
+  const m = /^\|\s*(\d+)\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/.exec(line);
+  if (!m) return null;
+  const [, qNo, gloss, keywords, format] = m;
+  return {
+    q_no: Number(qNo),
+    section,
+    gloss: gloss.trim(),
+    // Keywords are comma-separated, and some carry a parenthetical note
+    // saying which blueprint file they really live in — the bank's own point
+    // that a keyword's home subject is not the paper section it appears in.
+    keywords: keywords
+      .split(',')
+      .map((k) => k.replace(/\*\(.*?\)\*/g, '').replace(/[*_]/g, '').trim())
+      .filter(Boolean),
+    format_label: format.trim(),
+    raw: line.trim(),
+  };
+}
+
+function parsePapers(text) {
+  const blocks = [];
+  let cur = null;
   let section = '';
+  let ignoring = false;
+
   for (const line of text.split('\n')) {
-    const h2 = /^##\s+(.+)$/.exec(line);
-    if (h2) {
-      section = h2[1].trim();
+    const h1 = /^#\s+([^#].*)$/.exec(line);
+    const paperHead = PAPER_HEAD.exec(line);
+    const h2 = /^##\s+([^#].*)$/.exec(line);
+    const h3 = /^###\s+(.+)$/.exec(line);
+
+    if (paperHead) {
+      cur = { title: paperHead[1].trim(), sourceFile: '', rows: [] };
+      blocks.push(cur);
+      section = '';
+      ignoring = false;
       continue;
     }
-    // | 1 | gloss | keyword, keyword | Format |
-    const m = /^\|\s*(\d+)\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/.exec(line);
-    if (!m) continue;
-    const [, qNo, gloss, keywords, format] = m;
-    rows.push({
-      q_no: Number(qNo),
-      section,
-      gloss: gloss.trim(),
-      // Keywords are comma-separated, and some carry a parenthetical note
-      // saying which blueprint file they really live in — the bank's own point
-      // that a keyword's home subject is not the paper section it appears in.
-      keywords: keywords
-        .split(',')
-        .map((k) => k.replace(/\*\(.*?\)\*/g, '').replace(/[*_]/g, '').trim())
-        .filter(Boolean),
-      format_label: format.trim(),
-      raw: line.trim(),
-    });
+    if (h1 && !h2) {
+      cur = { title: h1[1].trim(), sourceFile: '', rows: [] };
+      blocks.push(cur);
+      section = '';
+      ignoring = false;
+      continue;
+    }
+    if (h2) {
+      ignoring = IGNORE_HEAD.test(line);
+      if (!ignoring) section = h2[1].trim();
+      continue;
+    }
+    if (h3) {
+      section = h3[1].trim();
+      continue;
+    }
+
+    const src = SOURCE_LINE.exec(line.trim());
+    if (src && cur && !cur.sourceFile) cur.sourceFile = src[1];
+
+    if (ignoring || !cur) continue;
+    const row = parseRow(line, section);
+    if (row) cur.rows.push(row);
   }
-  return rows;
+
+  // Group the blocks into papers by derived identity.
+  const papers = new Map();
+  for (const b of blocks) {
+    const id = identity(b.title);
+    const slug = `g2-${id.year}-${id.stage}-${id.paper}-bank`;
+    if (!papers.has(slug)) {
+      papers.set(slug, { slug, ...id, titles: [], sourceFiles: [], rows: [] });
+    }
+    const p = papers.get(slug);
+    p.titles.push(b.title);
+    if (b.sourceFile && !p.sourceFiles.includes(b.sourceFile)) p.sourceFiles.push(b.sourceFile);
+    p.rows.push(...b.rows);
+  }
+  return [...papers.values()].filter((p) => p.rows.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -142,11 +224,30 @@ function parseRows(text) {
 // ---------------------------------------------------------------------------
 
 const text = fs.readFileSync(file, 'utf8');
-const header = parseHeader(text);
-const rows = parseRows(text);
+const papers = parsePapers(text);
+const rows = papers.flatMap((p) => p.rows);
 
-console.log(`Bank: ${header.title}`);
-console.log(`Parsed ${rows.length} tagged question(s).\n`);
+if (!papers.length) {
+  console.error('No tagged rows found. Is this a PYQ bank file?');
+  process.exit(1);
+}
+
+console.log(`Parsed ${rows.length} tagged question(s) across ${papers.length} paper(s):\n`);
+for (const p of papers) {
+  const nos = p.rows.map((r) => r.q_no);
+  const dupes = [...new Set(nos.filter((n, i) => nos.indexOf(n) !== i))];
+  console.log(
+    `   ${p.slug.padEnd(32)} ${String(p.rows.length).padStart(4)} rows  ` +
+    `q${Math.min(...nos)}-${Math.max(...nos)}` +
+    (p.sourceFiles.length ? `  <- ${p.sourceFiles.join(', ')}` : '')
+  );
+  for (const t of p.titles) console.log(`       ${t}`);
+  // Two rows sharing a q_no within one paper would silently overwrite each
+  // other on write, so it is reported rather than discovered later as a
+  // shortfall in the counts.
+  if (dupes.length) console.log(`       !! duplicate q_no, one of each pair will be lost: ${dupes.join(', ')}`);
+}
+console.log();
 
 const unmapped = new Map();
 for (const r of rows) {
@@ -182,9 +283,9 @@ console.log(
 
 const fmtCount = new Map();
 for (const r of rows) fmtCount.set(r.format || 'unknown', (fmtCount.get(r.format || 'unknown') || 0) + 1);
-console.log('\nFormat distribution in this paper:');
+console.log('\nFormat distribution across the whole bank:');
 for (const [f, n] of [...fmtCount].sort((a, b) => b[1] - a[1])) {
-  console.log(`   ${f.padEnd(20)} ${String(n).padStart(3)}  ${(n / rows.length * 100).toFixed(1)}%`);
+  console.log(`   ${f.padEnd(20)} ${String(n).padStart(4)}  ${(n / rows.length * 100).toFixed(1)}%`);
 }
 
 if (dryRun) {
@@ -194,23 +295,12 @@ if (dryRun) {
 
 // ---- write ----
 
-const slug = `g2-${header.year}-${header.stage}-${header.paper}-bank`;
-
-db.prepare(
+const upsertPaper = db.prepare(
   `INSERT INTO pyq_papers (slug, exam, stage, paper, year, source_file, pages, notes)
    VALUES (@slug, 'group2', @stage, @paper, @year, @source_file, NULL, @notes)
-   ON CONFLICT(slug) DO UPDATE SET notes = excluded.notes`
-).run({
-  slug,
-  stage: header.stage,
-  paper: header.paper,
-  year: header.year,
-  source_file: path.basename(file),
-  notes:
-    'Hand-tagged bank from the appsc-group2-tutor skill. Stems are GLOSSES, not ' +
-    'verbatim questions — usable as format and keyword evidence only, never as practice questions.',
-});
-const paperId = db.prepare('SELECT id FROM pyq_papers WHERE slug = ?').get(slug).id;
+   ON CONFLICT(slug) DO UPDATE SET
+     source_file = excluded.source_file, notes = excluded.notes`
+);
 
 const insQ = db.prepare(
   `INSERT OR REPLACE INTO pyq_questions
@@ -231,38 +321,78 @@ let stored = 0;
 let kwRows = 0;
 let topicRows = 0;
 
+// Bank papers are rebuilt wholesale rather than merged into. A re-seed from a
+// corrected or extended bank must be able to REMOVE a row, and an upsert alone
+// never can — the same trap that made bad topic aliases un-deletable until the
+// topic seeder learned to prune. The delete is confined to '%-bank' slugs so
+// that questions extracted from the scanned PDFs, which live under their own
+// slugs and carry source='extracted', are never touched.
+const priorBank = db.prepare("SELECT id, slug FROM pyq_papers WHERE slug LIKE '%-bank'").all();
+
 db.transaction(() => {
-  for (const r of rows) {
-    const info = insQ.run({
-      paper_id: paperId,
-      q_no: r.q_no,
-      stem: r.gloss,
-      format: r.format || 'unknown',
-      subject: r.section,
-      raw: `${r.raw}   [format label: ${r.format_label}]`,
+  if (priorBank.length) {
+    db.prepare("DELETE FROM pyq_papers WHERE slug LIKE '%-bank'").run();
+    console.log(
+      `Replaced ${priorBank.length} existing bank paper(s): ${priorBank.map((p) => p.slug).join(', ')}`
+    );
+  }
+
+  for (const p of papers) {
+    upsertPaper.run({
+      slug: p.slug,
+      stage: p.stage,
+      paper: p.paper,
+      year: p.year,
+      // The PDF the tagging was done from, where the bank names one, so a row
+      // can be traced back to a scan. Falls back to the bank file itself.
+      source_file: p.sourceFiles[0] || path.basename(file),
+      notes:
+        `Hand-tagged bank (${path.basename(file)}): ${p.titles.join(' + ')}. ` +
+        'Stems are GLOSSES, not verbatim questions — usable as format and keyword ' +
+        'evidence only, never as practice questions.',
     });
-    const qid = info.lastInsertRowid;
-    stored++;
+    const paperId = db.prepare('SELECT id FROM pyq_papers WHERE slug = ?').get(p.slug).id;
 
-    // The bank's own tags, kept verbatim. These are a person's judgement about
-    // what the question tests and are better than re-deriving them from a gloss.
-    for (const k of r.keywords) {
-      insQK.run(qid, k);
-      kwRows++;
-    }
+    for (const r of p.rows) {
+      const info = insQ.run({
+        paper_id: paperId,
+        q_no: r.q_no,
+        stem: r.gloss,
+        format: r.format || 'unknown',
+        subject: r.section,
+        raw: `${r.raw}   [format label: ${r.format_label}]`,
+      });
+      const qid = info.lastInsertRowid;
+      stored++;
 
-    // Topic linkage from the gloss plus the keywords. Weaker than for a full
-    // item — a gloss is a handful of words — so this will match fewer topics
-    // than the news items do, which is expected rather than a fault.
-    for (const m of T.matchItem(
-      { headline: r.gloss, notes_markdown: r.keywords.join(' ') },
-      aliases
-    )) {
-      insQT.run(qid, m.topic_id, m.hits, m.matched);
-      topicRows++;
+      // The bank's own tags, kept verbatim. These are a person's judgement about
+      // what the question tests and are better than re-deriving them from a gloss.
+      for (const k of r.keywords) {
+        insQK.run(qid, k);
+        kwRows++;
+      }
+
+      // Topic linkage from the gloss plus the keywords. Weaker than for a full
+      // item — a gloss is a handful of words — so this will match fewer topics
+      // than the news items do, which is expected rather than a fault.
+      for (const m of T.matchItem(
+        { headline: r.gloss, notes_markdown: r.keywords.join(' ') },
+        aliases
+      )) {
+        insQT.run(qid, m.topic_id, m.hits, m.matched);
+        topicRows++;
+      }
     }
   }
 })();
 
 console.log(`\nStored ${stored} question(s), ${kwRows} keyword tag(s), ${topicRows} topic link(s).`);
-console.log(`Paper slug: ${slug}`);
+console.log(`Across ${papers.length} paper(s): ${papers.map((p) => p.slug).join(', ')}`);
+
+// Every row parsed must reach the database. Anything short means rows collided
+// on (paper_id, q_no) and overwrote each other, which is exactly the failure
+// the multi-paper split exists to prevent, so it is checked rather than assumed.
+if (stored !== rows.length) {
+  console.error(`\n! Parsed ${rows.length} rows but stored ${stored}. Rows were lost to a collision.`);
+  process.exit(1);
+}
