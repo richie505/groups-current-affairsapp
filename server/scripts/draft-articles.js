@@ -145,8 +145,18 @@ async function main() {
     '=== PAPER UNITS (use the CODE only, e.g. "P3-U7") ===',
     ...units.map((u) => `${u.unit_code} — ${u.label}`),
     '',
-    '=== BLUEPRINT KEYWORD ANGLES ===',
-    ...keywords.map((k) => `${k.keyword}${k.subject ? ` [${k.subject}]` : ''}`),
+    // Grouped by subject, matching the web lane, rather than one term per line
+    // with its subject beside it. The per-line form invited the model to return
+    // "Election [Polity]" as the keyword, and 20 of the first 84 tags came back
+    // that way. `insertDrafted` now strips the bracket regardless, but a prompt
+    // that does not ask for the fault is better than a repair that removes it.
+    '=== BLUEPRINT KEYWORD ANGLES (use the term exactly, without the subject) ===',
+    ...Object.entries(
+      keywords.reduce((acc, k) => {
+        (acc[k.subject || 'Other'] = acc[k.subject || 'Other'] || []).push(k.keyword);
+        return acc;
+      }, {})
+    ).map(([subject, list]) => `${subject}: ${list.join(', ')}`),
     '',
     // Told to the model as well as checked afterwards. The check catches a
     // superseded position; telling it first stops the position being written.

@@ -307,13 +307,30 @@ function normaliseTextFields(record) {
 // SPACE-DELIMITED dash, so the hyphen inside a real code (P3-U7) is untouched.
 const codeOf = (value) => String(value ?? '').trim().split(/\s+[—–-]\s+/)[0].trim();
 
+// Drops a trailing subject bracket: "Election [Polity]" -> "Election".
+//
+// The vocabulary is presented to the model with each term's subject beside it,
+// and the model returns the whole line. This is the SAME fault as the echoed
+// unit line, in a second dress, and it was reintroduced the moment a new caller
+// formatted its vocabulary a new way — which is the argument for handling it
+// here rather than trusting every prompt to be shaped right.
+//
+// Measured on the first 25 bridged items: 20 of 84 keyword tags came back as
+// "Election [Polity]", "Bill [Indian History]" and so on. Every one had a valid
+// bare form in `ref_keywords`, so none was WRONG — each was invisible, which is
+// worse, because a query for "Election" can never match it and nothing looks
+// broken.
+const unbracket = (value) => String(value ?? '').replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+
 function canonicaliser(valid) {
   return (value) => {
     const raw = String(value ?? '').trim();
     if (!raw) return null;
-    if (valid.has(raw)) return raw;
-    const head = codeOf(raw);
-    return valid.has(head) ? head : null;
+    // Tried in order of decreasing faithfulness to what the model actually said.
+    for (const candidate of [raw, unbracket(raw), codeOf(raw), unbracket(codeOf(raw))]) {
+      if (candidate && valid.has(candidate)) return candidate;
+    }
+    return null;
   };
 }
 
@@ -463,7 +480,7 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       itemIds.push(itemId);
 
       for (const k of r.keywords || []) {
-        const kw = keywordOf(k) || codeOf(k);
+        const kw = keywordOf(k) || unbracket(codeOf(k));
         if (!kw) continue;
         insKeyword.run(itemId, kw);
         if (!refKeywords.has(kw)) offVocabKeywords.add(kw);
