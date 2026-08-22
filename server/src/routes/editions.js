@@ -183,7 +183,10 @@ router.post('/:id/draft', (req, res) => {
 
   const argv = [DRAFTER, String(id)];
   if (Number.isFinite(minScore)) argv.push('--min-score', String(minScore));
-  if (Number.isFinite(limit)) argv.push('--limit', String(limit));
+  // Only passed when the caller explicitly asked for a cap. Left off, the worker
+  // drafts every eligible article, so one press of the button finishes the
+  // edition rather than leaving a remainder to notice.
+  if (Number.isFinite(limit) && limit > 0) argv.push('--limit', String(limit));
   if (req.query.model) argv.push('--model', String(req.query.model));
   if (redraft) argv.push('--redraft');
 

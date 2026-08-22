@@ -529,7 +529,12 @@ function OneEdition({ id }) {
 // articles each choice would send, so the decision is made with the number in
 // view rather than after the bill.
 function DraftPanel({ editionId, articles, onFinished }) {
-  const [minScore, setMinScore] = useState(55);
+  // 45 rather than 55 — see the worker for the measurement. Above 55 an edition
+  // yields a handful of items and the model discards none of them; the band from
+  // 45 to 54 is where the examinable AP material sits.
+  const [minScore, setMinScore] = useState(45);
+  // No cap by default: one press should finish the edition.
+  const [capped, setCapped] = useState(false);
   const [limit, setLimit] = useState(20);
   const [run, setRun] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -567,15 +572,17 @@ function DraftPanel({ editionId, articles, onFinished }) {
   const eligible = articles.filter((a) => a.score != null && a.score >= minScore);
   const undrafted = eligible.filter((a) => !a.item_id);
   const alreadyDrafted = articles.filter((a) => a.item_id).length;
+  const todo = capped ? Math.min(undrafted.length, limit) : undrafted.length;
+  // ~33s per article, measured across every run so far: one model call for the
+  // note and one for the questions.
+  const eta = Math.max(1, Math.round((todo * 33) / 60));
 
   async function start() {
     setBusy(true);
     setMsg(null);
     try {
-      await api.post(
-        `/admin/editions/${editionId}/draft?min_score=${minScore}&limit=${limit}`,
-        {}
-      );
+      const qs = `min_score=${minScore}` + (capped ? `&limit=${limit}` : '');
+      await api.post(`/admin/editions/${editionId}/draft?${qs}`, {});
       setMsg({ kind: 'ok', text: 'Drafting started. This takes a few seconds per article.' });
       await loadRun();
     } catch (err) {
@@ -613,16 +620,23 @@ function DraftPanel({ editionId, articles, onFinished }) {
           </span>
         </label>
 
-        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-          Cap
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={capped}
+            disabled={running}
+            onChange={(ev) => setCapped(ev.target.checked)}
+            className="h-4 w-4"
+          />
+          Stop after
           <input
             type="number"
             min="1"
-            max="100"
+            max="200"
             value={limit}
-            disabled={running}
+            disabled={running || !capped}
             onChange={(ev) => setLimit(Number(ev.target.value) || 1)}
-            className="mt-1 block w-20 rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800"
           />
         </label>
 
@@ -632,7 +646,7 @@ function DraftPanel({ editionId, articles, onFinished }) {
           disabled={busy || running || !undrafted.length}
           className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {running ? 'Drafting…' : `Draft ${Math.min(undrafted.length, limit)} article(s)`}
+          {running ? 'Drafting…' : `Draft ${todo} article(s) · about ${eta} min`}
         </button>
       </div>
 
@@ -642,8 +656,8 @@ function DraftPanel({ editionId, articles, onFinished }) {
       <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
         {eligible.length} article(s) at or above {minScore}
         {alreadyDrafted ? ` · ${alreadyDrafted} already drafted` : ''}
-        {undrafted.length > limit
-          ? ` · the cap holds this run to ${limit}, run again for the rest`
+        {capped && undrafted.length > limit
+          ? ` · the cap holds this run to ${limit}, leaving ${undrafted.length - limit} for a second run`
           : ''}
       </p>
 

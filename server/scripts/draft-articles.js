@@ -6,8 +6,8 @@
 //
 //   node server/scripts/draft-articles.js <editionId> [options]
 //
-//     --min-score 55     only articles scoring at or above this (default 55)
-//     --limit 20         stop after this many articles (default 20)
+//     --min-score N      only articles scoring at or above this (default 45)
+//     --limit N          stop after N articles (default: no limit — draft them all)
 //     --model <id>       override OPENAI_MODEL
 //     --mcqs-per 4       questions per item (default 4)
 //     --no-mcqs          draft the notes only, skip question generation
@@ -54,8 +54,25 @@ let openRunId = null;
 function parseArgs(argv) {
   const args = {
     editionId: Number(argv[2]),
-    minScore: 55,
-    limit: 20,
+    // 45, not 55.
+    //
+    // At 55 a whole edition yielded six items and the model discarded NONE of
+    // them — and a drafting stage that never discards is one whose input was
+    // pre-filtered so hard it had no judgement left to exercise. The band from
+    // 45 to 54 is where the examinable Andhra Pradesh material was sitting: a
+    // Rs 221-crore medical-infrastructure spend, tenant farmers seeking crop
+    // loans, a Supreme Court comment on MGNREGA, an NGT floodplain case.
+    //
+    // The score gate is a cheap filter, not a judgement. Below 45 the density of
+    // local crime and features rises sharply; between 45 and 55 the model's own
+    // DISCARD step is a better filter than the score is, and letting it run is
+    // what makes the discard rate mean something.
+    minScore: 45,
+    // No cap by default. A run that silently leaves articles behind means the
+    // admin has to notice the remainder and click again, and the whole point of
+    // the button is that one press finishes the edition. SQLite reads -1 as no
+    // limit.
+    limit: -1,
     model: process.env.OPENAI_MODEL || 'gpt-4o',
     redraft: false,
     dryRun: false,
@@ -123,9 +140,13 @@ async function main() {
         model: args.model,
       }));
 
+  // Roughly 33 seconds per article across every run so far: one call for the
+  // note, one for the questions. Printed so a long run is a known wait rather
+  // than an open one.
+  const eta = Math.max(1, Math.round((articles.length * 33) / 60));
   say(
     `${articles.length} article(s) from ${edition.publication} ${edition.date}` +
-      `, model ${args.model}${args.dryRun ? ' — DRY RUN' : ''}`
+      `, model ${args.model}${args.dryRun ? ' — DRY RUN' : ''} — about ${eta} min`
   );
 
   const prompt = L.readPrompt('prompt-draft.txt');

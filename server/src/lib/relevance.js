@@ -110,6 +110,35 @@ const SUBJECT_HINTS = [
 // the same text.
 const countOf = (re, text) => (text.match(new RegExp(re.source, re.flags + 'g')) || []).length;
 
+// Another country's internal affairs, with no Indian thread in the story at all.
+//
+// WHY THIS EXISTS
+//
+// A master-topic match assumes the topic is the INDIAN institution of that name.
+// "Imran Khan shifted back to jail after medical check-up" matched the Tier-1
+// topic "Supreme Court and judicial review" on the words "Supreme Court", and
+// picked up the angles "Institute" (from Pakistan Institute of Medical Sciences)
+// and "Prime Minister" (from "Former Prime Minister"). Every match was real text
+// and every one was spurious. It took 30/30 on the largest factor and reached
+// 59 — ahead of an AP medical-infrastructure spend at 47, a Supreme Court
+// comment on MGNREGA at 50 and an NGT floodplain case at 50.
+//
+// DAMPED, NOT VETOED. A foreign story with an Indian thread is examinable and
+// often important — India-Japan pacts, a neighbour's politics that bears on
+// India — so this only withdraws the TOPIC-derived part of the syllabus score,
+// which is the part that was measuring the wrong country. Subject territory
+// still counts, and every other factor is untouched.
+//
+// The test requires a foreign name in the HEADLINE and no Indian term anywhere
+// in the article. Measured over both editions: 6 of 169 articles flagged, all
+// genuinely foreign-domestic, and "India, Japan sign maritime security pact",
+// "Rashtrapati Bhavan withdraws email on Bangladesh PM visit" and "Structures
+// outside Pakistan embassy pulled down in Delhi" were all correctly spared.
+const FOREIGN_NAME =
+  /\b(?:Pakistan|Pakistani|Bangladesh|Sri Lanka|Nepal|Myanmar|Afghanistan|Iran|Iraq|Israel|Palestin\w*|Ukraine|Russia|Russian|China|Chinese|Beijing|Taiwan|Japan|Japanese|Korea|Vietnam|Indonesia|Malaysia|Thailand|Turkey|Egypt|Nigeria|Kenya|Brazil|Argentina|Mexico|Venezuela|Cuba|Canada|Australia|Britain|British|United Kingdom|France|French|Germany|German|Italy|Spain|Netherlands|Sweden|Norway|Poland|Greece|Washington|Moscow|Islamabad|Dhaka|Kathmandu|Colombo|Kabul|Tehran|Gaza|Imran Khan|Trump|Putin|Xi Jinping|Netanyahu|Zelensky\w*)\b/i;
+const INDIA_TERM =
+  /\b(?:India|Indian|Bharat|Andhra|Telangana|Amaravati|Vijayawada|Visakhapatnam|Tirupati|Delhi|Mumbai|Chennai|Kolkata|Bengaluru|Kerala|Karnataka|Tamil Nadu|Maharashtra|Gujarat|Rajasthan|Bihar|Odisha|Jharkhand|Assam|Punjab|Haryana|Centre|Union Government|Parliament|Lok Sabha|Rajya Sabha|RBI|NITI Aayog|Supreme Court of India)\b/i;
+
 function bucketOf({ text, ap }) {
   // AP wins over everything else. A story that is both national and about Andhra
   // Pradesh belongs in the AP bucket, because AP is the axis this exam turns on
@@ -279,8 +308,22 @@ function score(article, ctx) {
   // worth more than a body mention, because it is what the article is about.
   const subjects = subjectsOf(text);
   const headTopic = matched.some((m) => m.in_headline);
+  // See FOREIGN_NAME above. A topic match in a story about another country's
+  // internal affairs is naming the wrong country's institution, so the
+  // topic-derived tiers are withheld and subject territory carries the factor.
+  const foreignDomestic = !ap && FOREIGN_NAME.test(head) && !INDIA_TERM.test(text);
   let syllabus = 0;
-  if (headTopic) {
+  if (foreignDomestic) {
+    if (subjects.length >= 2) {
+      syllabus = 12;
+      notes.push(`foreign domestic story; syllabus territory only: ${subjects.slice(0, 3).join(', ')}`);
+    } else if (subjects.length === 1) {
+      syllabus = 7;
+      notes.push(`foreign domestic story; syllabus territory only: ${subjects[0]}`);
+    } else {
+      notes.push('foreign domestic story with no Indian thread');
+    }
+  } else if (headTopic) {
     syllabus = 30;
     notes.push('names a known topic in the headline');
   } else if (matched.length) {
@@ -295,7 +338,7 @@ function score(article, ctx) {
   }
   // A Tier-1 topic is the syllabus at its most concentrated, so it tops the
   // factor out rather than merely contributing to it.
-  const tier1 = matched.some((m) => ctx.topicTier.get(m.topic_id)?.tier === 1);
+  const tier1 = !foreignDomestic && matched.some((m) => ctx.topicTier.get(m.topic_id)?.tier === 1);
   if (tier1 && syllabus < 30) {
     syllabus = 30;
     notes.push('Tier-1 topic');
