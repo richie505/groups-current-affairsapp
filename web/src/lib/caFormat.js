@@ -90,9 +90,19 @@ export function todayIso() {
 // showing it is that a day's current affairs is a small, finishable task, and
 // an under-promise that turns out to take longer is worse than the reverse.
 export function readingMinutes(items) {
+  // `words` is counted on the server and sent as one integer per item.
+  //
+  // This used to count the text itself, which meant the digest had to SHIP the
+  // text — nine kilobytes of notes per card so that a card which renders none of
+  // them could produce the number 15. The count is the only part that was ever
+  // used here.
+  //
+  // The fallback keeps an older cached response working: the service worker can
+  // still be holding a digest fetched before the server sent `words`.
   const words = items.reduce((sum, it) => {
+    if (Number.isFinite(Number(it.words))) return sum + Number(it.words);
     const text = [it.notes_markdown, it.prelims_facts, it.g1_fact, it.g1_angle].filter(Boolean).join(' ');
-    return sum + text.split(/\s+/).length;
+    return sum + (text ? text.split(/\s+/).length : 0);
   }, 0);
   return Math.max(1, Math.round(words / 200));
 }

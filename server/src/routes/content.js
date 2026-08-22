@@ -39,6 +39,7 @@ function pacingOf(userId) {
   return { mode: row?.pacing || 'off', minutes: row?.pacing_minutes ?? 4 };
 }
 
+// THE FULL ITEM, for the item page. Everything a student can read.
 function itemColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
           ${alias}.subject_tag, ${alias}.notes_markdown, ${alias}.static_linkage,
@@ -52,10 +53,35 @@ function itemColumns(alias = 'i') {
           ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
 
+// THE ITEM AS A CARD, for every list.
+//
+// WHY THIS EXISTS
+//
+// Because the digest was sending the whole item and the card was rendering a
+// tenth of it. One day of nine items came to 96 KB and a month came to 302 KB,
+// of which `static_notes` alone was a fifth and `notes_markdown` another
+// eighth — and NEITHER is rendered by a card. Both are read only on the item
+// page, which fetches the item again anyway.
+//
+// That is paid for on a phone, on mobile data, before anything appears.
+//
+// The split is not a guess. Every field below is one a list screen actually
+// reads; every field left out belongs to `G1Note` or to `Item.jsx`, both of
+// which are only ever rendered from the item page. If a card ever needs one
+// back, add it here — the cost is visible and the detail query is unchanged.
+function listColumns(alias = 'i') {
+  return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
+          ${alias}.subject_tag, ${alias}.prelims_facts, ${alias}.g1_bank, ${alias}.g1_angle,
+          ${alias}.g1_theme, ${alias}.g1_sub_theme, ${alias}.g1_why_news, ${alias}.g1_ap_angle,
+          ${alias}.importance, ${alias}.relevance_g1, ${alias}.relevance_g2,
+          ${alias}.needs_verify, ${alias}.verify_note,
+          ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
+}
+
 // Tag/source fan-out for a set of items, fetched in three queries rather than
 // three per item. A digest day routinely carries 12 items with 4 tags each,
 // and the N+1 version of this was the slowest thing on the Today screen.
-function attachTags(items) {
+function attachTags(items, { full = true } = {}) {
   if (!items.length) return items;
   const ids = items.map((i) => i.id);
   const holes = ids.map(() => '?').join(',');
@@ -83,13 +109,17 @@ function attachTags(items) {
   for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids)) {
     byId.get(r.item_id)?.themes.push(r.theme);
   }
-  for (const r of db
-    .prepare(
-      `SELECT item_id, url, publisher, is_primary FROM ca_item_sources
-        WHERE item_id IN (${holes}) ORDER BY is_primary DESC, id`
-    )
-    .all(...ids)) {
-    byId.get(r.item_id)?.sources.push(r);
+  // Citations and essay questions are read on the item page and nowhere else, so
+  // a list pays for them and shows none of them.
+  if (full) {
+    for (const r of db
+      .prepare(
+        `SELECT item_id, url, publisher, is_primary FROM ca_item_sources
+          WHERE item_id IN (${holes}) ORDER BY is_primary DESC, id`
+      )
+      .all(...ids)) {
+      byId.get(r.item_id)?.sources.push(r);
+    }
   }
   // Sections 3 and 8 of the Group-I note template.
   for (const r of db
@@ -100,13 +130,42 @@ function attachTags(items) {
     .all(...ids)) {
     byId.get(r.item_id)?.dimensions.push({ dimension: r.dimension, note: r.note });
   }
+  if (full) {
+    for (const r of db
+      .prepare(
+        `SELECT item_id, id, question, kind, note FROM ca_essay_questions
+          WHERE item_id IN (${holes}) ORDER BY kind DESC, id`
+      )
+      .all(...ids)) {
+      byId.get(r.item_id)?.essay_questions.push({ id: r.id, question: r.question, kind: r.kind, note: r.note });
+    }
+  }
+  return items;
+}
+
+/**
+ * Attaches `words` — how much there is to read — to rows that no longer carry
+ * the text it counts.
+ *
+ * The digest needs a reading estimate and the pacing clock needs a word count,
+ * and both used to get them by reading the prose that was being shipped anyway.
+ * Now that a card no longer receives the prose, the COUNT is sent instead: one
+ * integer per item rather than nine kilobytes.
+ *
+ * It is a second query over the same rows, which costs SQLite almost nothing —
+ * they are already in its page cache — and saves the whole of that text crossing
+ * a phone's connection. That trade is the entire point.
+ */
+function attachWordCounts(items) {
+  if (!items.length) return items;
+  const ids = items.map((i) => i.id);
+  const holes = ids.map(() => '?').join(',');
+  const byId = new Map(items.map((i) => [i.id, i]));
   for (const r of db
-    .prepare(
-      `SELECT item_id, id, question, kind, note FROM ca_essay_questions
-        WHERE item_id IN (${holes}) ORDER BY kind DESC, id`
-    )
+    .prepare(`SELECT id, ${P.READ_FIELDS.join(', ')} FROM ca_items WHERE id IN (${holes})`)
     .all(...ids)) {
-    byId.get(r.item_id)?.essay_questions.push({ id: r.id, question: r.question, kind: r.kind, note: r.note });
+    const it = byId.get(r.id);
+    if (it) it.words = P.wordsIn(r);
   }
   return items;
 }
@@ -246,12 +305,13 @@ router.get('/days/:date', (req, res) => {
 
   const items = db
     .prepare(
-      `SELECT ${itemColumns()} FROM ca_items i JOIN ca_days d ON d.id = i.day_id
+      `SELECT ${listColumns()} FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE i.day_id = ? AND ${VISIBLE}
         ORDER BY i.importance, i.order_index, i.id`
     )
     .all(day.id);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
   attachUserState(items, req.user.id);
 
   // Neighbouring digests, so the day view has prev/next without a second
@@ -410,7 +470,7 @@ router.delete('/items/:id/bookmark', (req, res) => {
 router.get('/bookmarks', (req, res) => {
   const items = db
     .prepare(
-      `SELECT ${itemColumns()}, d.date AS day_date, b.created_at AS saved_at
+      `SELECT ${listColumns()}, d.date AS day_date, b.created_at AS saved_at
          FROM ca_bookmarks b
          JOIN ca_items i ON i.id = b.item_id
          JOIN ca_days d ON d.id = i.day_id
@@ -418,7 +478,8 @@ router.get('/bookmarks', (req, res) => {
         ORDER BY b.created_at DESC`
     )
     .all(req.user.id);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
   attachUserState(items, req.user.id);
   res.json({ items });
 });
@@ -468,7 +529,7 @@ router.get('/banks/:bank', (req, res) => {
   if (!['Q', 'D', 'E', 'S'].includes(bank)) return res.status(400).json({ error: 'Unknown bank.' });
   const items = db
     .prepare(
-      `SELECT ${itemColumns()}, d.date AS day_date, c.own_note, c.created_at AS filed_at
+      `SELECT ${listColumns()}, d.date AS day_date, c.own_note, c.created_at AS filed_at
          FROM ca_user_cards c
          JOIN ca_items i ON i.id = c.item_id
          JOIN ca_days d ON d.id = i.day_id
@@ -476,7 +537,8 @@ router.get('/banks/:bank', (req, res) => {
         ORDER BY c.created_at DESC`
     )
     .all(req.user.id, bank);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
   res.json({ bank, items });
 });
 
@@ -599,7 +661,7 @@ router.get('/revision/due', (req, res) => {
   const today = T.today();
   const items = db
     .prepare(
-      `SELECT ${itemColumns()}, d.date AS day_date, r.box, r.due_date
+      `SELECT ${listColumns()}, d.date AS day_date, r.box, r.due_date
          FROM ca_revision r
          JOIN ca_items i ON i.id = r.item_id
          JOIN ca_days d ON d.id = i.day_id
@@ -608,7 +670,8 @@ router.get('/revision/due', (req, res) => {
         LIMIT 40`
     )
     .all(req.user.id, today);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
 
   const mcqs = db
     .prepare(
@@ -802,13 +865,14 @@ router.get('/months/:month', (req, res) => {
 
   const items = db
     .prepare(
-      `SELECT ${itemColumns()}, d.date AS day_date
+      `SELECT ${listColumns()}, d.date AS day_date
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE d.date LIKE ? AND ${VISIBLE}
         ORDER BY i.importance, d.date, i.order_index`
     )
     .all(`${month}-%`);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
   attachUserState(items, req.user.id);
 
   const mcqTotal = db
@@ -839,7 +903,7 @@ router.get('/search', (req, res) => {
   const like = `%${q.replace(/[~%_]/g, '~$&')}%`;
   const items = db
     .prepare(
-      `SELECT ${itemColumns()}, d.date AS day_date
+      `SELECT ${listColumns()}, d.date AS day_date
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE ${VISIBLE}
           AND (i.headline LIKE ? ESCAPE '~' OR i.notes_markdown LIKE ? ESCAPE '~'
@@ -851,7 +915,8 @@ router.get('/search', (req, res) => {
         LIMIT 50`
     )
     .all(like, like, like, like, like, like);
-  attachTags(items);
+  attachTags(items, { full: false });
+  attachWordCounts(items);
   res.json({ items, query: q });
 });
 

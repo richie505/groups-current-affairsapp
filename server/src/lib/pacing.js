@@ -140,6 +140,10 @@ function wordsIn(item) {
     const t = String(item?.[f] || '').trim();
     if (t) n += t.split(/\s+/).length;
   }
+  // A list row carries `words` INSTEAD of the prose it counted — the digest
+  // stopped shipping the notes it was never going to render. Falling back to it
+  // is what lets planFor() price a day from rows that hold no text.
+  if (!n && Number.isFinite(Number(item?.words))) return Math.max(0, Number(item.words));
   return n;
 }
 
