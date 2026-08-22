@@ -283,6 +283,27 @@ async function main() {
     );
   }
 
+  // The discard rate, reported for the same reason the web lane reports it: a
+  // run that discards nothing has stopped filtering, and that is invisible
+  // unless it is said out loud.
+  //
+  // This lane will sit lower than the web lane by design — articles arriving
+  // here have already passed the relevance score, so the ruthlessness happened
+  // upstream and a low rate is expected rather than alarming. A rate of exactly
+  // zero across a whole edition is still worth seeing, because it is equally
+  // consistent with a threshold set too low.
+  const considered = articles.length;
+  const rate = considered ? Math.round((discarded.length / considered) * 100) : 0;
+  say('');
+  say(`Considered ${considered} · drafted ${drafted.length} · discarded ${discarded.length} (${rate}%)`);
+  if (!discarded.length && considered >= 5) {
+    say(
+      'NOTE: nothing was discarded. The score gate upstream does most of the ' +
+        'filtering here, but a run that never discards is also what a threshold ' +
+        'set too low looks like — check the weakest item that got through.'
+    );
+  }
+
   if (args.dryRun) {
     console.log(JSON.stringify({ drafted, discarded }, null, 2));
     say(`DRY RUN: ${drafted.length} would be drafted, ${discarded.length} discarded.`);

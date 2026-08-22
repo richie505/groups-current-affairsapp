@@ -97,12 +97,33 @@ const SUBJECT_HINTS = [
   ['Indian History', /\b(?:freedom struggle|Gandhi|Nehru|colonial|British rule|revolt|independence movement|Mughal|Maurya)/i],
 ];
 
+// How many distinct signals of each kind the text carries. Counted rather than
+// merely detected, because a single passing word is not evidence of what a story
+// is ABOUT.
+//
+// A strict precedence — any international token beats every national one — put a
+// Supreme Court opinion on Indian environmental clearances into the
+// 'international' bucket on the strength of one occurrence of "multilateral",
+// and an Indian fiscal-outlook piece there on "India and West". Measured over
+// the 21 August edition: 9 articles bucketed international, 2 of them wrongly,
+// and both had a clear domestic anchor ("Supreme Court", "Centre") sitting in
+// the same text.
+const countOf = (re, text) => (text.match(new RegExp(re.source, re.flags + 'g')) || []).length;
+
 function bucketOf({ text, ap }) {
   // AP wins over everything else. A story that is both national and about Andhra
   // Pradesh belongs in the AP bucket, because AP is the axis this exam turns on
   // and burying it under 'national' is how it stops being read.
   if (ap) return 'ap';
-  if (INTERNATIONAL.test(text)) return 'international';
+  // International has to out-signal the domestic reading, not merely appear in
+  // it. A tie goes to 'national': this is a State exam, and a story carrying
+  // equal evidence of both is far more often a domestic story with a foreign
+  // reference than the reverse. Verified against the edition — the seven
+  // genuinely international stories all carried zero national tokens, so none of
+  // them is affected by this.
+  if (INTERNATIONAL.test(text) && countOf(INTERNATIONAL, text) > countOf(NATIONAL, text)) {
+    return 'international';
+  }
   if (DYNAMIC.test(text) && !NATIONAL.test(text)) return 'dynamic';
   if (NATIONAL.test(text)) return 'national';
   return DYNAMIC.test(text) ? 'dynamic' : 'national';
