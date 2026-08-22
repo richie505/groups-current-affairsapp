@@ -80,15 +80,39 @@ function findingsFor(db, article) {
   // reuse map doing real work rather than being a view: the drafter is handed
   // the units this event's topics are known to serve, so a Polavaram story
   // arrives already knowing it belongs to Paper II, Paper IV and the essay.
+  // Units the matched topics can feed — CANDIDATES, deliberately few.
+  //
+  // This list used to be every unit every matched topic touches, introduced as
+  // "tag at least these". Both halves were wrong, and together they produced the
+  // worst tagging in the corpus: a single generic Tier-1 topic ("Supreme Court
+  // and judicial review") spans most of Paper III, so any story mentioning the
+  // Supreme Court was handed twelve units — and the model returned all twelve,
+  // verbatim, every time. Seven unrelated items ended up with an identical
+  // 12-unit set: an industry ruling, trade unions, a jail transfer in Pakistan,
+  // a Delhi protest, MGNREGA and CBSE marking. P3-U7 landed on 77% of items.
+  //
+  // A tag that appears on three quarters of everything cannot answer "which
+  // items feed P3-U7", and that question is the whole cross-paper reuse map.
+  //
+  // The proof it was the suggestion and not the model: the one article with no
+  // suggested units chose five sensible ones by itself.
+  //
+  // So: ordered by how strongly the source topic matched — a topic named in the
+  // headline is what the story is ABOUT — and capped. The prompt now calls them
+  // candidates and asks for the ones this story genuinely feeds.
   const units = topics.length
     ? db
         .prepare(
-          `SELECT DISTINCT tu.unit_code, u.label
+          `SELECT tu.unit_code, u.label,
+                  MAX(at.in_headline) AS from_headline,
+                  SUM(at.hits)        AS weight
              FROM np_article_topics at
              JOIN topic_units tu ON tu.topic_id = at.topic_id
              LEFT JOIN ref_units u ON u.unit_code = tu.unit_code
             WHERE at.article_id = ?
-            ORDER BY tu.unit_code`
+            GROUP BY tu.unit_code
+            ORDER BY from_headline DESC, weight DESC, tu.unit_code
+            LIMIT 6`
         )
         .all(article.id)
     : [];
@@ -192,10 +216,11 @@ function sourceTextFor(db, article, edition) {
 
   if (f.units.length) {
     lines.push('');
-    lines.push('PAPER UNITS THOSE TOPICS ALREADY FEED (tag at least these):');
-    for (const u of f.units.slice(0, 14)) {
+    lines.push('PAPER UNITS THOSE TOPICS CAN FEED — candidates, not a list to copy:');
+    for (const u of f.units) {
       lines.push(`  - ${u.unit_code}${u.label ? ` — ${u.label}` : ''}`);
     }
+    lines.push('  Take only the ones THIS story genuinely feeds, and add any they miss.');
   }
 
   if (f.entities.length) {
@@ -240,6 +265,23 @@ Two consequences, both binding:
 
 Use the established findings above for the bucket, the keyword angles and the
 unit tags. You are writing the note, not re-classifying the article.
+
+=== CHOOSING THE UNIT TAGS ===
+
+Tag the paper units this story genuinely feeds. Usually two to five; more than
+six is almost always wrong.
+
+The test: could this exact unit list sit under a completely different story? If
+so it is not a routing decision, it is a default block. Seven unrelated items —
+a labour-law ruling, a trade-union protest, a jail transfer abroad, a Delhi
+police enquiry, MGNREGA and a CBSE marking dispute — once came back with the
+same twelve units, which left P3-U7 attached to 77% of everything filed. A tag
+that appears on three quarters of the corpus cannot answer "which items feed
+P3-U7", and that question is the entire point of tagging.
+
+The candidate list above is what the matched topics CAN feed, not what this
+story does. A broad topic like "Supreme Court and judicial review" touches most
+of Paper III; a story about it does not.
 
 === CHOOSING THE BANK ===
 
@@ -579,6 +621,28 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
   if (offVocabKeywords.size) {
     onLog(`${offVocabKeywords.size} keyword(s) outside ref_keywords, kept as free tags:`);
     onLog(`   ${[...offVocabKeywords].slice(0, 10).join(', ')}`);
+  }
+
+  // Over-tagging, reported rather than trimmed.
+  //
+  // Every one of these codes is valid, so there is nothing to drop — the fault
+  // is that too many were claimed, and only a person can say which are real.
+  // Reported because it is otherwise invisible: an item with twelve units looks
+  // exactly like an item with three until somebody counts, and by then the
+  // reuse map has already been diluted.
+  const OVER_TAGGED = 6;
+  const heavy = itemIds
+    .map((id) => ({
+      id,
+      n: db.prepare('SELECT COUNT(*) AS n FROM ca_item_units WHERE item_id = ?').get(id).n,
+    }))
+    .filter((r) => r.n > OVER_TAGGED);
+  if (heavy.length) {
+    onLog(
+      `${heavy.length} item(s) claim more than ${OVER_TAGGED} paper units ` +
+        `(${heavy.map((r) => `#${r.id}:${r.n}`).join(', ')})`
+    );
+    onLog('   a unit list that would fit any story is a default block, not a routing decision');
   }
 
   return { itemIds, offVocabKeywords: [...offVocabKeywords], droppedUnits };
