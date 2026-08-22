@@ -253,6 +253,7 @@ router.get('/:id', (req, res) => {
       `SELECT id, page, headline, standfirst, byline, dateline, chars, language,
               extraction, ocr_confidence, prominence, ap, status, discard_reason,
               merged_into, item_id, score, band, bucket, subjects, breakdown,
+              section, genre, genre_why, bylines, credits,
               substr(body, 1, 400) AS excerpt
          FROM np_articles
         WHERE edition_id = ?

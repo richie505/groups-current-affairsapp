@@ -25,7 +25,8 @@ function itemColumns(alias = 'i') {
           ${alias}.g1_background, ${alias}.g1_ap_angle, ${alias}.g1_linked,
           ${alias}.g1_bridges, ${alias}.g1_way_forward,
           ${alias}.importance, ${alias}.relevance_g1, ${alias}.relevance_g2,
-          ${alias}.needs_verify, ${alias}.verify_note, ${alias}.order_index`;
+          ${alias}.needs_verify, ${alias}.verify_note,
+          ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
 
 // Tag/source fan-out for a set of items, fetched in three queries rather than

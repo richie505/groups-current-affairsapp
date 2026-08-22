@@ -6,7 +6,9 @@ import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import Markdown from '../../components/Markdown';
-import { BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, Chip } from '../../components/Badges';
+import {
+  BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, GenreBadge, Chip,
+} from '../../components/Badges';
 import { longDate } from '../../lib/caFormat';
 import { IconCheck, IconTrash, IconAlert, IconList, IconPencil } from '../../components/Icon';
 
@@ -181,6 +183,7 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
         <BucketBadge bucket={item.bucket} />
         <ImportanceBadge importance={item.importance} />
         {item.g1_bank ? <BankBadge bank={item.g1_bank} /> : null}
+        <GenreBadge genre={item.source_genre} author={item.source_author} />
         {item.needs_verify ? (
           <Chip className="border-amber-400 bg-amber-100 text-amber-900">⚠ Needs verify</Chip>
         ) : null}

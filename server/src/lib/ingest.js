@@ -201,12 +201,13 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
 
     const insert = db.prepare(
       `INSERT INTO np_articles
-         (edition_id, page, headline, standfirst, byline, dateline, body, chars,
-          language, extraction, ocr_confidence, prominence, ap, status, discard_reason,
-          continues_on)
-       VALUES (@edition_id, @page, @headline, @standfirst, @byline, @dateline, @body,
-               @chars, @language, @extraction, @ocr_confidence, @prominence, @ap,
-               @status, @discard_reason, @continues_on)`
+         (edition_id, page, headline, standfirst, byline, bylines, credits, dateline,
+          body, chars, language, extraction, ocr_confidence, prominence, ap, status,
+          discard_reason, continues_on, section, genre, genre_why)
+       VALUES (@edition_id, @page, @headline, @standfirst, @byline, @bylines, @credits,
+               @dateline, @body, @chars, @language, @extraction, @ocr_confidence,
+               @prominence, @ap, @status, @discard_reason, @continues_on,
+               @section, @genre, @genre_why)`
     );
 
     // Provenance has to survive a re-process.
@@ -256,6 +257,12 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
           headline: a.headline,
           standfirst: a.standfirst || '',
           byline: a.byline || '',
+          // Every byline, and the credit lines under them. On an opinion piece
+          // the credit is provenance rather than decoration — an argument about
+          // fiscal policy from a former RBI Governor is a different object from
+          // the same argument unattributed.
+          bylines: (a.bylines || []).join(' | '),
+          credits: (a.credits || []).join(' | '),
           dateline: a.dateline || '',
           body: a.body,
           chars: a.chars,
@@ -267,6 +274,13 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
           status: isLead ? 'new' : 'duplicate',
           discard_reason: isLead ? '' : 'same event as another article in this edition',
           continues_on: a.continues_on ?? null,
+          // What page of the paper this is, and therefore what KIND of writing it
+          // is. See content-pipeline/np-daily/genre.js: an op-ed's claims are the
+          // author's, not the record's, and everything downstream needs to know
+          // that before it turns them into exam facts.
+          section: a.section || '',
+          genre: a.genre || 'report',
+          genre_why: a.genre_why || '',
         }).lastInsertRowid;
       }
 

@@ -71,6 +71,33 @@ function BandBadge({ band, score }) {
   );
 }
 
+// What KIND of piece this is, where it is not an ordinary report.
+//
+// Read off the page's own running head and section labels — see
+// content-pipeline/np-daily/genre.js. Reports carry no chip: they are the norm,
+// and labelling the norm is what makes the exception invisible.
+const GENRE_CHIP = {
+  oped: ['Op-ed', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
+  editorial: ['Editorial', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
+  interview: ['Interview', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
+  column: ['Column', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
+  letters: ['Letters', 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'],
+  archive: ['Archive', 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'],
+};
+
+function GenreChip({ genre, section, why }) {
+  const g = GENRE_CHIP[genre];
+  if (!g) return null;
+  return (
+    <span
+      className={`rounded px-1.5 font-semibold ${g[1]}`}
+      title={[section ? `${section} page` : '', why].filter(Boolean).join(' — ')}
+    >
+      {g[0]}
+    </span>
+  );
+}
+
 // The five factors, shown on demand. A score nobody can decompose is a score
 // nobody trusts, so the breakdown is one click away rather than absent.
 function Breakdown({ raw }) {
@@ -785,6 +812,12 @@ function ArticleList({ rows, muted }) {
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
             <BandBadge band={a.band} score={a.score} />
             <span className="font-mono">p{a.page}</span>
+            {/* What kind of piece the page says this is. Shown BEFORE drafting,
+                because on the editorial page the difference between a report and
+                an argument is the difference between a fact and a claim, and the
+                admin deciding what to draft should see it here rather than
+                discover it in the queue. */}
+            <GenreChip genre={a.genre} section={a.section} why={a.genre_why} />
             {a.prominence ? <span>{a.prominence}×</span> : null}
             {a.ap ? (
               <span className="rounded bg-brand-100 px-1.5 font-bold text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">

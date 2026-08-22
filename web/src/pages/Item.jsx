@@ -17,6 +17,7 @@ import {
   UnitBadge,
   BankBadge,
   VerifyBadge,
+  GenreBadge,
   Chip,
 } from '../components/Badges';
 import { BANKS, longDate, shortDate } from '../lib/caFormat';
@@ -78,6 +79,7 @@ export default function Item() {
             {item.subject_tag}
           </Chip>
         ) : null}
+        <GenreBadge genre={item.source_genre} author={item.source_author} />
         {item.needs_verify ? <VerifyBadge note={item.verify_note} /> : null}
       </div>
 

@@ -7,6 +7,7 @@ import {
   UnitBadge,
   BankBadge,
   VerifyBadge,
+  GenreBadge,
   Chip,
 } from './Badges';
 import { shortDate } from '../lib/caFormat';
@@ -29,6 +30,7 @@ export default function ItemCard({ item, showDate = false }) {
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <BucketBadge bucket={item.bucket} />
         <ImportanceBadge importance={item.importance} />
+        <GenreBadge genre={item.source_genre} author={item.source_author} />
         {item.needs_verify ? <VerifyBadge note={item.verify_note} /> : null}
         {showDate && item.day_date ? (
           <span className="text-[11px] text-slate-500">{shortDate(item.day_date)}</span>

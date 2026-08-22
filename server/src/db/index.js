@@ -25,6 +25,15 @@ db.exec(schema);
     // shipped with a single angle field, so existing rows keep their fact and
     // angle and simply have the new sections empty until edited or redrafted.
     ca_items: [
+      // What KIND of source this item was drafted from — 'report', 'oped',
+      // 'editorial', 'interview'. Copied onto the item rather than read through
+      // np_articles because it has to survive the article: an item outlives the
+      // edition row it came from, and "is this a fact or a columnist's claim"
+      // must stay answerable for as long as a student can read the item.
+      ['source_genre', "TEXT NOT NULL DEFAULT 'report'"],
+      // Who is making the claim, where the source was signed opinion. Rendered
+      // beside the item so an argument is never presented as anonymous record.
+      ['source_author', "TEXT NOT NULL DEFAULT ''"],
       ['g1_theme', "TEXT NOT NULL DEFAULT ''"],
       ['g1_sub_theme', "TEXT NOT NULL DEFAULT ''"],
       ['g1_why_news', "TEXT NOT NULL DEFAULT ''"],
@@ -76,6 +85,19 @@ db.exec(schema);
       // join the continuation, but a jump that is stored can be joined later
       // and one that was stripped and forgotten cannot.
       ['continues_on', 'INTEGER'],
+      // What KIND of piece this is — see content-pipeline/np-daily/genre.js.
+      // `section` is the page as the paper names it in its own running head
+      // ("Editorial", "Opinion", "Business"); `genre` is what that makes the
+      // piece; `genre_why` records which signal decided it, so a wrong call can
+      // be read rather than guessed at.
+      ['section', "TEXT NOT NULL DEFAULT ''"],
+      ['genre', "TEXT NOT NULL DEFAULT 'report'"],
+      ['genre_why', "TEXT NOT NULL DEFAULT ''"],
+      // All bylines, not only the first: op-eds are routinely co-authored. And
+      // the contributor credit under them, which on an opinion piece is the
+      // authority the argument rests on.
+      ['bylines', "TEXT NOT NULL DEFAULT ''"],
+      ['credits', "TEXT NOT NULL DEFAULT ''"],
     ],
   };
 

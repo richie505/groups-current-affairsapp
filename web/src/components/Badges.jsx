@@ -103,6 +103,37 @@ export function FormatBadge({ format }) {
   );
 }
 
+// What KIND of piece the item was drafted from.
+//
+// A news report and an op-ed are different objects, and until this badge existed
+// nothing on the screen said so: an item summarising a columnist's reading of a
+// judgment looked exactly like an item summarising the judgment. The student
+// reading it has no way to know that the confident sentence in front of them is
+// somebody's argument unless the page says so.
+//
+// A report earns no badge — it is the norm, and labelling the norm makes the
+// exception invisible, the same reasoning that keeps Tier 2 and 3 unbadged.
+const GENRE_CHIP = {
+  oped: { label: 'Op-ed', hint: 'Drafted from signed opinion. The evaluations and projections in it are the author’s, not the record’s.' },
+  editorial: { label: 'Editorial', hint: 'Drafted from the newspaper’s own unsigned editorial — an institutional argument, not a report.' },
+  interview: { label: 'Interview', hint: 'Drafted from an interview or debate. The claims are the speakers’, not the record’s.' },
+  column: { label: 'Column', hint: 'Drafted from a signed column — argument rather than reportage.' },
+};
+
+export function GenreBadge({ genre, author }) {
+  const g = GENRE_CHIP[genre];
+  if (!g) return null;
+  return (
+    <Chip
+      className="border-violet-300 bg-violet-100 text-violet-900"
+      title={author ? `${g.hint} — ${author}` : g.hint}
+    >
+      {g.label}
+      {author ? <span className="font-normal opacity-80">· {author}</span> : null}
+    </Chip>
+  );
+}
+
 // Shown when a figure or name could not be confirmed at a second source. It is
 // deliberately loud: an acknowledged gap is worth more than a confident guess,
 // but only if the student actually sees it before memorising the number.

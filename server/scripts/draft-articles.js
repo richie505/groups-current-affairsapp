@@ -261,6 +261,11 @@ async function main() {
     ];
     record._articleId = article.id;
 
+    // What KIND of piece this came from, and whose claims these therefore are.
+    // Stamped before the verify-note default below, because on an opinion source
+    // it writes a specific note where that default would write a generic one.
+    D.markProvenance(record, { ...article, publication: edition.publication });
+
     // The flag is left to the model; only the NOTE is guaranteed.
     //
     // It used to be forced to 1 here, on the reasoning that a single print

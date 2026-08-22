@@ -45,6 +45,7 @@ const T = require('./topics');
 const { VETO, INSTRUMENT, SPORT_MATCH_REPORT, SPORT_EXEMPT } = require(
   path.join(__dirname, '..', '..', '..', 'content-pipeline', 'np-daily', 'gate-rules')
 );
+const G = require(path.join(__dirname, '..', '..', '..', 'content-pipeline', 'np-daily', 'genre'));
 
 let AP_TERMS = [];
 try {
@@ -259,6 +260,27 @@ function score(article, ctx) {
 
   // ---- veto ----
   //
+  // Some pieces are not events at all, whatever they score.
+  //
+  // Letters to the editor are readers' opinions; the archive columns ("A HUNDRED
+  // YEARS AGO", "FROM THE ARCHIVES") are reprints of copy a century old. Both
+  // read as perfectly plausible current-affairs prose and both would score on
+  // the ordinary signals — the 21 August archive column is about Calcutta's
+  // foreign trade, names an instrument, carries a figure and reads like a
+  // business report from 1926, which is exactly what it is.
+  //
+  // This is a veto rather than a penalty because no score is the right score
+  // here. The question "how examinable is this?" does not apply to a document
+  // that is not a record of anything current.
+  if (G.isNonEvent(article.genre)) {
+    const label = G.labelOf(article.genre).toLowerCase();
+    return {
+      score: 0, band: 'low', bucket: bucketOf({ text, ap }), subjects: [],
+      breakdown: { vetoed: label }, keywords: [], topics: [],
+      vetoed: label, why: `excluded: ${label} — not a report of a current event`,
+    };
+  }
+
   // Sport is tested separately from the veto list because the rule is narrower:
   // a match report is not examinable, but doping, governance, a major tournament
   // or a sports policy question is, and the blueprint carries CWG and Olympics as

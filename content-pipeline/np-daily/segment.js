@@ -31,6 +31,7 @@
 // discard as a first-class outcome for the same reason.
 
 const { detect, isNoisePage } = require('./profiles');
+const G = require('./genre');
 
 // ---------------------------------------------------------------------------
 // text cleanup
@@ -169,6 +170,28 @@ function matchesAny(patterns, text) {
 // they were lifted out of.
 function isFragment(text) {
   return /^[a-z]/.test(text) && !/^[a-z]{2,}\s+[A-Z]/.test(text);
+}
+
+// A byline is a name, and the emphasis face it is set in is not reserved to it:
+// the paper uses the same bold for section kickers ("PARLEY", "NOTEBOOK") and
+// for the bolded question that opens each turn of an interview. Keeping only the
+// first byline hid that; listing them all exposes it, so the list is shaped as
+// well as collected.
+//
+// A name is a few words. It does not end in a colon, a question mark or a
+// sentence's full stop, and it is not a single word set in capitals — which is
+// what every kicker on the opinion pages is.
+//
+// The full stop needs the exception: "Sankar Narayanan E.H." is a byline and
+// ends in one. A trailing initial is not a sentence ending, so only a stop that
+// closes a word is disqualifying.
+function looksLikeByline(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 60) return false;
+  if (/[?:!]$/.test(t)) return false;
+  if (/\.$/.test(t) && !/\b[A-Z]\.$/.test(t)) return false;
+  if (!/\s/.test(t) && t === t.toUpperCase()) return false;
+  return true;
 }
 
 // Assigns one of: noise, classified, furniture, pagetitle, dropcap, headline,
@@ -415,6 +438,8 @@ function segmentPage(page, profile, opts = {}) {
     standfirst: '',
     byline: '',
     captions: [],
+    bylineBlocks: [],
+    captionBlocks: [],
     bodyBlocks: [],
     dropcaps: [],
     jumps: [],
@@ -429,8 +454,11 @@ function segmentPage(page, profile, opts = {}) {
     if (b.role === 'jumpline') {
       for (const m of b.text.matchAll(CONTINUATION)) owner.jumps.push(Number(m[1]));
     } else if (b.role === 'dropcap') owner.dropcaps.push(b);
-    else if (b.role === 'caption') owner.captions.push(b.text);
-    else if (b.role === 'byline' && !owner.byline) owner.byline = b.text;
+    else if (b.role === 'caption') owner.captionBlocks.push(b);
+    // Every byline, not just the first. Op-eds are routinely co-authored — the
+    // 21 August fiscal-outlook piece carries two — and keeping only the first
+    // silently reassigns the whole argument to one of its authors.
+    else if (b.role === 'byline') owner.bylineBlocks.push(b);
     else if (b.role === 'secondary') {
       // Immediately under its headline, a headline-face block is the standfirst.
       // Further down it is a pull-quote, whose text already appears in the body.
@@ -524,6 +552,36 @@ function segmentPage(page, profile, opts = {}) {
   // this article actually occupies rather than from a page-wide grid.
   const out = [];
   for (const a of articles) {
+    // Bylines in reading order, and the credit lines that belong to them.
+    //
+    // The contributor's credit — "Former Chairman, Prime Minister's Economic
+    // Advisory Council and former Governor, Reserve Bank of India" — is set in
+    // the caption face and sits immediately under the byline, in the same
+    // column. Nothing else in the paper does that, which is what makes the
+    // geometric test safe.
+    //
+    // It is kept because on an opinion piece it is provenance, not decoration:
+    // an argument about fiscal policy FROM A FORMER RBI GOVERNOR is a different
+    // object from the same argument unattributed, and an answer that leans on it
+    // has to be able to say which.
+    // The byline role is set by the emphasis FACE, which the paper also uses for
+    // section kickers and bold lead-ins — "PARLEY", "NOTEBOOK", and the bolded
+    // question that opens each turn of an interview. Keeping only the first
+    // byline hid that; listing them all exposes it, so the list is shaped as
+    // well as collected. A byline is a name: a few words, not a sentence, not a
+    // question, and not a one-word kicker set in capitals.
+    a.bylineBlocks.sort((p, q) => y0(p) - y0(q));
+    const bylines = a.bylineBlocks.map((b) => clean(b.text)).filter(looksLikeByline);
+    a.byline = bylines[0] || '';
+    const credits = [];
+    for (const c of a.captionBlocks) {
+      const under = a.bylineBlocks.find(
+        (b) => y0(c) - y1(b) >= -2 && y0(c) - y1(b) <= 32 && Math.abs(x0(c) - x0(b)) <= 24
+      );
+      if (under) credits.push(clean(c.text));
+      else a.captions.push(c.text);
+    }
+
     const cols = new Map();
     for (const b of a.bodyBlocks) {
       const key = Math.round(x0(b) / 24) * 24;   // tolerate justification jitter
@@ -568,6 +626,8 @@ function segmentPage(page, profile, opts = {}) {
       headline: a.headline,
       standfirst: a.standfirst,
       byline: a.byline,
+      bylines,
+      credits,
       dateline: datelineFrom(a.byline),
       body: text,
       chars,
@@ -666,7 +726,24 @@ function segment(ir, opts = {}) {
       skipped.push({ page: page.page, reason: noise, source: page.source });
       continue;
     }
-    pages.push(segmentPage(page, pageProfile, opts));
+    const seg = segmentPage(page, pageProfile, opts);
+    // What page of the paper this is, and therefore what kind of writing sits on
+    // it. Read off the running head, which every page carries and which the role
+    // classifier was already matching in order to discard it. See genre.js.
+    seg.section = G.sectionOf(page);
+    const markers = G.markersOf(page);
+    for (const a of seg.articles) {
+      a.section = seg.section;
+      const g = G.genreOf(a, seg.section, G.markerFor(a, markers));
+      a.genre = g.genre;
+      a.genre_why = g.why;
+      // The disclaimer has now done its work as evidence, so it comes out of the
+      // prose. It is a statement by the newspaper about the piece, not a
+      // sentence in it, and left in place it reads as content.
+      a.body = clean(a.body.replace(G.DISCLAIMER_LINE, ' '));
+      a.chars = a.body.length;
+    }
+    pages.push(seg);
   }
 
   // `continues_on` is a PRINTED page number as the paper wrote it. Resolved here

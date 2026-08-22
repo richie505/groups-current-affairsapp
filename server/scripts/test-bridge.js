@@ -152,6 +152,106 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// 3. genre — what kind of piece the source was
+//
+// The rules that decide it are pure text and pure geometry, so they pin cleanly.
+// Each case below is a real piece from the 21 August edition, and every one of
+// them was previously classified as a news report.
+// ---------------------------------------------------------------------------
+
+const G = require(path.join(__dirname, '..', '..', 'content-pipeline', 'np-daily', 'genre'));
+
+const runningHead = (text) => ({ blocks: [{ text, bbox: [28, 23, 964, 31] }] });
+check('section read off the running head', G.sectionOf(runningHead('Vijayawada Editorial')) === 'Editorial');
+check(
+  'section read off the one-line running head',
+  G.sectionOf(runningHead('7 Friday, August 21, 2026 Vijayawada Opinion')) === 'Opinion'
+);
+check(
+  'a promotional strip is not read as a section',
+  G.sectionOf(runningHead('Vijayawada www.thehindu.com Friday, August 21, 2026')) === ''
+);
+check('a page with no running head has no section', G.sectionOf(runningHead('')) === '');
+
+check(
+  'signed piece on the editorial page is an op-ed',
+  G.genreOf({ headline: 'The Vanashakti verdict is balanced', byline: 'K. Periyasamy', body: 'x' }, 'Editorial').genre === 'oped'
+);
+check(
+  'unsigned piece on the editorial page is an editorial',
+  G.genreOf({ headline: 'Trial by fire', byline: '', body: 'x' }, 'Editorial').genre === 'editorial'
+);
+check(
+  'the disclaimer identifies an op-ed with no section',
+  G.genreOf({ headline: 'h', byline: 'C. Rangarajan', body: 'Fiscal text. The views expressed are personal' }, '').genre === 'oped'
+);
+check(
+  'a Q&A transcript is an interview',
+  G.genreOf({ headline: 'Can free coaching work?', byline: 'BC', body: 'Is it viable? BC: Yes it is. AS: I disagree. BC: The stack model works.' }, 'Opinion').genre === 'interview'
+);
+check(
+  'a news report stays a report',
+  G.genreOf({ headline: 'Four higher education Bills passed', byline: 'The Hindu Bureau', body: 'The Assembly passed.' }, 'Andhra Pradesh').genre === 'report'
+);
+check(
+  'a kicker labels the piece below it, not the page',
+  G.markerFor({ bbox: [385, 1360, 515, 1380] }, G.markersOf({
+    blocks: [
+      { text: 'FIFTY YEARS AGO AUGUST 21, 1976', bbox: [385, 1330, 529, 1342] },
+      { text: 'PARLEY', bbox: [172, 160, 209, 172] },
+    ],
+  }))?.genre === 'archive'
+);
+check('op-ed counts as opinion', G.isOpinion('oped') && G.isOpinion('editorial') && !G.isOpinion('report'));
+check('letters and archive are not events', G.isNonEvent('letters') && G.isNonEvent('archive') && !G.isNonEvent('oped'));
+
+// ---------------------------------------------------------------------------
+// 4. provenance — an opinion source is marked as one, and says whose it is
+// ---------------------------------------------------------------------------
+
+const opRecord = D.markProvenance(
+  { headline: 'h', verify_note: '' },
+  { genre: 'oped', byline: 'C. Rangarajan', bylines: 'C. Rangarajan | D.K. Srivastava' }
+);
+check('op-ed record carries its genre', opRecord._genre === 'oped');
+check('op-ed record names every author', opRecord._author === 'C. Rangarajan, D.K. Srivastava');
+check('op-ed forces the verify flag', Number(opRecord.needs_verify) === 1);
+check('verify note names whose claims these are', /C\. Rangarajan, D\.K\. Srivastava/.test(opRecord.verify_note));
+
+const edRecord = D.markProvenance({ headline: 'h' }, { genre: 'editorial', byline: '', publication: 'The Hindu' });
+check('an unsigned editorial is attributed to the paper', edRecord._author === 'The Hindu');
+
+const repRecord = D.markProvenance({ headline: 'h', needs_verify: 0 }, { genre: 'report', byline: 'The Hindu Bureau' });
+check('a report is not force-flagged', Number(repRecord.needs_verify) === 0);
+check('a report carries no forced verify note', !repRecord.verify_note);
+
+const provOut = D.insertDrafted(db, {
+  date: '2026-08-21',
+  drafted: [{ ...record, headline: 'An op-ed item', _genre: 'oped', _author: 'C. Rangarajan' }],
+  onLog: () => {},
+});
+const provItem = db.prepare('SELECT source_genre, source_author FROM ca_items WHERE id = ?').get(provOut.itemIds[0]);
+check('source genre is stored on the item', provItem.source_genre === 'oped');
+check('source author is stored on the item', provItem.source_author === 'C. Rangarajan');
+
+// ---------------------------------------------------------------------------
+// 5. the relevance gate refuses pieces that are not events at all
+// ---------------------------------------------------------------------------
+
+const R = require(path.join(__dirname, '..', 'src', 'lib', 'relevance'));
+const ctx = R.loadContext(db);
+const archive = R.score(
+  {
+    headline: "A HUNDRED YEARS AGO AUGUST 21, 1926 Calcutta's foreign trade",
+    body: 'Calcutta, August 18: Calcutta trade with foreign countries in July 1926 shows a small decline under the Act.',
+    genre: 'archive',
+  },
+  ctx
+);
+check('an archive reprint is vetoed, not scored', archive.score === 0 && !!archive.vetoed);
+check('the veto says why', /not a report of a current event/.test(archive.why));
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

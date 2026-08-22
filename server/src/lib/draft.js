@@ -47,6 +47,7 @@ const PIPELINE = path.join(ROOT, 'content-pipeline', 'ca-daily');
 // parameter the API names and retries. Reimplementing that here would mean
 // rediscovering it here.
 const L = require(path.join(PIPELINE, 'lib'));
+const G = require(path.join(ROOT, 'content-pipeline', 'np-daily', 'genre'));
 
 const DIMENSIONS = [
   'economic', 'social', 'political', 'ethical', 'environmental', 'legal', 'international',
@@ -139,6 +140,27 @@ function sourceTextFor(db, article, edition) {
   // rather than being left inside the body.
   if (article.dateline) lines.push(`DATELINE: ${article.dateline}`);
   if (article.byline) lines.push(`BYLINE: ${article.byline}`);
+
+  // What KIND of piece this is. It goes above the findings rather than among
+  // them because it changes what every one of them means: the same sentence is a
+  // fact in a report and a claim in an op-ed, and nothing else in this input
+  // distinguishes the two.
+  const genre = article.genre || 'report';
+  lines.push(`KIND: ${G.labelOf(genre)}`);
+  if (article.bylines && article.bylines !== article.byline) {
+    lines.push(`AUTHORS: ${article.bylines}`);
+  }
+  // The contributor credit — "former Governor, Reserve Bank of India" — is the
+  // authority the argument rests on, and an answer that cites the argument needs
+  // it. It is also the check on the argument: an expert's reading of a judgment
+  // is still a reading.
+  if (article.credits) lines.push(`AUTHOR'S CREDENTIALS: ${article.credits}`);
+  if (G.isOpinion(genre)) {
+    lines.push(
+      'THIS IS NOT A NEWS REPORT. Everything below the SOURCE TEXT heading is ' +
+        'argument, not record. See the rules on opinion sources in your instructions.'
+    );
+  }
   lines.push(`DATE: ${edition.date}`);
   lines.push(
     `SOURCE: ${edition.publication}${edition.edition ? ` (${edition.edition})` : ''}` +
@@ -305,14 +327,192 @@ Use null only when the item genuinely fits none of the four. An item worth
 routing to Group I at all usually fits one.
 `;
 
+// Appended ONLY when the source is an editorial, an op-ed, an interview or a
+// signed column. See content-pipeline/np-daily/genre.js for how that is decided.
+//
+// WHY THIS IS A SEPARATE BLOCK AND NOT A LINE IN THE MAIN PROMPT
+//
+// Because it inverts the default. The whole of the rest of the prompt is built
+// on "the source reports what happened, extract it". On an opinion page that
+// premise is false, and a caution bolted onto a prompt whose every other
+// instruction assumes reportage loses to the instructions around it.
+//
+// The two faults it exists to prevent both actually happened, on one page, on
+// one day:
+//
+//   An op-ed characterised the Vanashakti judgment. The item filed the
+//   characterisation as what the Court held.
+//
+//   Two economists PROJECTED a fiscal deficit of ₹18.16 lakh crore against a
+//   budgeted ₹16.96 lakh crore. The item filed the projection as the figure,
+//   labelled "Estimated", with no projector named.
+//
+// Neither is a hallucination. Both are faithful summaries of their source. That
+// is exactly the difficulty: faithfully summarising an argument produces a false
+// fact, and no amount of care about accuracy catches it, because the summary IS
+// accurate. Only knowing what kind of page it came from catches it.
+const OPINION_ADDENDUM = `
+=== THIS SOURCE IS OPINION, NOT REPORTAGE ===
+
+The KIND line in the input says what this is. It is argument, written by a named
+person or by the newspaper itself. It is not a record of what happened.
+
+That distinction is the whole of this section. A candidate who writes "the
+Supreme Court held X" when a columnist argued X loses the mark — and loses it
+confidently, which is the hardest kind of error to unlearn.
+
+1. THE FACT IS THE OCCASION, NOT THE ARGUMENT.
+
+   Every opinion piece is written ABOUT something: a judgment, a Budget, a data
+   release, a Bill, a report. That occasion is verifiable and belongs in
+   "g1_fact". The author's reading of it does not.
+
+     WRONG  The Vanashakti verdict is balanced and pragmatic.
+     RIGHT  The Supreme Court delivered judgment in Vanashakti v. Union of India
+            on 29 July 2026, on whether prior environmental clearance may be
+            granted retrospectively.
+
+   Where the piece is occasioned by no verifiable event — a general argument
+   about coaching culture, say — say so in "verify_note", and let the fact be
+   the publication of the argument itself, attributed.
+
+2. ATTRIBUTE EVERY EVALUATION, PREDICTION AND CAUSAL CLAIM.
+
+   Name the author inside the sentence, not in a footnote. For an unsigned
+   editorial the author is the newspaper, and "The Hindu argued in its editorial
+   of <date>" is a citable institutional position — write it that way.
+
+     WRONG  The fiscal deficit will reach 4.6% of GDP.
+     RIGHT  Rangarajan and Srivastava project the deficit at 4.6% of GDP against
+            a budgeted 4.3%.
+
+3. EVERY FIGURE IS ONE OF THREE THINGS. SAY WHICH.
+
+   (a) An official figure the author is CITING — give the issuing body and the
+       period: "CGA data for Q1 2026-27".
+   (b) The author's OWN estimate or projection — say so, and say whose:
+       "projected by the authors", "the editorial's own estimate".
+   (c) An illustration, or a round number used rhetorically — do not file it as
+       data at all.
+
+   Never present (b) as (a). A projection filed as a figure is the most damaging
+   thing this pipeline can produce, because at the moment a student memorises it
+   it is indistinguishable from a real one.
+
+4. "prelims_facts" TAKES ONLY WHAT SURVIVES WITHOUT THE AUTHOR.
+
+   These become MCQ answer keys, and an MCQ keyed to somebody's opinion is
+   simply a wrong question. Admit only:
+
+     - names, numbers and dates of statutes, sections, articles and rules
+     - case names, courts, benches and judgment dates
+     - institutions, their mandates and their office-holders
+     - official figures, WITH the body that issued them
+
+   Exclude the author's characterisation, projection, evaluation and forecast —
+   however well argued, and however expert the author. If nothing survives that
+   test, return fewer facts, or none. A short honest list beats a long one.
+
+   Where a projection is genuinely worth carrying, NAME ITS AUTHOR IN THE LABEL
+   ITSELF. "Estimated" is not a label — estimated by whom?
+
+     WRONG  Estimated fiscal deficit: Rs 18.16 lakh crore
+     WRONG  Projected fiscal deficit: Rs 18.16 lakh crore
+     RIGHT  Fiscal deficit projected by the authors: Rs 18.16 lakh crore
+            (budgeted: Rs 16.96 lakh crore)
+
+   The official figure belongs beside the projection wherever the piece gives
+   it. A projection with nothing to measure it against is the form in which a
+   student memorises it as the real number.
+
+   The same test governs the MCQs. Do not write a question whose correct answer
+   is a columnist's view.
+
+5. THE ANGLE IS WHY THIS ITEM IS WORTH HAVING AT ALL.
+
+   An op-ed is the paper's poorest source of facts and its best source of
+   argument, and Group-I Mains is graded on argument. So "g1_angle" and
+   "g1_bridges" should be FULLER here than on a news report, not thinner:
+
+     - state the argument in full, with its author and their standing
+     - give the strongest counter-argument, whether or not the piece concedes it
+     - a named authority's position is citable in an answer in a way that an
+       anonymous news summary is not: "as C. Rangarajan has argued" earns marks
+
+6. "static_notes" IS THE SAFE HARBOUR.
+
+   Where the author's reading of the law or the policy is contested, the settled
+   position underneath it is not. Make the static notes carry that uncontested
+   framework — the Articles, the doctrine, the landmark cases, the scheme as
+   notified — so the student has firm ground to stand on when the material above
+   it is argument.
+`;
+
 async function draftArticle(db, { article, edition, model, vocabulary, prompt }) {
-  const system = `${prompt}\n\n${PRINT_ADDENDUM}\n\n${vocabulary}`;
+  // An opinion source needs a different premise, not an extra caution: the rest
+  // of the prompt is written on "the source reports what happened", which is
+  // false here. See OPINION_ADDENDUM.
+  const opinion = G.isOpinion(article.genre) ? `\n\n${OPINION_ADDENDUM}` : '';
+  const system = `${prompt}\n\n${PRINT_ADDENDUM}${opinion}\n\n${vocabulary}`;
   const raw = await L.complete({
     system,
     user: sourceTextFor(db, article, edition),
     model,
   });
   return L.parseJson(raw);
+}
+
+/**
+ * Stamps the source's KIND onto a drafted record, and — for opinion sources —
+ * makes the verify flag mean what it says.
+ *
+ * WHY THE FLAG IS FORCED HERE AND NOWHERE ELSE
+ *
+ * `draft-articles.js` deliberately does NOT force `needs_verify` on print items,
+ * and the reasoning there is right: forcing it made 100% of bridged items carry
+ * it against 37% on the web lane, and a warning that fires on everything
+ * distinguishes nothing.
+ *
+ * Opinion is the case that argument does not cover. It is a minority — 8 of the
+ * 121 articles in the 21 August edition — so forcing it there leaves the badge
+ * discriminating, and it is the one class of source where "confirm this against
+ * the record" is not boilerplate but the literal thing a reviewer must do,
+ * because the record and the source genuinely differ.
+ *
+ * The note names the author, because that is the actionable half. "Verify before
+ * publishing" tells a reviewer nothing; "these are C. Rangarajan's projections,
+ * not CGA figures" tells them exactly where to look.
+ */
+function markProvenance(record, article) {
+  const genre = article.genre || 'report';
+  record._genre = genre;
+
+  // Who is making the claim. An unsigned editorial is the newspaper's own
+  // position and is citable as such, so it is attributed to the paper rather
+  // than left blank — "The Hindu argued" is a real authority in an answer.
+  const authors = String(article.bylines || article.byline || '')
+    .split('|')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (genre === 'editorial') record._author = article.publication || 'The Hindu (editorial)';
+  else if (authors.length) record._author = authors.join(', ');
+  else record._author = '';
+
+  if (!G.isOpinion(genre)) return record;
+
+  record.needs_verify = 1;
+  const who = record._author || 'the author';
+  record.verify_note = [
+    `Drafted from ${G.labelOf(genre).toLowerCase()}, not from a news report — ` +
+      `the evaluations, projections and characterisations in it are ${who}'s, ` +
+      'not the record’s. Confirm any statute, case, date or official figure ' +
+      'against the primary source before publishing, and check that nothing in ' +
+      'the prelims facts is a claim rather than a fact.',
+    String(record.verify_note || '').trim(),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,13 +636,13 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
          g1_theme, g1_sub_theme, g1_why_news, g1_background, g1_ap_angle,
          g1_linked, g1_bridges, g1_way_forward,
          importance, relevance_g1, relevance_g2, needs_verify, verify_note,
-         order_index, status)
+         source_genre, source_author, order_index, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
          @notes_markdown, @static_linkage, @static_notes, @prelims_facts, @g1_bank, @g1_fact, @g1_angle,
          @g1_theme, @g1_sub_theme, @g1_why_news, @g1_background, @g1_ap_angle,
          @g1_linked, @g1_bridges, @g1_way_forward,
          @importance, @relevance_g1, @relevance_g2, @needs_verify, @verify_note,
-         @order_index, 'draft')`
+         @source_genre, @source_author, @order_index, 'draft')`
     );
     const insKeyword = db.prepare(
       'INSERT OR IGNORE INTO ca_item_keywords (item_id, keyword) VALUES (?, ?)'
@@ -538,6 +738,12 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         relevance_g2: Number(r.relevance_g2) === 0 ? 0 : 1,
         needs_verify: Number(r.needs_verify) ? 1 : 0,
         verify_note: r.verify_note || '',
+        // What KIND of source this came from, carried onto the item rather than
+        // read back through np_articles. An item outlives the edition row that
+        // produced it, and "is this a fact or a columnist's claim" has to stay
+        // answerable for as long as a student can read the item.
+        source_genre: r._genre || 'report',
+        source_author: r._author || '',
         order_index: order,
       });
       const itemId = info.lastInsertRowid;
@@ -778,10 +984,12 @@ async function generateMcqs(
 module.exports = {
   DIMENSIONS,
   PRINT_ADDENDUM,
+  OPINION_ADDENDUM,
   FORMAT_CYCLE,
   findingsFor,
   sourceTextFor,
   draftArticle,
+  markProvenance,
   normaliseTextFields,
   toText,
   insertDrafted,
