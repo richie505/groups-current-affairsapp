@@ -4,8 +4,12 @@ What the commission has actually asked, as data — so that generation imitates 
 real paper instead of a rotation.
 
 ```bash
-# Group-II: the hand-tagged bank (format evidence)
-node server/scripts/seed-pyq-bank.js --file <skill>/references/pyq-bank.md
+# Group-II: the hand-tagged bank (format evidence). Use the appsc-group2-prep
+# skill's copy — it holds eight papers; the appsc-group2-tutor one holds one.
+node server/scripts/seed-pyq-bank.js --file "<appsc-group2-prep skill>/references/pyq-bank.md"
+
+# The blueprint's full keyword-angle vocabulary, from the same skill
+node server/scripts/seed-blueprint-keywords.js --file "<appsc-group2-prep skill>/references/blueprint-keywords.md"
 
 # Group-I: recurrence and cross-paper reuse from the Mains blueprint
 node server/scripts/seed-g1-blueprint.js --file APPSC-G1-Mains-Blueprint/01-MASTER-STUDY-PLAN.md
@@ -139,13 +143,25 @@ rather than interprets and is forbidden from supplying an answer key from memory
 
 ## Known limitations
 
-- **One paper is tagged.** The bank covers 2025 Mains Paper I (150 questions).
-  Distributions for a keyword with 4-12 questions of evidence are directional,
-  not precise.
-- **Option loss in extraction.** On the first three-page trial, 7 of 10
-  questions lost at least one option, because the English filter was tuned for
-  prose and discarded short option lines. Being corrected; until it is, treat
-  extracted questions as format evidence rather than as usable practice items.
+- **Eight papers are tagged, 1,127 questions** — 2016/2018/2023 screening, 2018
+  Mains Papers I and 3, 2025 Mains Papers I and II, and 2019 GS. 96 keywords
+  carry the four questions of evidence `plannedFormats()` needs; the rest still
+  fall back to the default cycle. Distributions for a keyword with 4-12
+  questions are directional, not precise.
+
+  Note there are TWO `pyq-bank.md` files. The one to seed lives in the
+  **`appsc-group2-prep`** skill (125 KB, eight papers); the one in
+  `appsc-group2-tutor` holds only 2025 Mains Paper I and is a subset of it.
+- **38 rows are `format = 'unknown'`.** Mental Ability question types
+  (Coding-Decoding, Blood Relations, Non-verbal Figure Reasoning and the rest)
+  are not among the eight formats the generator uses, and ten more are questions
+  the official key marked deleted. `formatMix()` excludes `'unknown'`, so
+  neither group skews a planned mix — but neither is evidence either.
+- **The scans are still barely extracted.** The filter that discarded short
+  option lines is fixed (see `content-pipeline/pyq/extract.js`), and kept lines
+  went from 52 to 128 of 151 across the pages it was measured on, but only ten
+  questions have actually been run through stage 3. Until a full run is made,
+  the bank is the format evidence and the scans are not.
 - **Group-I evidence is topic-level, not question-level.** The blueprint records
   "Both years", not the questions themselves, so there is no Group-I question
   text in the database at all.
