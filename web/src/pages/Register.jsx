@@ -1,0 +1,124 @@
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+// The exam track is asked for at registration rather than left to a default,
+// because it decides what the app shows from the very first screen. Someone
+// sitting only Group-II should never have to work out what a "bank" is.
+const TRACKS = [
+  { key: 'both', label: 'Both Group I and Group II', hint: 'Most people — read once, file for both' },
+  { key: 'g2', label: 'Group II only', hint: 'Prelims facts, keyword angles, MCQs' },
+  { key: 'g1', label: 'Group I only', hint: 'Capture cards, banks, paper-unit routing' },
+];
+
+export default function Register() {
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ name: '', email: '', password: '', exam_track: 'both' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  function set(k, v) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await register(form.name, form.email, form.password, form.exam_track);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-sm">
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">Create an account</h1>
+      <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-surface p-5">
+        {error ? (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-700">Name</span>
+          <input
+            required
+            value={form.name}
+            onChange={(e) => set('name', e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-700">Email</span>
+          <input
+            type="email"
+            autoComplete="email"
+            required
+            value={form.email}
+            onChange={(e) => set('email', e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-700">Password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            value={form.password}
+            onChange={(e) => set('password', e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"
+          />
+          <span className="mt-1 block text-xs text-slate-500">At least 6 characters.</span>
+        </label>
+        <fieldset>
+          <legend className="mb-1.5 text-sm font-medium text-slate-700">Which exam?</legend>
+          <div className="space-y-1.5">
+            {TRACKS.map((t) => (
+              <label
+                key={t.key}
+                className="flex cursor-pointer gap-2 rounded-md border border-slate-200 p-2 hover:bg-slate-50"
+              >
+                <input
+                  type="radio"
+                  name="track"
+                  value={t.key}
+                  checked={form.exam_track === t.key}
+                  onChange={() => set('exam_track', t.key)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-800">{t.label}</span>
+                  <span className="block text-xs text-slate-500">{t.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            You can switch view at any time — this only sets the starting lane.
+          </p>
+        </fieldset>
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-md bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          {busy ? 'Creating…' : 'Create account'}
+        </button>
+      </form>
+      <p className="mt-4 text-center text-sm text-slate-600">
+        Already have one?{' '}
+        <Link to="/login" className="font-medium text-brand-700 hover:underline">
+          Log in
+        </Link>
+      </p>
+    </div>
+  );
+}

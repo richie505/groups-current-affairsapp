@@ -1,0 +1,11 @@
+{
+  "name": "appsc-current-affairs-app",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "20.x" },
+  "scripts": {
+    "build": "npm --prefix web install && npm --prefix web run build && npm --prefix server install",
+    "start": "npm --prefix server run start",
+    "seed": "npm --prefix server run seed"
+  }
+}

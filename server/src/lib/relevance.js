@@ -1,0 +1,407 @@
+'use strict';
+
+// Section 2 — the APPSC relevance score.
+//
+//   A. Syllabus relevance      30
+//   B. PYQ keyword match       20
+//   C. Andhra Pradesh          20
+//   D. Current importance      15
+//   E. Cross-paper reuse       15
+//                             ---
+//                             100
+//
+//   80-100 CRITICAL   60-79 HIGH   40-59 MEDIUM   below 40 LOW
+//
+// WHY EVERY SCORE CARRIES ITS BREAKDOWN
+//
+// Because a number nobody can decompose is a number nobody trusts. The first
+// question anyone asks about "62 / HIGH" is which part came from where, and if
+// that cannot be answered the score gets ignored and the list goes back to being
+// read top to bottom. So `score()` returns the five components and the reason
+// each one fired, and the caller stores them.
+//
+// It also means the weights are testable. They are a judgement — 30 for syllabus
+// against 20 for AP is an opinion about this exam — and an opinion that can be
+// re-run over past articles can be corrected. One that only exists as a total
+// cannot.
+//
+// WHY IT IS DETERMINISTIC
+//
+// Because it runs on every article of every edition — 118 of them for one day's
+// paper — and it must be free, repeatable, and explainable. A model asked to
+// score relevance gives a different answer to the same article on Tuesday, which
+// makes "why did this drop out of today's list" unanswerable.
+//
+// THE VETO COMES FIRST
+//
+// A robbery in Nandyal mentions an AP district, names a police officer, and
+// matches the 'Arrested' angle: it would score in the forties on the factors
+// alone. So the categories that are never examinable are excluded before any
+// scoring happens, rather than being outvoted by it.
+
+const path = require('path');
+
+const T = require('./topics');
+const { VETO, INSTRUMENT, SPORT_MATCH_REPORT, SPORT_EXEMPT } = require(
+  path.join(__dirname, '..', '..', '..', 'content-pipeline', 'np-daily', 'gate-rules')
+);
+
+let AP_TERMS = [];
+try {
+  ({ AP_TERMS } = require(
+    path.join(__dirname, '..', '..', '..', 'content-pipeline', 'ca-daily', 'sweep')
+  ));
+} catch {
+  AP_TERMS = ['andhra', 'amaravati', 'visakhapatnam', 'vijayawada', 'tirupati'];
+}
+
+const WEIGHTS = { syllabus: 30, pyq: 20, ap: 20, importance: 15, reuse: 15 };
+const BANDS = [
+  [80, 'critical'],
+  [60, 'high'],
+  [40, 'medium'],
+  [0, 'low'],
+];
+
+function bandFor(score) {
+  return (BANDS.find(([min]) => score >= min) || [0, 'low'])[1];
+}
+
+// ---------------------------------------------------------------------------
+// the four buckets (spec section 6)
+// ---------------------------------------------------------------------------
+
+// Requires India-as-party framing, not merely a country name. The first version
+// listed bare country names and filed "Collectors empowered to grant citizenship
+// under CAA" as international, because a CAA story naturally mentions Pakistan
+// and Bangladesh. A country appearing in a story is not the story being about
+// that country.
+const INTERNATIONAL =
+  /\b(?:United Nations|UNESCO|UNICEF|WTO|G20|G7|BRICS|ASEAN|QUAD|COP\d+|bilateral|multilateral|summit|treaty|foreign minister|external affairs|ambassador|diplomatic|envoy)\b|\bIndia\s*(?:[-–—]|and)\s*[A-Z][a-z]+\b/;
+const NATIONAL = /\b(?:Union Cabinet|Parliament|Lok Sabha|Rajya Sabha|Supreme Court|Centre|Government of India|Union Minister|Ministry of|RBI|NITI Aayog|Election Commission|CAG|President of India)\b/i;
+
+// 'dynamic' is the fast-changing edge of another subject — a fresh GI tag, a new
+// index rank, a rate decision. It is current affairs by recency, but its home is
+// Economy or Environment rather than Current Affairs, which is exactly the
+// distinction the Group-II bucket scheme draws.
+const DYNAMIC = /\b(?:GI tag|index|ranking|rank\b|repo rate|inflation|GDP|growth rate|survey|census|report released|data released|tiger reserve|Ramsar|biosphere|launch(?:ed)? (?:of )?(?:a )?satellite|mission)\b/i;
+
+const SUBJECT_HINTS = [
+  ['Polity', /\b(?:Constitution|Article \d+|Amendment|Parliament|Assembly|judiciary|Supreme Court|High Court|Governor|federalism|Panchayat|municipal|writ|Bill|Act\b)/i],
+  ['Economy', /\b(?:GDP|inflation|repo|fiscal|deficit|budget|tax|GST|MSME|industry|investment|export|import|bank|subsidy|MSP|crore|lakh crore)/i],
+  ['Geography', /\b(?:river|monsoon|rainfall|drought|cyclone|soil|mineral|coast|forest cover|landform|irrigation|canal|dam)/i],
+  ['Environment', /\b(?:pollution|emission|climate|biodiversity|wildlife|conservation|Ramsar|tiger|ecosystem|CPCB|environmental clearance)/i],
+  ['Science & Technology', /\b(?:ISRO|satellite|space|vaccine|AI|artificial intelligence|semiconductor|nuclear|research|DRDO|biotechnology|quantum)/i],
+  ['Society', /\b(?:caste|tribal|women|SC\/ST|literacy|education|health|poverty|migration|urbanisation|welfare|reservation)/i],
+  ['AP History', /\b(?:Satavahana|Kakatiya|Vijayanagara|Ikshvaku|Qutb Shahi|Reddi|Telugu literature|inscription|dynasty)/i],
+  ['Indian History', /\b(?:freedom struggle|Gandhi|Nehru|colonial|British rule|revolt|independence movement|Mughal|Maurya)/i],
+];
+
+function bucketOf({ text, ap }) {
+  // AP wins over everything else. A story that is both national and about Andhra
+  // Pradesh belongs in the AP bucket, because AP is the axis this exam turns on
+  // and burying it under 'national' is how it stops being read.
+  if (ap) return 'ap';
+  if (INTERNATIONAL.test(text)) return 'international';
+  if (DYNAMIC.test(text) && !NATIONAL.test(text)) return 'dynamic';
+  if (NATIONAL.test(text)) return 'national';
+  return DYNAMIC.test(text) ? 'dynamic' : 'national';
+}
+
+function subjectsOf(text) {
+  return SUBJECT_HINTS.filter(([, re]) => re.test(text)).map(([name]) => name);
+}
+
+// ---------------------------------------------------------------------------
+// vocabularies, loaded once per scoring run
+// ---------------------------------------------------------------------------
+
+const KEYWORD_STOPLIST = new Set([
+  'last', 'first', 'new', 'best', 'top', 'largest', 'highest', 'lowest', 'longest',
+  'oldest', 'total', 'number', 'place', 'location', 'name', 'year', 'day', 'state',
+  'city', 'district', 'area', 'people', 'group', 'india', 'government', 'minister',
+  'president', 'world', 'ministry', 'party', 'days', 'website', 'platform',
+  'programme', 'policy', 'capital', 'council', 'defence', 'cases', 'report',
+  'committee', 'commission', 'chairman', 'chairperson', 'commissioner',
+  'secretary', 'officer', 'department', 'scheme', 'project', 'meeting',
+]);
+
+function loadContext(db) {
+  const keywords = [];
+  const seen = new Set();
+  for (const r of db.prepare('SELECT keyword, subject FROM ref_keywords').all()) {
+    for (const raw of String(r.keyword).split(/[/|]/)) {
+      const term = raw.trim();
+      if (term.length < 4) continue;
+      const low = term.toLowerCase();
+      if (KEYWORD_STOPLIST.has(low) || seen.has(low)) continue;
+      seen.add(low);
+      keywords.push({
+        term,
+        subject: r.subject,
+        re: new RegExp(`\\b${term.replace(/[.*+?^${}()[\]\\]/g, '\\$&')}\\b`, 'i'),
+      });
+    }
+  }
+
+  // How often each angle has actually been asked. This is what turns factor B
+  // from "matches a word on a list" into "matches an angle the commission keeps
+  // returning to".
+  const pyqCount = new Map();
+  try {
+    for (const r of db
+      .prepare(
+        `SELECT k.keyword, COUNT(*) AS n FROM pyq_question_keywords k
+           JOIN pyq_questions q ON q.id = k.question_id
+          GROUP BY k.keyword`
+      )
+      .all()) {
+      pyqCount.set(r.keyword.toLowerCase(), r.n);
+    }
+  } catch {
+    // No PYQ corpus yet; factor B falls back to a plain keyword match.
+  }
+
+  // Papers each topic is known to serve, for factor E.
+  const topicPapers = new Map();
+  try {
+    for (const r of db
+      .prepare(
+        `SELECT topic_id, COUNT(DISTINCT paper) AS papers FROM topic_evidence
+          WHERE paper <> '' GROUP BY topic_id`
+      )
+      .all()) {
+      topicPapers.set(r.topic_id, r.papers);
+    }
+  } catch {
+    // No blueprint evidence loaded.
+  }
+
+  const topicTier = new Map(
+    db.prepare('SELECT id, tier, ap FROM topics').all().map((r) => [r.id, r])
+  );
+
+  return { keywords, pyqCount, topicPapers, topicTier, aliases: T.loadAliases(db) };
+}
+
+// ---------------------------------------------------------------------------
+// the score
+// ---------------------------------------------------------------------------
+
+/**
+ * Scores one article. Pure: same input, same output, no model, no clock.
+ *
+ * Returns { score, band, bucket, subjects, breakdown, keywords, topics, vetoed }.
+ */
+function score(article, ctx) {
+  const headline = `${article.headline || ''} ${article.standfirst || ''}`;
+  const body = String(article.body || '');
+  const text = `${headline} ${body}`;
+  const head = headline;
+
+  const ap =
+    article.ap != null
+      ? !!article.ap
+      : AP_TERMS.some((t) => `${text} ${article.dateline || ''}`.toLowerCase().includes(t));
+
+  const breakdown = {};
+  const notes = [];
+
+  // ---- veto ----
+  //
+  // Sport is tested separately from the veto list because the rule is narrower:
+  // a match report is not examinable, but doping, governance, a major tournament
+  // or a sports policy question is, and the blueprint carries CWG and Olympics as
+  // angles. Omitting this check let a CBSE archery tournament reach 62/HIGH.
+  if (SPORT_MATCH_REPORT.test(text) && !SPORT_EXEMPT.test(text)) {
+    return {
+      score: 0, band: 'low', bucket: bucketOf({ text, ap }), subjects: [],
+      breakdown: { vetoed: 'sport match report' }, keywords: [], topics: [],
+      vetoed: 'sport match report', why: 'excluded: sport match report',
+    };
+  }
+  // A tournament or championship ANNOUNCEMENT is not a match report and so slips
+  // past the rule above, while being just as unexaminable.
+  if (/\b(?:tourney|tournament|championship|meet|league)\b/i.test(head) && !SPORT_EXEMPT.test(text)) {
+    return {
+      score: 0, band: 'low', bucket: bucketOf({ text, ap }), subjects: [],
+      breakdown: { vetoed: 'sports event announcement' }, keywords: [], topics: [],
+      vetoed: 'sports event announcement', why: 'excluded: sports event announcement',
+    };
+  }
+  for (const v of VETO) {
+    if (v.re.test(head) || v.re.test(body.slice(0, 900))) {
+      return {
+        score: 0,
+        band: 'low',
+        bucket: bucketOf({ text, ap }),
+        subjects: [],
+        breakdown: { vetoed: v.label },
+        keywords: [],
+        topics: [],
+        vetoed: v.label,
+        why: `excluded: ${v.label}`,
+      };
+    }
+  }
+
+  // ---- topics, needed by A and E ----
+  const matched = T.matchItem(
+    { headline: head, notes_markdown: body },
+    ctx.aliases
+  ).filter((m) => (m.in_headline ? m.hits >= 1 : m.hits >= 2));
+
+  // ---- A. syllabus relevance (30) ----
+  //
+  // Earned by connecting to the syllabus in a way something downstream can use:
+  // a known master topic, or recognisable subject territory. A headline topic is
+  // worth more than a body mention, because it is what the article is about.
+  const subjects = subjectsOf(text);
+  const headTopic = matched.some((m) => m.in_headline);
+  let syllabus = 0;
+  if (headTopic) {
+    syllabus = 30;
+    notes.push('names a known topic in the headline');
+  } else if (matched.length) {
+    syllabus = 18;
+    notes.push('mentions a known topic');
+  } else if (subjects.length >= 2) {
+    syllabus = 12;
+    notes.push(`syllabus territory: ${subjects.slice(0, 3).join(', ')}`);
+  } else if (subjects.length === 1) {
+    syllabus = 7;
+    notes.push(`syllabus territory: ${subjects[0]}`);
+  }
+  // A Tier-1 topic is the syllabus at its most concentrated, so it tops the
+  // factor out rather than merely contributing to it.
+  const tier1 = matched.some((m) => ctx.topicTier.get(m.topic_id)?.tier === 1);
+  if (tier1 && syllabus < 30) {
+    syllabus = 30;
+    notes.push('Tier-1 topic');
+  }
+  breakdown.syllabus = { score: syllabus, max: WEIGHTS.syllabus };
+
+  // ---- B. PYQ keyword match (20) ----
+  const kwHits = [];
+  for (const k of ctx.keywords) {
+    const inHead = k.re.test(head);
+    if (inHead || k.re.test(body.slice(0, 1400))) {
+      kwHits.push({ ...k, in_headline: inHead ? 1 : 0, pyq: ctx.pyqCount.get(k.term.toLowerCase()) || 0 });
+      if (kwHits.length >= 8) break;
+    }
+  }
+  // An angle the commission has asked before is worth more than one it has not,
+  // which is the whole reason the PYQ layer exists.
+  const asked = kwHits.filter((k) => k.pyq > 0);
+  let pyq = 0;
+  if (asked.length) {
+    pyq = Math.min(20, 8 + asked.length * 4);
+    notes.push(`recurring angle(s): ${asked.slice(0, 3).map((k) => k.term).join(', ')}`);
+  } else if (kwHits.some((k) => k.in_headline)) {
+    pyq = 8;
+    notes.push(`blueprint angle in headline: ${kwHits.find((k) => k.in_headline).term}`);
+  } else if (kwHits.length) {
+    pyq = 4;
+  }
+  breakdown.pyq = { score: pyq, max: WEIGHTS.pyq };
+
+  // ---- C. Andhra Pradesh (20) ----
+  //
+  // Full marks for an AP story, and the dateline counts: a story filed from
+  // AMALAPURAM is an AP story even when its text never names the State. Half
+  // marks where a topic is AP-specific but the article reads as national, which
+  // is how a Centre decision about Polavaram scores.
+  let apScore = 0;
+  if (ap) {
+    apScore = 20;
+    notes.push(article.dateline ? `AP (filed from ${article.dateline})` : 'Andhra Pradesh');
+  } else if (matched.some((m) => ctx.topicTier.get(m.topic_id)?.ap)) {
+    apScore = 10;
+    notes.push('touches an AP topic');
+  }
+  breakdown.ap = { score: apScore, max: WEIGHTS.ap };
+
+  // ---- D. current importance (15) ----
+  //
+  // Does it name a findable official act? This is the difference between a
+  // decision that can be cited and a meeting that was held.
+  const instruments = INSTRUMENT.filter((i) => i.re.test(text));
+  const rawWeight = instruments.reduce((s, i) => s + i.w, 0);
+  const importance = Math.min(WEIGHTS.importance, Math.round(rawWeight * 2.5));
+  if (instruments.length) {
+    notes.push(`names: ${instruments.slice(0, 3).map((i) => i.label).join(', ')}`);
+  }
+  breakdown.importance = { score: importance, max: WEIGHTS.importance };
+
+  // ---- E. cross-paper reuse (15) ----
+  const papers = Math.max(0, ...matched.map((m) => ctx.topicPapers.get(m.topic_id) || 0));
+  let reuse = 0;
+  if (papers >= 4) reuse = 15;
+  else if (papers === 3) reuse = 12;
+  else if (papers === 2) reuse = 8;
+  else if (papers === 1) reuse = 4;
+  if (papers >= 2) notes.push(`reusable across ${papers} papers`);
+  breakdown.reuse = { score: reuse, max: WEIGHTS.reuse };
+
+  const total = syllabus + pyq + apScore + importance + reuse;
+
+  return {
+    score: Math.round(total),
+    band: bandFor(total),
+    bucket: bucketOf({ text, ap }),
+    subjects,
+    breakdown,
+    keywords: kwHits,
+    topics: matched,
+    vetoed: null,
+    why: notes.join('; ') || 'no examinable signal',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// entity extraction
+// ---------------------------------------------------------------------------
+
+// Deliberately conservative patterns. A wrong entity is worse than a missing
+// one here, because entities are used to link articles to each other and a bad
+// link is read as a fact about the world.
+const ORG_SUFFIX = /\b((?:[A-Z][A-Za-z&.]*\s+){1,5}(?:Authority|Commission|Corporation|Ministry|Department|Board|Council|Tribunal|Committee|Institute|University|Agency|Bank|Federation|Devasthanams?))\b/g;
+const ACRONYM = /\b([A-Z]{3,7})\b/g;
+const SCHEME = /\b((?:[A-Z][A-Za-z]*\s+){0,4}(?:Yojana|Mission|Abhiyan|Scheme|Programme|Act|Bill|Code|Policy))\b/g;
+const PERSON = /\b(?:Mr\.|Ms\.|Mrs\.|Dr\.|Justice|Minister|Chief Minister|Governor|President)\s+([A-Z][A-Za-z.]*(?:\s+[A-Z][A-Za-z.]*){0,3})/g;
+
+const ACRONYM_STOP = new Set([
+  'THE', 'AND', 'FOR', 'WITH', 'THAT', 'THIS', 'FROM', 'WILL', 'SAID', 'NOT',
+  'ALL', 'NEW', 'ONE', 'TWO', 'PDF', 'IST', 'AM', 'PM', 'OCR',
+]);
+
+function extractEntities(article) {
+  const text = `${article.headline || ''} ${article.standfirst || ''} ${article.body || ''}`;
+  const found = new Map();
+
+  const add = (kind, name) => {
+    const clean = String(name || '').replace(/\s+/g, ' ').trim();
+    if (clean.length < 3 || clean.length > 70) return;
+    const key = `${kind}::${clean}`;
+    found.set(key, { kind, name: clean, mentions: (found.get(key)?.mentions || 0) + 1 });
+  };
+
+  for (const m of text.matchAll(ORG_SUFFIX)) add('organisation', m[1]);
+  for (const m of text.matchAll(SCHEME)) add('scheme', m[1]);
+  for (const m of text.matchAll(PERSON)) add('person', m[1]);
+  for (const m of text.matchAll(ACRONYM)) {
+    if (!ACRONYM_STOP.has(m[1])) add('organisation', m[1]);
+  }
+
+  // Places come from the AP list plus the dateline, which is the one place name
+  // the paper itself has already identified for us.
+  const low = text.toLowerCase();
+  for (const t of AP_TERMS) {
+    if (t.length >= 5 && low.includes(t)) add('place', t.replace(/\b\w/g, (c) => c.toUpperCase()));
+  }
+  if (article.dateline) add('place', article.dateline.replace(/\b\w/g, (c) => c.toUpperCase()));
+
+  return [...found.values()];
+}
+
+module.exports = { score, bandFor, bucketOf, subjectsOf, loadContext, extractEntities, WEIGHTS, BANDS };

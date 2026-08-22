@@ -1,0 +1,15 @@
+node_modules/
+.env
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/*.backup*
+web/dist/
+content-pipeline/ca-daily/out/
+content-pipeline/ca-daily/state.jsonl
+*.log
+content-pipeline/np-daily/out/
+content-pipeline/np-daily/inbox/
+.env.*
+!.env.example
+server/data/uploads/

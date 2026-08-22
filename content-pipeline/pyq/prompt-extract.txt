@@ -1,0 +1,87 @@
+You are transcribing questions from a page of an APPSC (Andhra Pradesh Public
+Service Commission) examination paper.
+
+The text you are given came from OCR of a scanned, BILINGUAL page. English and
+Telugu alternate down the page, and the Telugu has OCR'd into meaningless
+character soup because the recogniser had no Telugu model. The English is
+largely accurate but its lines arrive out of order, because the two languages
+are interleaved in the original layout.
+
+Your job is to reconstruct the ENGLISH questions only.
+
+=== WHAT TO DO ===
+
+1. **Ignore every fragment that is not English.** Strings like
+   `So"Ilsoird 6,)o13.$`, `806 Xo`, `ee 808` or `5ai (1) $c$60p$` are corrupted
+   Telugu. Discard them silently. Do not attempt to translate or guess them.
+
+2. **Reassemble each English question from its scattered lines.** A stem may
+   arrive in pieces and in the wrong order. For example these four fragments:
+
+       7. following statements is
+       Which of the
+       incorrect with Settlement ?
+       reference to Permanent
+
+   are one question:
+
+       Which of the following statements is incorrect with reference to
+       Permanent Settlement ?
+
+3. **Keep the question number** printed on the page.
+
+4. **Collect the four options.** They are labelled (1) (2) (3) (4), sometimes
+   OCR'd as {1), Q), (U or t3). Normalise them to positions 1-4 in order. For a
+   list-matching question, include the code rows as the options, exactly as
+   printed.
+
+5. **Include the full text of a Match List question** — both lists and their
+   items — in the stem, so the pairing is preserved.
+
+=== ACCURACY RULES ===
+
+- **Transcribe, do not improve.** If the paper asks about the "Romaka
+  Siddhanta", write that, even if you believe another spelling is correct. You
+  are recording what was asked.
+- **Fix only unmistakable OCR damage** in English words: `Whieh` → `Which`,
+  `lbllowing` → `following`, `introducecl` → `introduced`, `Bowlatt` →
+  `Rowlatt`, `n'as` → `was`. Do not change names, numbers, dates or technical
+  terms on a hunch.
+- **Never invent a question, an option or an answer.** A partly legible question
+  is reported partly, with `"complete": false`. A page with no readable English
+  question returns an empty array.
+- **Do not supply an answer from your own knowledge.** Only record an answer if
+  the page itself marks one (some papers are printed with a key). Otherwise
+  `answer` is null. This is the most important rule here: an invented key would
+  silently corrupt every count built on this data, and there is no way to notice
+  it later.
+
+=== OUTPUT ===
+
+Return ONLY a JSON array. No preamble, no code fence.
+
+[
+  {
+    "q_no": 7,
+    "stem": "Which of the following statements is incorrect with reference to Permanent Settlement ?",
+    "options": [
+      "It was introduced by Lord Cornwallis in Bengal, Bihar and Orissa in 1795.",
+      "It declared Zamindars as the owners of the land and they were given hereditary rights.",
+      "It was planned by John Shore.",
+      "The amount to be paid by the landlords was fixed."
+    ],
+    "answer": null,
+    "complete": true,
+    "note": ""
+  }
+]
+
+- `q_no` — the printed number, or null if not legible.
+- `stem` — the reassembled English question.
+- `options` — 0 to 4 strings. Empty for a descriptive (Mains) question.
+- `answer` — 1-4 only if the page marks a key; otherwise null.
+- `complete` — false if part of the question was illegible or missing.
+- `note` — one short clause, only when `complete` is false, saying what is
+  missing.
+
+Return the questions in the order they appear on the page.

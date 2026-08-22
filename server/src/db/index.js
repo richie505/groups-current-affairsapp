@@ -1,0 +1,74 @@
+const path = require('path');
+const fs = require('fs');
+const Database = require('better-sqlite3');
+
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'ca.db');
+
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+db.exec(schema);
+
+// Column additions cannot live in schema.sql — it runs on every boot, and
+// ALTER TABLE ADD COLUMN throws once the column exists. Guarded here instead by
+// reading the table's actual shape first, so it is a no-op after the first run
+// and an existing database picks up new fields without being rebuilt.
+(function addMissingColumns() {
+  const columns = (table) => db.pragma(`table_info(${table})`).map((c) => c.name);
+
+  const wanted = {
+    // The eight-section Group-I note template. Added after the first version
+    // shipped with a single angle field, so existing rows keep their fact and
+    // angle and simply have the new sections empty until edited or redrafted.
+    ca_items: [
+      ['g1_theme', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_sub_theme', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_why_news', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_background', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_ap_angle', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_linked', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_bridges', "TEXT NOT NULL DEFAULT ''"],
+      ['g1_way_forward', "TEXT NOT NULL DEFAULT ''"],
+    ],
+    // Whether `stem` is the question as printed, or only a description of it.
+    //
+    // The hand-tagged PYQ bank records each question as a short gloss
+    // ("Andhra newspaper founders/dates") rather than verbatim text, which is
+    // perfectly good evidence of WHICH keyword was tested in WHICH format — the
+    // only thing the format engine needs — but is useless as a practice
+    // question and must never be served as one. Recording the difference is the
+    // only way to keep both uses honest.
+    pyq_questions: [
+      ['stem_kind', "TEXT NOT NULL DEFAULT 'verbatim'"],
+      ['source', "TEXT NOT NULL DEFAULT 'extracted'"],
+    ],
+    // Section 2 — the relevance verdict, stored on the article it judges.
+    //
+    // `breakdown` holds the five factor scores as JSON, which is not
+    // decoration: a single number nobody can decompose is a number nobody
+    // trusts, and the first question an admin asks about "62 / HIGH" is which
+    // part of it came from where. Keeping the breakdown also means a change to
+    // the weights can be evaluated against past articles instead of guessed at.
+    np_articles: [
+      ['score', 'REAL'],
+      ['band', "TEXT NOT NULL DEFAULT ''"],
+      ['bucket', "TEXT NOT NULL DEFAULT ''"],
+      ['subjects', "TEXT NOT NULL DEFAULT ''"],
+      ['breakdown', "TEXT NOT NULL DEFAULT ''"],
+      ['scored_at', 'TEXT'],
+    ],
+  };
+
+  for (const [table, cols] of Object.entries(wanted)) {
+    const have = new Set(columns(table));
+    for (const [name, type] of cols) {
+      if (!have.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    }
+  }
+})();
+
+module.exports = db;

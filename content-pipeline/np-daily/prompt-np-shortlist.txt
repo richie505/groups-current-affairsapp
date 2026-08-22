@@ -1,0 +1,128 @@
+You are triaging one day's newspaper, segmented into articles, for the APPSC
+Group-I and Group-II examinations (Andhra Pradesh Public Service Commission).
+
+You will be given a numbered list of articles in this shape:
+
+  12. [p8 · 2.6x · TIRUMALA · AP] Tirumala gears up for twin Brahmotsavams
+       — the opening of the article body, a couple of hundred characters
+
+The bracket carries:
+
+  p8      the page it appeared on. Pages 1-3 are national and international
+          news, the middle pages are Andhra Pradesh and regional, the last
+          pages are business and sport.
+  2.6x    prominence: how many times body size the headline was set in. The
+          editor's own judgement of importance, and a strong signal. Above 3x
+          is a lead story; 1.5x is a filler paragraph.
+  TIRUMALA the dateline, where the story was filed from.
+  AP      the article mentions Andhra Pradesh or an AP place.
+
+A NEWSPAPER IS NOT A PRESS RELEASE
+
+This matters for what you keep. A press release is the government stating what
+it did; a newspaper is a reporter's account of it, and the account can be
+partial, early or simply wrong. So the question is not only "is this
+examinable" but "does this point at something official and verifiable" — a
+Government Order, a cabinet decision, an Act, a scheme, a commission report, an
+appointment, a judgment, a data release.
+
+Prefer articles that name the instrument. "State to spend ₹2,400 crore on
+irrigation, says Minister" is worth keeping because the underlying order can be
+found and cited. "Irrigation projects reviewed at meeting" is not.
+
+=== KEEP ===
+
+Keep an article if it will yield either:
+
+- a **Group-II fact worth recalling** — a first, a name, a number, a date, an
+  appointment, a scheme name, an index rank, a GI tag, a summit, an Act; or
+- a **Group-I argument** — a statutory change, a policy instrument, a
+  commission report, a fiscal decision, something with a consequence you could
+  argue about in a written answer.
+
+Weight heavily towards:
+
+- **Anything touching Andhra Pradesh.** AP is roughly half of Papers II and IV,
+  a fifth of Paper V, and present in every Paper I essay — and no national
+  source covers AP at the depth this exam demands, which is the entire reason
+  for reading a Vijayawada edition rather than only central press releases.
+  Keep AP items at a **much** lower bar than national ones. A minor AP policy
+  item beats a major national one.
+- **AP government decisions**: GOs, budget allocations, new districts,
+  irrigation and Polavaram, Amaravati, ports and industrial corridors, welfare
+  schemes, APPSC and recruitment, State Cabinet decisions.
+- **Cabinet and CCEA decisions**, new Acts, Bills, rules and notifications.
+- Commission and committee **reports**; official **data releases** and indices.
+- **Appointments** to constitutional and statutory posts.
+- **Supreme Court and High Court judgments** on constitutional questions.
+- ISRO / DRDO **launches**; new **tiger reserves, Ramsar sites, biosphere
+  reserves, GI tags**.
+- **International agreements, summits and treaties** India is party to.
+- **Editorials and op-eds that would yield a quotable line** on governance,
+  federalism, ethics, the economy or Andhra Pradesh. Keep these sparingly — two
+  or three a day at most — but do keep them. Quotations are the hardest Paper I
+  bank to fill and the easiest to neglect, because nothing in a day's paper
+  hands you a usable line unless you are looking for one.
+
+=== DISCARD ===
+
+Discard, without hesitation. A newspaper is mostly not examinable, and most of
+what follows is the bulk of any edition:
+
+- **Local crime**: robberies, murders, arrests, accidents, drownings, suicides,
+  missing persons, court remands. Examinable only if it drives a change in law
+  or policy.
+- **Civic complaints**: potholes, garbage, water supply, power cuts, traffic,
+  encroachments — unless tied to a scheme, a budget or a court direction.
+- **Entertainment, film, television, celebrity interviews, fashion, food,
+  travel, lifestyle.**
+- **Sport**, unless a record was broken, a major tournament was decided, or a
+  policy or governance question is involved.
+- **Obituaries, felicitations, condolences, inaugurations, awareness days,
+  seminars, college functions, career-guidance talks.**
+- **Religious festival logistics and temple arrangements** — crowd management,
+  queue timings, darshan schedules. The institution's governance can be
+  examinable; the arrangements for a festival are not.
+- Speeches and statements that restate a known position with no new figure,
+  deadline or instrument.
+- Weather, horoscopes, letters to the editor, corrections, listings, results.
+- Anything whose only claim to attention is that it was in the news.
+
+A system that captures everything is a system nobody runs for nine months, and
+nine months of daily use is the only property that matters here.
+
+=== NEAR-DUPLICATES ===
+
+The same event is often reported twice in one edition — once on the national
+page and again, with a local angle, on the state page. Keep **one**: prefer the
+version with more specific detail, which is usually the AP-angled one. Mark the
+other as a duplicate of it.
+
+=== OUTPUT ===
+
+Return ONLY a JSON array, one object per input article, in the same order. No
+preamble, no code fence.
+
+[
+  {
+    "n": 1,
+    "keep": true,
+    "ap": false,
+    "why": "one short clause — the reason to keep, or the reason to discard",
+    "duplicate_of": null,
+    "needs_lookup": true
+  }
+]
+
+- `n` — the article's number from the input list.
+- `keep` — true or false.
+- `ap` — true if the article has an Andhra Pradesh dimension, even a small one.
+- `why` — brief. For a discard this becomes the recorded reason.
+- `duplicate_of` — the `n` of the article this duplicates, or null.
+- `needs_lookup` — true if the claim rests on a figure, order or appointment
+  that should be confirmed against the official source before it is written into
+  exam material. Default to true for anything carrying a number.
+
+Do not keep more than {{MAX_ITEMS}} articles. If more qualify, keep the
+{{MAX_ITEMS}} with the strongest examinable content, always retaining every
+Andhra Pradesh item.

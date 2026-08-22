@@ -1,0 +1,31 @@
+[
+  {
+    "headline": "Cabinet approves GOBARdhan, national scheme for compressed biogas",
+    "date": "2026-08-06",
+    "text": "The Union Cabinet, chaired by the Prime Minister, has approved GOBARdhan, the National Unified Scheme for Compressed Biogas, with a total outlay of Rs 23,731 crore. The scheme will be implemented from FY 2026-27 to FY 2035-36. It is administered by the Ministry of Petroleum and Natural Gas, consolidating a compressed biogas ecosystem that had previously been spread across four ministries. The scheme aims to transform agricultural residue, cattle dung, municipal organic waste, press mud and other biomass into compressed biogas (CBG), organic manure and rural economic value. It seeks to increase domestic CBG production nearly ten-fold while strengthening India's energy security by reducing dependence on imported fossil fuels. Its instruments are assured demand, remunerative and stable pricing, capital assistance, pipeline infrastructure, credit support and technology development.",
+    "sources": [
+      {
+        "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2295480&reg=48&lang=1",
+        "publisher": "PIB",
+        "is_primary": true
+      },
+      {
+        "url": "https://www.pmindia.gov.in/en/news_updates/cabinet-approves-gobardhan-indias-national-unified-scheme-for-compressed-biogas-with-an-outlay-of-rs-23731-crore/",
+        "publisher": "PMO India",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "headline": "Minister reiterates commitment to completing pending irrigation works",
+    "date": "2026-08-06",
+    "text": "Speaking at a departmental review, the minister said the government remained committed to completing pending irrigation works and that officials had been instructed to expedite progress. No revised timeline, allocation or project list was announced.",
+    "sources": [
+      {
+        "url": "https://example.com/placeholder-restatement-of-policy",
+        "publisher": "Regional daily",
+        "is_primary": false
+      }
+    ]
+  }
+]

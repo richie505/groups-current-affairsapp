@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* The whole palette, as variables — see tailwind.config.js for why.
+   Values are Tailwind's own defaults, so light mode is byte-identical to
+   what shipped before. */
+:root {
+  --c-surface: 255 255 255;  /* cards; `white` itself stays literally white */
+  --c-ink: 30 41 59;         /* chrome meant to be dark in both themes */
+
+  --c-slate-50: 248 250 252;
+  --c-slate-100: 241 245 249;
+  --c-slate-200: 226 232 240;
+  --c-slate-300: 203 213 225;
+  --c-slate-400: 148 163 184;
+  --c-slate-500: 100 116 139;
+  --c-slate-600: 71 85 105;
+  --c-slate-700: 51 65 85;
+  --c-slate-800: 30 41 59;
+  --c-slate-900: 15 23 42;
+
+  --c-brand-50: 239 246 255;
+  --c-brand-100: 219 234 254;
+  --c-brand-200: 191 219 254;
+  --c-brand-300: 147 197 253;
+  --c-brand-400: 96 165 250;
+  --c-brand-500: 37 99 235;
+  --c-brand-600: 29 78 216;
+  --c-brand-700: 30 64 175;
+
+  --c-green-50: 240 253 244;
+  --c-green-100: 220 252 231;
+  --c-green-200: 187 247 208;
+  --c-green-300: 134 239 172;
+  --c-green-400: 74 222 128;
+  --c-green-500: 34 197 94;
+  --c-green-600: 22 163 74;
+  --c-green-700: 21 128 61;
+  --c-green-800: 22 101 52;
+  --c-green-900: 20 83 45;
+
+  --c-red-50: 254 242 242;
+  --c-red-100: 254 226 226;
+  --c-red-200: 254 202 202;
+  --c-red-300: 252 165 165;
+  --c-red-400: 248 113 113;
+  --c-red-500: 239 68 68;
+  --c-red-600: 220 38 38;
+  --c-red-700: 185 28 28;
+  --c-red-800: 153 27 27;
+  --c-red-900: 127 29 29;
+
+  --c-amber-50: 255 251 235;
+  --c-amber-100: 254 243 199;
+  --c-amber-200: 253 230 138;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 251 191 36;
+  --c-amber-500: 245 158 11;
+  --c-amber-600: 217 119 6;
+  --c-amber-700: 180 83 9;
+  --c-amber-800: 146 64 14;
+  --c-amber-900: 120 53 15;
+}
+
+/* Dark mode flips each scale end for end: 50 becomes the darkest step, 900
+   the lightest. Every existing pairing therefore keeps the contrast direction
+   it was written with — `bg-white text-slate-900` is a dark card with light
+   text here, and a light card with dark text above, from the same markup.
+   The values aren't a mechanical inversion of the light ones: a true invert
+   gives muddy, over-saturated darks, so these are hand-picked to sit on a
+   slate-900 ground while holding the same relative steps. */
+.dark {
+  --c-surface: 17 24 39;    /* cards — one step above the page */
+  --c-ink: 15 20 32;        /* the floating bars, still darker than a card */
+
+  --c-slate-50: 11 15 25;   /* page background */
+  --c-slate-100: 30 37 51;
+  --c-slate-200: 45 55 72;  /* borders */
+  --c-slate-300: 71 85 105;
+  --c-slate-400: 122 138 158;
+  --c-slate-500: 156 170 189;
+  --c-slate-600: 181 192 208; /* muted body text — 8.1:1 on the card */
+  --c-slate-700: 203 213 225;
+  --c-slate-800: 226 232 240;
+  --c-slate-900: 241 245 249; /* primary text */
+
+  /* Blue has to lighten in dark mode: brand-600 as a button fill needs white
+     on it to clear 4.5:1, and brand-700 as *text* needs to be light. */
+  --c-brand-50: 23 37 66;
+  --c-brand-100: 30 50 90;
+  --c-brand-200: 40 68 120;
+  --c-brand-300: 96 137 214;
+  --c-brand-400: 128 170 240;
+  --c-brand-500: 59 130 246;
+  --c-brand-600: 37 99 235;
+  --c-brand-700: 147 190 255;
+
+  --c-green-50: 12 38 24;
+  --c-green-100: 18 55 34;
+  --c-green-200: 25 80 48;
+  --c-green-300: 34 110 64;
+  --c-green-400: 52 168 96;
+  --c-green-500: 74 200 120;
+  --c-green-600: 110 220 150;
+  --c-green-700: 150 235 180;
+  --c-green-800: 190 245 210;
+  --c-green-900: 215 250 228;
+
+  --c-red-50: 48 18 20;
+  --c-red-100: 68 24 27;
+  --c-red-200: 96 32 36;
+  --c-red-300: 140 46 52;
+  --c-red-400: 200 80 88;
+  --c-red-500: 235 110 118;
+  --c-red-600: 245 140 146;
+  --c-red-700: 250 170 175;
+  --c-red-800: 254 202 202;
+  --c-red-900: 254 226 226;
+
+  --c-amber-50: 46 32 10;
+  --c-amber-100: 66 46 14;
+  --c-amber-200: 92 64 20;
+  --c-amber-300: 130 92 28;
+  --c-amber-400: 200 150 60;
+  --c-amber-500: 230 180 80;
+  --c-amber-600: 245 200 110;
+  --c-amber-700: 250 215 145;
+  --c-amber-800: 253 230 175;
+  --c-amber-900: 254 243 199;
+}
+
+/* Stops the browser painting light-mode scrollbars and form controls over a
+   dark page. */
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+/* Consistent, visible keyboard-focus ring app-wide (mouse/touch clicks don't
+   trigger :focus-visible, so this only shows up for keyboard/AT users). */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  @apply outline-none ring-2 ring-brand-500 ring-offset-1 ring-offset-surface rounded-sm;
+}
+
+.prose-notes h1, .prose-notes h2, .prose-notes h3 {
+  @apply font-semibold text-slate-900 mt-6 mb-2;
+}
+.prose-notes h1 { @apply text-2xl; }
+.prose-notes h2 { @apply text-xl; }
+.prose-notes h3 { @apply text-lg; }
+.prose-notes p { @apply mb-3 leading-relaxed; }
+.prose-notes ul { @apply list-disc pl-6 mb-3 space-y-1; }
+.prose-notes ol { @apply list-decimal pl-6 mb-3 space-y-1; }
+.prose-notes table { @apply w-full border-collapse mb-4 text-sm; }
+.prose-notes th, .prose-notes td { @apply border border-slate-300 px-2 py-1 text-left; }
+.prose-notes th { @apply bg-slate-100; }
+.prose-notes strong { @apply font-semibold; }
+.prose-notes blockquote { @apply border-l-4 border-brand-200 pl-3 italic text-slate-600 mb-3; }
+.prose-notes code, .prose-mcq code { @apply bg-slate-100 rounded px-1 py-0.5 text-[0.85em] font-mono; }
+.prose-notes pre code, .prose-mcq pre code { @apply bg-transparent p-0; }
+
+/* Tighter markdown rendering for MCQ question/explanation text — same
+   conventions as .prose-notes (numbered lists for multi-statement questions,
+   tables for matching-type questions, **bold** for Assertion/Reason labels)
+   but with compact spacing so it reads well inside a small card instead of
+   a full notes page. */
+.prose-mcq p { @apply mb-2 leading-relaxed; }
+.prose-mcq ul { @apply list-disc pl-5 mb-2 space-y-0.5; }
+.prose-mcq ol { @apply list-decimal pl-5 mb-2 space-y-0.5; }
+.prose-mcq table { @apply w-full border-collapse mb-2 text-sm; }
+.prose-mcq th, .prose-mcq td { @apply border border-slate-300 px-2 py-1 text-left align-top; }
+.prose-mcq th { @apply bg-slate-100; }
+.prose-mcq strong { @apply font-semibold; }
+.prose-mcq > *:last-child { @apply mb-0; }
+
+/* "Mark the text" highlights (web/src/components/TextHighlighter.jsx). Marks
+   are injected imperatively (not part of React's tree), so these are plain
+   CSS classes rather than Tailwind utility classes the JIT compiler would
+   need to see in JSX to keep. Colors are deliberately translucent so bold
+   text and links underneath stay legible. */
+mark.hl-yellow { background-color: rgba(250, 204, 21, 0.45); }
+mark.hl-green { background-color: rgba(74, 222, 128, 0.45); }
+mark.hl-blue { background-color: rgba(96, 165, 250, 0.4); }
+mark.hl-pink { background-color: rgba(244, 114, 182, 0.4); }
+/* Highlights are the one place a literal colour is the meaning — a student
+   picks "the yellow one" — so they keep their hue in dark mode rather than
+   inverting. They only need to be dimmed: at full strength on a dark card
+   the fill overwhelms the text sitting on it. */
+.dark mark.hl-yellow { background-color: rgba(250, 204, 21, 0.30); }
+.dark mark.hl-green { background-color: rgba(74, 222, 128, 0.28); }
+.dark mark.hl-blue { background-color: rgba(96, 165, 250, 0.32); }
+.dark mark.hl-pink { background-color: rgba(244, 114, 182, 0.30); }
+mark[data-highlight-id] {
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+mark[data-highlight-id]:hover { filter: brightness(0.92); }
