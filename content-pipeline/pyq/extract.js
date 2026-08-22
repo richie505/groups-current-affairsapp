@@ -143,22 +143,63 @@ function ocrPages(pdf, { pages, dpi }) {
   return JSON.parse(res.stdout);
 }
 
-const WORD = /[A-Za-z]{2,}/g;
+// A run of characters that belongs to a real word or a real number. Single
+// stray letters do not count, which is what separates text from OCR debris.
+const TOKEN = /[A-Za-z]{2,}|[0-9]+/g;
+const ALNUM = /[A-Za-z0-9]/g;
 
-// How English a block looks. Telugu OCR'd with an English model produces
-// low-confidence strings with few real words and many stray glyphs, so the two
-// signals together separate the languages cleanly without needing a language
-// model: on a sample page this kept 32 blocks and dropped 45.
+// How English a block looks — deliberately INDEPENDENT of how long it is.
+//
+// The previous score multiplied by min(words/4, 1), which made shortness look
+// like foreignness and cost this pipeline its most valuable lines. Measured
+// over 8 pages of three papers, every one of these was dropped while being
+// perfectly legible English at 82-97% OCR confidence:
+//
+//   "(1) Chemistry (2) Mathematics"   the options of Q5, 2023 screening
+//   "(4) Medicine"                    the remaining option of the same question
+//   "(1) Finance Minister (2)"        option 1 of Q9 — and the correct answer
+//   "Osaka"  "Henry"  "Bathymetry"    the printed ANSWER on a key paper
+//   "celebrated ?"  "companies ?"     stem tails, silently truncating the stem
+//   "11."  "12."  "13."               every question number on the page
+//
+// A four-option question whose options were dropped is stored as a question
+// with no options, and a stem that lost its tail is stored as a shorter
+// question — both silently, both the same class of fault as the baked-in text
+// layer this stage exists to avoid.
+//
+// So the length term is gone. What remains asks only whether the characters
+// present form words and numbers rather than debris, and OCR confidence is left
+// to do the language separation it was already doing better: across those pages
+// English blocks ran 78-97% and Telugu soup 33-74%.
 function englishScore(text) {
   const t = String(text || '');
   if (!t.trim()) return 0;
   const asciiRatio = [...t].filter((ch) => ch.charCodeAt(0) < 128).length / t.length;
-  const words = (t.match(WORD) || []).length;
-  return asciiRatio * Math.min(words / 4, 1);
+  const alnum = (t.match(ALNUM) || []).length;
+  if (!alnum) return 0; // punctuation and rules only
+  const inTokens = (t.match(TOKEN) || []).join('').length;
+  return asciiRatio * (inTokens / alnum);
 }
 
-const MIN_CONF = 75;
-const MIN_ENGLISH = 0.55;
+// Both bars are set for RECALL, because the two kinds of mistake do not cost
+// the same. Admitting Telugu soup costs a few tokens and the stage-3 prompt is
+// written to discard it — its own examples of soup are lines off these very
+// pages. Dropping an English line corrupts a question with no way to notice
+// later, and at the old 75% bar the losses included "(4) Kadambari" (61.9%) and
+// "(1) Finance Minister" (82.8%), each the correct answer to its question.
+//
+// 60 is calibrated, not chosen: across the 8 pages measured, the least
+// confident genuine English line was that "(4) Kadambari" at 61.9%, while the
+// soup this still excludes sat at 33-57% ("wat", "sara", "806 Xo", "PDD").
+// It is a two-point margin on a sample of 8 pages, so it is worth re-measuring
+// if a paper ever comes out visibly worse than these did.
+const MIN_CONF = 60;
+const MIN_ENGLISH = 0.35;
+
+// Confidence reported against a question is still measured over the
+// confidently-English core, so the stored figure keeps the meaning it had
+// before these bars were lowered and stays comparable across runs.
+const CORE_CONF = 75;
 
 function englishLines(page) {
   const kept = (page.blocks || []).filter(
@@ -171,8 +212,9 @@ function englishLines(page) {
     const cb = Math.round(b.bbox[0] / 240);
     return ca - cb || a.bbox[1] - b.bbox[1];
   });
-  const conf = kept.length
-    ? kept.reduce((s, b) => s + (b.conf || 0), 0) / kept.length
+  const core = kept.filter((b) => (b.conf ?? 0) >= CORE_CONF);
+  const conf = core.length
+    ? core.reduce((s, b) => s + (b.conf || 0), 0) / core.length
     : null;
   return { lines: kept.map((b) => b.text), conf, dropped: (page.blocks || []).length - kept.length };
 }
