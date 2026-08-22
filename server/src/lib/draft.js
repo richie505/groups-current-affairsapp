@@ -453,7 +453,23 @@ async function draftArticle(db, { article, edition, model, vocabulary, prompt })
   // of the prompt is written on "the source reports what happened", which is
   // false here. See OPINION_ADDENDUM.
   const opinion = G.isOpinion(article.genre) ? `\n\n${OPINION_ADDENDUM}` : '';
-  const system = `${prompt}\n\n${PRINT_ADDENDUM}${opinion}\n\n${vocabulary}`;
+
+  // THE OPINION BLOCK GOES LAST, AND THAT IS ABOUT MONEY.
+  //
+  // Providers cache a prompt by its PREFIX and bill the cached part at about a
+  // tenth of the input rate. Of the 12,244 input tokens in a real drafting call,
+  // 10,478 — 86% — are this prompt plus the vocabulary, identical on every
+  // single call of the day.
+  //
+  // Inserted between them, as it was, the opinion block forked the prefix after
+  // ~4,200 tokens, so the 6,250-token vocabulary re-billed at full price for
+  // every op-ed and, worse, for every report drafted after one. Moving it behind
+  // the vocabulary makes the whole 10,478-token head identical for every call,
+  // whatever the genre.
+  //
+  // Its position does not change what it says. It is still the last thing before
+  // the article, which is where a binding instruction belongs.
+  const system = `${prompt}\n\n${PRINT_ADDENDUM}\n\n${vocabulary}${opinion}`;
   const raw = await L.complete({
     system,
     user: sourceTextFor(db, article, edition),

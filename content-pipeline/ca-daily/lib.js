@@ -65,10 +65,49 @@ function readPrompt(name) {
 // do accept a custom temperature is unchanged.
 const DROPPABLE_PARAMS = new Set(['temperature', 'top_p']);
 
+// Which endpoint a given model is served from.
+//
+// The chat-completions shape is the same at OpenAI, DeepSeek, Together, Groq and
+// most others, so a provider is a base URL and a key and nothing more. Kept as a
+// pair of environment variables rather than a provider abstraction, because an
+// abstraction here would be three interfaces wrapping one POST.
+//
+// WHY TWO PROVIDERS AT ONCE
+//
+// Because the two jobs in this pipeline have opposite requirements. Shortlisting
+// reads forty headlines and picks the examinable ones — judgement over supplied
+// text, no recall, and a wrong call costs one article that the next day's paper
+// will cover again. Drafting writes static notes: Articles, sections, landmark
+// cases, AP schemes, recalled rather than read. A model that invents there
+// teaches a candidate something false, confidently, and this project has spent
+// weeks on exactly that failure.
+//
+// So the cheap model gets the cheap job. Leave ALT_BASE_URL unset and everything
+// runs on OpenAI as before.
+function endpointFor(model) {
+  const alt = process.env.ALT_MODELS
+    ? process.env.ALT_MODELS.split(',').map((m) => m.trim()).filter(Boolean)
+    : [];
+  const useAlt = process.env.ALT_BASE_URL && alt.includes(model);
+  const base = useAlt
+    ? process.env.ALT_BASE_URL
+    : process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const key = useAlt
+    ? process.env.ALT_API_KEY || process.env.OPENAI_API_KEY
+    : process.env.OPENAI_API_KEY;
+  return { url: `${base.replace(/\/+$/, '')}/chat/completions`, key, provider: useAlt ? 'alt' : 'openai' };
+}
+
 async function complete({ system, user, model, temperature = 0.3, maxRetries = 3 }) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY is not set. Put it in the repo root .env.');
   const useModel = model || process.env.OPENAI_MODEL || 'gpt-4o';
+  const { url, key, provider } = endpointFor(useModel);
+  if (!key) {
+    throw new Error(
+      provider === 'alt'
+        ? 'ALT_API_KEY is not set, and OPENAI_API_KEY is not there to fall back on.'
+        : 'OPENAI_API_KEY is not set. Put it in the repo root .env.'
+    );
+  }
 
   const drop = new Set();
   let lastError;
@@ -85,7 +124,7 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
       };
       if (!drop.has('temperature')) payload.temperature = temperature;
 
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +149,7 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
           drop.add(param);
           continue;
         }
-        throw new Error(`OpenAI ${res.status}: ${body.slice(0, 300)}`);
+        throw new Error(`${useModel} ${res.status}: ${body.slice(0, 300)}`);
       }
       const json = await res.json();
       return json.choices?.[0]?.message?.content || '';
@@ -218,6 +257,7 @@ module.exports = {
   serverValidators,
   readPrompt,
   complete,
+  endpointFor,
   parseJson,
   loadState,
   recordState,

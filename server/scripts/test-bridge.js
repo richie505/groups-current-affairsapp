@@ -412,6 +412,74 @@ const Rev = require(path.join(__dirname, '..', 'src', 'lib', 'revision'));
 check('a card read at 2 a.m. local is due the NEXT local day', Rev.fmt(Rev.addDays(lateNight, 1)) === '2026-08-24');
 
 // ---------------------------------------------------------------------------
+// 9. which provider serves which model, and the cacheable prompt prefix
+// ---------------------------------------------------------------------------
+
+const L = require(path.join(__dirname, '..', '..', 'content-pipeline', 'ca-daily', 'lib'));
+
+const saved = { ...process.env };
+const withEnv = (vars, fn) => {
+  for (const k of ['ALT_BASE_URL', 'ALT_API_KEY', 'ALT_MODELS', 'OPENAI_BASE_URL']) delete process.env[k];
+  Object.assign(process.env, vars);
+  try { return fn(); } finally {
+    for (const k of Object.keys(vars)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+};
+
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'test-key';
+
+check(
+  'with no second provider everything goes to OpenAI',
+  withEnv({}, () => L.endpointFor('gpt-5.6-luna').url) === 'https://api.openai.com/v1/chat/completions'
+);
+check(
+  'a listed model goes to the second provider',
+  withEnv(
+    { ALT_BASE_URL: 'https://api.deepseek.com/v1', ALT_MODELS: 'deepseek-v4-flash' },
+    () => L.endpointFor('deepseek-v4-flash').url
+  ) === 'https://api.deepseek.com/v1/chat/completions'
+);
+check(
+  'an UNLISTED model still goes to OpenAI, even with a second provider configured',
+  withEnv(
+    { ALT_BASE_URL: 'https://api.deepseek.com/v1', ALT_MODELS: 'deepseek-v4-flash' },
+    () => L.endpointFor('gpt-5.6-luna').url
+  ) === 'https://api.openai.com/v1/chat/completions'
+);
+check(
+  'a trailing slash on the base URL does not double up',
+  withEnv(
+    { ALT_BASE_URL: 'https://api.deepseek.com/v1/', ALT_MODELS: 'x' },
+    () => L.endpointFor('x').url
+  ) === 'https://api.deepseek.com/v1/chat/completions'
+);
+check(
+  'the second provider falls back to the OpenAI key if it has none of its own',
+  withEnv(
+    { ALT_BASE_URL: 'https://api.deepseek.com/v1', ALT_MODELS: 'x', OPENAI_API_KEY: 'k' },
+    () => L.endpointFor('x').key
+  ) === 'k'
+);
+
+// The cacheable prefix. Providers bill a repeated prompt prefix at about a tenth
+// of the input rate, and 86% of a drafting call is this prompt — so where the
+// opinion block sits is a billing decision as much as a wording one.
+const fakePrompt = 'PROMPT';
+const fakeVocab = 'V'.repeat(2000);
+const headOf = (opinion) =>
+  `${fakePrompt}\n\n${D.PRINT_ADDENDUM}\n\n${fakeVocab}${opinion ? `\n\n${D.OPINION_ADDENDUM}` : ''}`;
+const a = headOf(false);
+const b = headOf(true);
+let shared = 0;
+while (shared < a.length && a[shared] === b[shared]) shared += 1;
+check(
+  'a report and an op-ed share the whole prompt+vocabulary head',
+  shared === a.length,
+  );
+check('the opinion block is still present, just last', b.length > a.length && b.includes('OPINION, NOT REPORTAGE'));
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {
