@@ -246,10 +246,25 @@ async function main() {
     ];
     record._articleId = article.id;
 
-    // A single print report is not the cross-check the research discipline
-    // requires, so the flag is set here regardless of what the model decided.
-    // Its own verify_note is kept when it named something specific to check.
-    record.needs_verify = 1;
+    // The flag is left to the model; only the NOTE is guaranteed.
+    //
+    // It used to be forced to 1 here, on the reasoning that a single print
+    // report is not the cross-check the research discipline requires. True, but
+    // it made the flag useless: 100% of bridged items carried it, against 37% on
+    // the web lane where the model decides. A warning that fires on everything
+    // distinguishes nothing, and the student learns to look past it — so the one
+    // item that genuinely could not be confirmed reads exactly like the forty
+    // that could.
+    //
+    // The note is the part that was doing the work anyway. Across the first 49
+    // items the generic fallback below never once fired: the model always wrote
+    // something specific and checkable ("verify the 19 August MHA order and the
+    // Citizenship Rules against the Gazette"). The review queue renders the note
+    // whether or not the flag is set, so the reviewer keeps their checklist
+    // either way, and the badge goes back to meaning something.
+    //
+    // The corrections guard below still raises the flag on a hit, which is
+    // exactly the case where a reader should be cautioned.
     if (!String(record.verify_note || '').trim()) {
       record.verify_note =
         'Drafted from a single print report. Confirm names, figures and dates ' +
