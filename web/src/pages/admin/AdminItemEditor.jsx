@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useResource from '../../hooks/useResource';
+import RichText from '../../components/RichText';
 import { api } from '../../api/client';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
@@ -166,7 +167,9 @@ function ItemRow({ item, meta, onEdit, onChanged }) {
       <h3 className="mb-2 font-semibold text-slate-900">{item.headline}</h3>
 
       {item.status === 'discarded' && item.discard_reason ? (
-        <p className="mb-2 text-xs text-slate-500">Discarded: {item.discard_reason}</p>
+        <p className="mb-2 text-xs text-slate-500">
+          Discarded: <RichText>{item.discard_reason}</RichText>
+        </p>
       ) : null}
 
       <div className="flex flex-wrap gap-2">

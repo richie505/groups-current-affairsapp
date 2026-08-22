@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import useResource from '../hooks/useResource';
+import RichText from '../components/RichText';
 import Loading from '../components/Loading';
 import ErrorState from '../components/ErrorState';
 import { formatLabel } from '../lib/caFormat';
@@ -222,7 +223,9 @@ function ItemGroup({ title, rows, muted }) {
               </div>
               <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{it.headline}</p>
               {!muted && it.g1_angle ? (
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{it.g1_angle}</p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      <RichText>{it.g1_angle}</RichText>
+                    </p>
               ) : null}
             </Link>
           </li>

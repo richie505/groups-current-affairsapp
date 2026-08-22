@@ -35,11 +35,14 @@ function remainingLabel(seconds) {
 }
 
 /**
- * @param {object} pacing        the item's pacing state, from the API
- * @param {boolean} markedRead   whether the item is already read
- * @param {() => void} onUnlock  called once, when the clock runs out
+ * @param {object} pacing          the item's pacing state, from the API
+ * @param {boolean} markedRead     whether the item is already read
+ * @param {() => void} onUnlock    called once, when the clock runs out
+ * @param {() => void} onPractise  open the questions — the point of the wait
+ * @param {number} mcqCount        how many are waiting, for the button
+ * @param {boolean} busy           a practise click is in flight
  */
-export default function PacingBar({ pacing, markedRead, onUnlock }) {
+export default function PacingBar({ pacing, markedRead, onUnlock, onPractise, mcqCount = 0, busy = false }) {
   const required = Number(pacing?.required_seconds) || 0;
   const startedAt = pacing?.started_at || null;
 
@@ -92,7 +95,7 @@ export default function PacingBar({ pacing, markedRead, onUnlock }) {
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         {unlocked ? (
           <span className="inline-flex items-center gap-1.5 font-semibold text-green-800 dark:text-green-300">
-            <IconCheck /> Reading time complete
+            <IconCheck /> Time&rsquo;s up — time to practise
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 font-semibold text-brand-800 dark:text-brand-200">
@@ -124,11 +127,35 @@ export default function PacingBar({ pacing, markedRead, onUnlock }) {
         />
       </div>
 
-      <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
-        {unlocked
-          ? 'Mark it read to open the questions.'
-          : 'The clock is running — leave and come back and it keeps its place. Change or switch off your pace in Your account.'}
-      </p>
+      {/* The payoff.
+          The wait is not the feature — the questions are, and the wait is what
+          makes answering them worth anything. So when the clock runs out the
+          bar does not merely turn green and go quiet: it says the time is up
+          and offers the one thing the student has been waiting for, as a button
+          rather than as an instruction to go and press a different one. */}
+      {unlocked ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onPractise}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+          >
+            {mcqCount > 0
+              ? `Practise ${mcqCount} question${mcqCount === 1 ? '' : 's'}`
+              : 'Open the questions'}
+            <span aria-hidden="true">→</span>
+          </button>
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            You have read it; now find out whether it stuck.
+          </span>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+          The clock is running — leave and come back and it keeps its place. Change or switch off
+          your pace in Your account.
+        </p>
+      )}
     </section>
   );
 }

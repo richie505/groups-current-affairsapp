@@ -70,9 +70,12 @@ export default function G1Note({ item }) {
       {item.g1_theme || item.g1_sub_theme ? (
         <div className="rounded-lg bg-slate-800 px-3 py-2 text-white">
           <p className="text-sm font-bold uppercase tracking-wide">
-            {item.g1_theme}
+            <RichText>{item.g1_theme}</RichText>
             {item.g1_sub_theme ? (
-              <span className="font-medium text-slate-300"> → {item.g1_sub_theme}</span>
+              <span className="font-medium text-slate-300">
+                {' → '}
+                <RichText>{item.g1_sub_theme}</RichText>
+              </span>
             ) : null}
           </p>
           <p className="text-[11px] text-slate-400">
@@ -84,7 +87,9 @@ export default function G1Note({ item }) {
 
       {item.g1_why_news ? (
         <Section n="1" title="Why in News">
-          <p className="text-sm leading-relaxed text-slate-900">{item.g1_why_news}</p>
+          <p className="text-sm leading-relaxed text-slate-900">
+            <RichText>{item.g1_why_news}</RichText>
+          </p>
         </Section>
       ) : null}
 
@@ -151,7 +156,9 @@ export default function G1Note({ item }) {
 
       {item.g1_way_forward ? (
         <Section n="7" title="Way forward" tone="forward">
-          <p className="text-sm leading-relaxed text-slate-900">{item.g1_way_forward}</p>
+          <p className="text-sm leading-relaxed text-slate-900">
+            <RichText>{item.g1_way_forward}</RichText>
+          </p>
         </Section>
       ) : null}
 

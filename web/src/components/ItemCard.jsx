@@ -97,8 +97,13 @@ export default function ItemCard({ item, showDate = false }) {
               eight would be unreadable. */}
           {item.g1_theme ? (
             <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              {item.g1_theme}
-              {item.g1_sub_theme ? ` → ${item.g1_sub_theme}` : ''}
+              <RichText>{item.g1_theme}</RichText>
+              {item.g1_sub_theme ? (
+                <>
+                  {' → '}
+                  <RichText>{item.g1_sub_theme}</RichText>
+                </>
+              ) : null}
             </p>
           ) : null}
           {item.g1_why_news ? (

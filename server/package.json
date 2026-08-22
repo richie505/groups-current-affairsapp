@@ -8,7 +8,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed": "node scripts/seed.js",
-    "test": "node scripts/test-bridge.js"
+    "test": "node scripts/test-bridge.js && node ../scripts/check-rich-text.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

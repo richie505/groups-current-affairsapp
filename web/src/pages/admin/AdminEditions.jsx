@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, getToken } from '../../api/client';
 import useResource from '../../hooks/useResource';
+import RichText from '../../components/RichText';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
@@ -848,7 +849,9 @@ function ArticleList({ rows, muted }) {
             </p>
           ) : null}
           {a.discard_reason ? (
-            <p className="mt-1 text-xs text-slate-500">{a.discard_reason}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              <RichText>{a.discard_reason}</RichText>
+            </p>
           ) : null}
           <Breakdown raw={a.breakdown} />
         </li>

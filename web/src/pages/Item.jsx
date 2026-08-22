@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -40,6 +40,10 @@ export default function Item() {
   // — this only stops the student clicking a button that would be refused.
   const [paceDone, setPaceDone] = useState(false);
   const [paceError, setPaceError] = useState('');
+  // Where "Practise the questions" lands. The questions are below the whole
+  // note, so opening them without moving the page leaves the student looking at
+  // the same paragraph they just finished, wondering whether anything happened.
+  const questionsRef = useRef(null);
 
   if (loading) return <Loading label="Loading…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -59,6 +63,26 @@ export default function Item() {
       // The pacing gate answers 409 when the reading clock has not run. Shown
       // where the click happened rather than as a page-level error: it is not a
       // failure, it is the feature working.
+      setPaceError(err.message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  // Time is up and the student pressed the button in the pacing bar: mark it
+  // read (which is what the server gates on) and take them to the questions.
+  async function practise() {
+    setBusy('read');
+    setPaceError('');
+    try {
+      if (!item.marked_read) await api.post(`/items/${item.id}/read`, {});
+      reload();
+      // After the reload has painted, so the section exists to scroll to.
+      setTimeout(
+        () => questionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        150
+      );
+    } catch (err) {
       setPaceError(err.message);
     } finally {
       setBusy('');
@@ -113,6 +137,9 @@ export default function Item() {
         pacing={item.pacing}
         markedRead={!!item.marked_read}
         onUnlock={() => setPaceDone(true)}
+        onPractise={practise}
+        mcqCount={item.mcq_count || 0}
+        busy={busy === 'read'}
       />
 
       {paceError ? (
@@ -241,7 +268,7 @@ export default function Item() {
             <div key={s.id} className="rounded-lg border border-slate-200 bg-surface p-4">
               <p className="mb-2 font-medium text-slate-900">
                 {s.paper ? <span className="mr-1 font-mono text-xs text-slate-500">{s.paper}</span> : null}
-                {s.question_text}
+                <RichText>{s.question_text}</RichText>
               </p>
               <div className="prose-notes text-sm">
                 <Markdown>{s.skeleton_markdown}</Markdown>
@@ -279,7 +306,7 @@ export default function Item() {
 
       {/* ---- MCQs ---- */}
       {showG2 && item.relevance_g2 ? (
-        <section>
+        <section ref={questionsRef} className="scroll-mt-4">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-600">
             Questions
           </h2>
@@ -292,8 +319,9 @@ export default function Item() {
                   : 'Questions locked'}
               </p>
               <p className="text-xs text-slate-500">
-                Mark this item read to open them — answering before reading teaches the answer,
-                not the topic.
+                {item.pacing?.required_seconds && !item.pacing?.unlocked
+                  ? 'They open when your reading time is up — answering before reading teaches the answer, not the topic.'
+                  : 'Mark this item read to open them — answering before reading teaches the answer, not the topic.'}
               </p>
             </div>
           ) : item.mcqs.length === 0 ? (
