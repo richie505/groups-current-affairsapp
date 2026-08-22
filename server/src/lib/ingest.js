@@ -315,6 +315,22 @@ function processEdition(editionId, { dpi = 300, onLog } = {}) {
           (x, j) => j !== i && x.page === link.page && x.headline === link.headline
         );
         if (originIdx === -1 || !ids[originIdx]) continue;
+        // The origin must itself be a lead.
+        //
+        // Where the same-event pass has ALREADY grouped these two — it picks the
+        // longer half as the lead, which for a jumped story is often the
+        // continuation rather than the origin — folding again points them at each
+        // other. Both rows then read 'duplicate' with `merged_into` forming a
+        // cycle, neither is a lead, and the event disappears from drafting
+        // entirely: an event silently lost, which is worse than a duplicate.
+        //
+        // Observed on the second edition processed: two pairs, four articles.
+        // None scored highly enough to be drafted that day, so nothing was
+        // actually lost — but only by luck.
+        //
+        // The same-event pass has precedence, as the comment above always
+        // claimed and the code did not enforce.
+        if (leadOf.get(originIdx) !== originIdx) continue;
         setMerged.run(ids[originIdx], ids[i]);
         db.prepare(
           `UPDATE np_articles SET status = 'duplicate',
