@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, getToken } from '../../api/client';
 import useResource from '../../hooks/useResource';
@@ -20,11 +20,17 @@ import EmptyState from '../../components/EmptyState';
 // merged. An edition that yields four articles from twenty-eight pages is
 // broken, and the only way to notice is to print the numbers.
 
+// English only, decided 22 Aug 2026. Eenadu and Sakshi were offered here before
+// and are gone: Telugu OCR needs a `tel.traineddata` this machine does not have,
+// so choosing them produced an edition that could never be extracted. Offering a
+// broken path is worse than offering a short list.
+//
+// This is about SOURCE newspapers, not about Telugu as exam content — AP History
+// and Society legitimately test Telugu literature and dynasties, and the
+// relevance scorer still matches them.
 const PUBLICATIONS = [
   { value: 'The Hindu', language: 'en' },
-  { value: 'Eenadu', language: 'te' },
   { value: 'Indian Express', language: 'en' },
-  { value: 'Sakshi', language: 'te' },
 ];
 
 export default function AdminEditions() {
@@ -472,6 +478,10 @@ function OneEdition({ id }) {
         </details>
       ) : null}
 
+      {e.status === 'processed' ? (
+        <DraftPanel editionId={id} articles={live} onFinished={reload} />
+      ) : null}
+
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Articles ({live.length})
       </h2>
@@ -500,6 +510,189 @@ function OneEdition({ id }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// Section 3 — the article → note bridge, from the admin's side.
+//
+// Everything above this panel is a filing cabinet: articles extracted, scored
+// and ranked, and until this existed that was where they stopped. This is the
+// door out — it turns the ones worth keeping into drafted knowledge items in the
+// review queue, where the existing approve-and-publish flow takes over.
+//
+// WHY THE THRESHOLD IS A CONTROL AND NOT A CONSTANT
+//
+// Because it is the one number that decides what the day costs. Each article is
+// a model call, so 'draft everything' on a 28-page edition is both expensive and
+// against the point — most news should be discarded. The default of 55 is the
+// bottom of the HIGH band; the counts below the slider say exactly how many
+// articles each choice would send, so the decision is made with the number in
+// view rather than after the bill.
+function DraftPanel({ editionId, articles, onFinished }) {
+  const [minScore, setMinScore] = useState(55);
+  const [limit, setLimit] = useState(20);
+  const [run, setRun] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const running = run?.status === 'running';
+
+  const loadRun = useCallback(async () => {
+    try {
+      const res = await api.get(`/admin/editions/${editionId}/draft`);
+      setRun(res.run);
+      return res.running;
+    } catch {
+      // A missing run is not an error state for this panel — it just means
+      // nothing has been drafted from this edition yet.
+      return false;
+    }
+  }, [editionId]);
+
+  useEffect(() => {
+    loadRun();
+  }, [loadRun]);
+
+  // The worker is a separate process, so the only way this screen learns the run
+  // finished is to ask. Same pattern as the extraction poll above.
+  useEffect(() => {
+    if (!running) return undefined;
+    const t = setInterval(async () => {
+      const stillRunning = await loadRun();
+      if (!stillRunning) onFinished?.();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [running, loadRun, onFinished]);
+
+  const eligible = articles.filter((a) => a.score != null && a.score >= minScore);
+  const undrafted = eligible.filter((a) => !a.item_id);
+  const alreadyDrafted = articles.filter((a) => a.item_id).length;
+
+  async function start() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.post(
+        `/admin/editions/${editionId}/draft?min_score=${minScore}&limit=${limit}`,
+        {}
+      );
+      setMsg({ kind: 'ok', text: 'Drafting started. This takes a few seconds per article.' });
+      await loadRun();
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mb-5 rounded-lg border border-brand-200 bg-brand-50/50 p-3 dark:border-brand-900 dark:bg-brand-900/10">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-brand-800 dark:text-brand-300">
+        Draft knowledge items
+      </h2>
+      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+        Turns scored articles into drafted items in the review queue. Nothing reaches students
+        until you approve it there.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-end gap-4">
+        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+          Minimum score
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={minScore}
+            disabled={running}
+            onChange={(ev) => setMinScore(Number(ev.target.value))}
+            className="mt-1 block w-44"
+          />
+          <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+            {minScore}
+          </span>
+        </label>
+
+        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+          Cap
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={limit}
+            disabled={running}
+            onChange={(ev) => setLimit(Number(ev.target.value) || 1)}
+            className="mt-1 block w-20 rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={start}
+          disabled={busy || running || !undrafted.length}
+          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {running ? 'Drafting…' : `Draft ${Math.min(undrafted.length, limit)} article(s)`}
+        </button>
+      </div>
+
+      {/* The honest count. `eligible` is what the threshold selects; `undrafted`
+          is what would actually be sent, and the gap between them is the work
+          already done rather than work being skipped. */}
+      <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+        {eligible.length} article(s) at or above {minScore}
+        {alreadyDrafted ? ` · ${alreadyDrafted} already drafted` : ''}
+        {undrafted.length > limit
+          ? ` · the cap holds this run to ${limit}, run again for the rest`
+          : ''}
+      </p>
+
+      {msg ? (
+        <p
+          className={
+            'mt-2 text-xs ' +
+            (msg.kind === 'error'
+              ? 'text-red-700 dark:text-red-300'
+              : 'text-green-700 dark:text-green-400')
+          }
+        >
+          {msg.text}
+        </p>
+      ) : null}
+
+      {run ? (
+        <div className="mt-3 rounded-md border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={
+                'rounded px-1.5 py-0.5 font-bold uppercase ' +
+                (run.status === 'running'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                  : run.status === 'failed'
+                    ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+                    : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200')
+              }
+            >
+              {run.status}
+            </span>
+            <span className="text-slate-600 dark:text-slate-400">
+              {run.candidates} considered · {run.drafted} drafted · {run.discarded} discarded ·{' '}
+              {run.model}
+            </span>
+          </div>
+          {run.log ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">
+                Run log
+              </summary>
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-slate-600 dark:text-slate-400">
+                {run.log}
+              </pre>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

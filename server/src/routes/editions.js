@@ -4,6 +4,8 @@
 //
 //   POST   /api/admin/editions            upload a PDF (raw body)
 //   POST   /api/admin/editions/:id/process  extract, segment, dedupe
+//   POST   /api/admin/editions/:id/draft    promote scored articles to items
+//   GET    /api/admin/editions/:id/draft    the drafting run, for polling
 //   GET    /api/admin/editions            the list
 //   GET    /api/admin/editions/:id        one edition and its articles
 //   DELETE /api/admin/editions/:id        remove an edition and its articles
@@ -121,6 +123,94 @@ router.post('/:id/process', (req, res) => {
   child.unref();
 
   res.status(202).json({ started: true, id, dpi });
+});
+
+// ---------------------------------------------------------------------------
+// draft — Section 3, the article → note bridge
+// ---------------------------------------------------------------------------
+//
+// Turns scored articles into drafted knowledge items. Everything Sections 1 and
+// 2 produce is input to this and nothing else consumed it before: `item_id` was
+// in the schema from the start and no code ever wrote it, so an article scored
+// CRITICAL produced exactly as much student-visible material as one scored LOW.
+//
+// Out of process for the same reason as /process, but a different bottleneck:
+// one model call per article at several seconds each, so twenty articles is
+// minutes. The `ca_runs` row is the lock — see the worker for why that rather
+// than a new column.
+
+const DRAFTER = path.join(__dirname, '..', '..', 'scripts', 'draft-articles.js');
+
+const runningDraft = (editionId) =>
+  db
+    .prepare(`SELECT * FROM ca_runs WHERE mode = ? AND status = 'running'
+               ORDER BY id DESC LIMIT 1`)
+    .get(`edition-${editionId}`);
+
+router.post('/:id/draft', (req, res) => {
+  const id = Number(req.params.id);
+  const ed = db.prepare('SELECT id, status, date FROM np_editions WHERE id = ?').get(id);
+  if (!ed) return res.status(404).json({ error: 'No such edition.' });
+  if (ed.status !== 'processed') {
+    return res.status(409).json({
+      error: 'Process the edition before drafting from it — there are no scored articles yet.',
+    });
+  }
+
+  const existing = runningDraft(id);
+  if (existing) {
+    return res.status(409).json({ error: 'A drafting run is already in progress.', run: existing });
+  }
+
+  const minScore = Number(req.query.min_score);
+  const limit = Number(req.query.limit);
+  const redraft = String(req.query.redraft || '') === '1';
+
+  const waiting = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM np_articles
+        WHERE edition_id = ? AND status NOT IN ('duplicate', 'discarded')
+          AND score IS NOT NULL AND score >= ?
+          ${redraft ? '' : 'AND item_id IS NULL'}`
+    )
+    .get(id, Number.isFinite(minScore) ? minScore : 55).n;
+  if (!waiting) {
+    return res.status(409).json({
+      error: 'No articles are waiting to be drafted at that score. Lower the threshold, or ' +
+        'use redraft to include ones already drafted.',
+    });
+  }
+
+  const argv = [DRAFTER, String(id)];
+  if (Number.isFinite(minScore)) argv.push('--min-score', String(minScore));
+  if (Number.isFinite(limit)) argv.push('--limit', String(limit));
+  if (req.query.model) argv.push('--model', String(req.query.model));
+  if (redraft) argv.push('--redraft');
+
+  const child = spawn(process.execPath, argv, {
+    detached: true,
+    stdio: 'ignore',
+    cwd: path.join(__dirname, '..', '..', '..'),
+  });
+  child.on('error', (e) => {
+    // The worker opens its own run row, so a failure to start it leaves nothing
+    // behind to mark failed — which is why this is only logged. The client sees
+    // no run appear and can try again.
+    console.error(`Could not start the drafter for edition ${id}: ${e.message}`);
+  });
+  child.unref();
+
+  res.status(202).json({ started: true, id, waiting });
+});
+
+// Poll target while a run is in flight, and the record of the last one after it
+// finishes. Same shape either way so the client does not need two code paths.
+router.get('/:id/draft', (req, res) => {
+  const id = Number(req.params.id);
+  const run = db
+    .prepare(`SELECT * FROM ca_runs WHERE mode = ? ORDER BY id DESC LIMIT 1`)
+    .get(`edition-${id}`);
+  res.json({ run: run || null, running: !!(run && run.status === 'running') });
 });
 
 // ---------------------------------------------------------------------------
