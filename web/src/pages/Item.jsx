@@ -393,7 +393,11 @@ function BankFiler({ item, onFiled }) {
             disabled={busy}
             onClick={() => file(key)}
             title={b.hint}
-            className={`rounded-md border px-2 py-1 text-xs font-semibold ${
+            // min-h-11 because these were 26px tall, and a 26px target is one a
+            // thumb misses. They are not chips — each one files this item into a
+            // bank — and the four sit side by side, so a near miss lands on the
+            // wrong bank rather than on nothing.
+            className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
               filed?.bank === key
                 ? 'border-slate-800 bg-slate-800 text-white'
                 : 'border-slate-300 bg-surface text-slate-700 hover:border-slate-500'

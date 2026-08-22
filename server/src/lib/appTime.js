@@ -32,8 +32,16 @@
 // the offset becomes a column read through the same two functions.
 
 // Indian Standard Time, UTC+05:30.
+//
+// The SQL form is in MINUTES, as one modifier, and that is not stylistic.
+// SQLite takes each modifier as its own argument: `datetime(t, '+5 hours 30
+// minutes')` is not "five and a half hours later", it is unparseable, and
+// SQLite answers an unparseable modifier with NULL rather than an error. So the
+// activity chart grouped every read under the key `null`, `computeStreak` found
+// no date it recognised, and a student who had read something today was shown a
+// streak of zero. Nothing failed; the number was simply wrong.
 const OFFSET_MINUTES = 330;
-const OFFSET_SQL = '+5 hours 30 minutes';
+const OFFSET_SQL = `+${OFFSET_MINUTES} minutes`;
 
 /**
  * The current date where the student is, as 'YYYY-MM-DD'.

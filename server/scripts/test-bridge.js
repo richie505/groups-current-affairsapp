@@ -393,6 +393,19 @@ check('a stored SQLite timestamp reads as a local date', T.localDate('2026-08-22
 check('nonsense falls back to today rather than NaN', /^\d{4}-\d{2}-\d{2}$/.test(T.localDate('not a date')));
 check('the SQL shift names the column', T.localSql('marked_at').includes('marked_at'));
 
+// Run against SQLite, not just inspected. An unparseable datetime modifier is
+// answered with NULL rather than an error, so the first version of this shifted
+// nothing, grouped every read under the key `null`, and showed a student who had
+// read something today a streak of zero. It looked exactly like working code.
+const shifted = db
+  .prepare(`SELECT date(${T.localSql("'2026-08-22 20:30:00'")}) AS d`)
+  .get().d;
+check('the SQL shift actually shifts, in SQLite', shifted === '2026-08-23');
+check(
+  'the SQL shift and the JS agree',
+  shifted === T.localDate('2026-08-22 20:30:00')
+);
+
 // Scheduling has to count in the same calendar at both ends, or the interval is
 // off by one for a fifth of every day.
 const Rev = require(path.join(__dirname, '..', 'src', 'lib', 'revision'));
