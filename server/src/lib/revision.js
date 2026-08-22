@@ -3,7 +3,9 @@
 // independently testable — see server/src/db/schema.sql for the
 // ca_revision table this operates on.
 //
-// Dates are UTC 'YYYY-MM-DD' strings, matching progressStats.js.
+// Dates are LOCAL 'YYYY-MM-DD' strings — see lib/appTime.js. They were UTC,
+// which put the day boundary at 05:30 in the morning for every student: a card
+// scheduled for today did not appear as due until after dawn.
 
 const MAX_BOX = 5;
 // Days until next review, keyed by box. A correct/"got it" outcome pushes an
@@ -12,8 +14,10 @@ const MAX_BOX = 5;
 // each student actually knows each piece of content, not a fixed calendar.
 const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
+const T = require('./appTime');
+
 function fmt(date) {
-  return date.toISOString().slice(0, 10);
+  return T.today(date);
 }
 function addDays(date, n) {
   const d = new Date(date);

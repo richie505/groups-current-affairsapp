@@ -369,6 +369,36 @@ check('a day plan multiplies the chosen time', customPlan.total_seconds === 600)
 check('the day plan names the chosen minutes', customPlan.minutes === 5);
 
 // ---------------------------------------------------------------------------
+// 8. what day is it, for the student
+//
+// "Today" was the UTC date, so between midnight and 05:30 IST the app believed
+// it was still yesterday: revision cards due today did not appear, and a note
+// read at 2 a.m. counted towards the previous day's streak.
+// ---------------------------------------------------------------------------
+
+const T = require(path.join(__dirname, '..', 'src', 'lib', 'appTime'));
+
+// 22 Aug, 20:30 UTC — which is 02:00 on the 23rd in Andhra Pradesh.
+const lateNight = new Date('2026-08-22T20:30:00Z');
+check('after midnight locally, today is the local date', T.today(lateNight) === '2026-08-23');
+check('the UTC date would have been wrong', lateNight.toISOString().slice(0, 10) === '2026-08-22');
+
+// 22 Aug, 03:00 UTC — 08:30 local, same date either way.
+check('during the day the two agree', T.today(new Date('2026-08-22T03:00:00Z')) === '2026-08-22');
+
+// 22 Aug, 19:00 UTC — 00:30 on the 23rd. The very first minutes of a local day.
+check('the first minutes of a local day are that day', T.today(new Date('2026-08-22T19:00:00Z')) === '2026-08-23');
+
+check('a stored SQLite timestamp reads as a local date', T.localDate('2026-08-22 20:30:00') === '2026-08-23');
+check('nonsense falls back to today rather than NaN', /^\d{4}-\d{2}-\d{2}$/.test(T.localDate('not a date')));
+check('the SQL shift names the column', T.localSql('marked_at').includes('marked_at'));
+
+// Scheduling has to count in the same calendar at both ends, or the interval is
+// off by one for a fifth of every day.
+const Rev = require(path.join(__dirname, '..', 'src', 'lib', 'revision'));
+check('a card read at 2 a.m. local is due the NEXT local day', Rev.fmt(Rev.addDays(lateNight, 1)) === '2026-08-24');
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

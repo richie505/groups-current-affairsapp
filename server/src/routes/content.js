@@ -17,6 +17,7 @@ const BUCKETS = ['international', 'national', 'ap', 'dynamic'];
 const VISIBLE = `i.status = 'published' AND d.status = 'published'`;
 
 const P = require('../lib/pacing');
+const T = require('../lib/appTime');
 
 // The pacing setting, read from the database rather than from the JWT.
 //
@@ -24,6 +25,15 @@ const P = require('../lib/pacing');
 // token lives thirty days and this is the setting the gate below is enforced on.
 // Reading the row is the difference between "what the browser was told when it
 // logged in" and "what the student has chosen".
+// A query-string number, bounded at both ends. `Number(x) || fallback` is the
+// idiom this replaces, and it has one hole big enough to matter: it rejects NaN
+// and zero and accepts every negative.
+function clamp(value, fallback, min, max) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 function pacingOf(userId) {
   const row = db.prepare('SELECT pacing, pacing_minutes FROM users WHERE id = ?').get(userId);
   return { mode: row?.pacing || 'off', minutes: row?.pacing_minutes ?? 4 };
@@ -181,7 +191,10 @@ router.get('/meta', (req, res) => {
 // The digest list. Defaults to the most recent days rather than "today", so
 // the app still opens onto something on a day the pipeline hasn't run.
 router.get('/days', (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 30, 120);
+  // Clamped at BOTH ends. `Number(x) || 30` catches NaN and zero and lets a
+  // negative through, and SQLite reads `LIMIT -1` as no limit at all — so
+  // ?limit=-1 quietly returned every day in the database.
+  const limit = clamp(req.query.limit, 30, 1, 120);
   const month = req.query.month; // 'YYYY-MM'
   const where = [`d.status = 'published'`];
   const params = [];
@@ -373,10 +386,19 @@ router.delete('/items/:id/read', (req, res) => {
 });
 
 router.post('/items/:id/bookmark', (req, res) => {
+  // The same existence check the read and card routes make. Without it an
+  // unknown id reached the foreign key and came back as a 500 "something went
+  // wrong on the server" — which is a lie: nothing went wrong on the server,
+  // the item does not exist.
+  const item = db
+    .prepare(`SELECT i.id FROM ca_items i JOIN ca_days d ON d.id = i.day_id WHERE i.id = ? AND ${VISIBLE}`)
+    .get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found.' });
+
   db.prepare(
     `INSERT INTO ca_bookmarks (user_id, item_id) VALUES (?, ?)
      ON CONFLICT(user_id, item_id) DO NOTHING`
-  ).run(req.user.id, req.params.id);
+  ).run(req.user.id, item.id);
   res.json({ ok: true, bookmarked: 1 });
 });
 
@@ -474,7 +496,11 @@ router.get('/practice', (req, res) => {
     bucket: req.query.bucket,
     keyword: req.query.keyword,
     unit: req.query.unit,
-    limit: Math.min(Number(req.query.limit) || 20, 100),
+    // Same clamp, and here the consequence was stranger: a negative limit
+    // reached pickByFormatMix, whose per-format quota went negative, whose
+    // slice(0, -n) then took ALL BUT the last n — so ?limit=-5 handed back a
+    // 92-question quiz.
+    limit: clamp(req.query.limit, 20, 1, 100),
     onlyUnread: req.query.only_unread === '1',
   });
   res.json(quiz);
@@ -517,7 +543,26 @@ router.post('/mcqs/:id/attempt', (req, res) => {
 
 router.post('/sessions', (req, res) => {
   const { scope, scope_ref, label, total, answered, correct, timed, duration_seconds } = req.body || {};
-  if (!total) return res.status(400).json({ error: 'A session needs a question count.' });
+
+  // A session is written once and never edited, and the Progress screen divides
+  // by these numbers. `{ total: -1, answered: 99, correct: 1e9 }` was accepted
+  // and stored, which is an accuracy figure of 1,010,101% sitting permanently in
+  // a student's history with no way to remove it.
+  const n = (v) => {
+    const x = Math.round(Number(v));
+    return Number.isFinite(x) && x >= 0 ? x : null;
+  };
+  const nTotal = n(total);
+  const nAnswered = n(answered) ?? 0;
+  const nCorrect = n(correct) ?? 0;
+  if (!nTotal) return res.status(400).json({ error: 'A session needs a question count.' });
+  if (nTotal > 500) return res.status(400).json({ error: 'That is not a session, that is a paper.' });
+  if (nAnswered > nTotal) {
+    return res.status(400).json({ error: 'More answers than questions.' });
+  }
+  if (nCorrect > nAnswered) {
+    return res.status(400).json({ error: 'More correct than answered.' });
+  }
   const info = db
     .prepare(
       `INSERT INTO ca_sessions (user_id, scope, scope_ref, label, total, answered, correct, timed, duration_seconds)
@@ -528,11 +573,11 @@ router.post('/sessions', (req, res) => {
       scope || 'range',
       String(scope_ref || ''),
       String(label || ''),
-      total,
-      answered || 0,
-      correct || 0,
+      nTotal,
+      nAnswered,
+      nCorrect,
       timed ? 1 : 0,
-      duration_seconds || null
+      n(duration_seconds)
     );
   res.json({ id: info.lastInsertRowid });
 });
@@ -550,7 +595,8 @@ router.get('/sessions', (req, res) => {
 // ---- Revision -----------------------------------------------------------
 
 router.get('/revision/due', (req, res) => {
-  const today = fmt(new Date());
+  // The student's today, not UTC's. See lib/appTime.js.
+  const today = T.today();
   const items = db
     .prepare(
       `SELECT ${itemColumns()}, d.date AS day_date, r.box, r.due_date
@@ -703,7 +749,10 @@ router.get('/progress', (req, res) => {
 
   const daily = db
     .prepare(
-      `SELECT substr(marked_at, 1, 10) AS date, COUNT(*) AS n
+      // Grouped by the day the STUDENT had, not the day UTC had. Reading at
+      // 02:00 used to be filed under the previous date, so a real day of work
+      // could show as blank and break a streak that had actually been kept.
+      `SELECT date(${T.localSql('marked_at')}) AS date, COUNT(*) AS n
          FROM ca_progress
         WHERE user_id = ? AND marked_read = 1 AND marked_at IS NOT NULL
           AND marked_at >= datetime('now', '-90 days')
@@ -731,11 +780,14 @@ router.get('/progress', (req, res) => {
 function computeStreak(daily) {
   const dates = new Set(daily.map((d) => d.date));
   let streak = 0;
+  // Walked in local days, to match the grouping above. Stepping a UTC cursor
+  // over locally-grouped dates would drop a day twice a year and, worse, every
+  // night between midnight and half past five.
   const cursor = new Date();
-  if (!dates.has(fmt(cursor))) cursor.setUTCDate(cursor.getUTCDate() - 1);
-  while (dates.has(fmt(cursor))) {
+  if (!dates.has(T.today(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (dates.has(T.today(cursor))) {
     streak++;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
 }
@@ -775,15 +827,26 @@ router.get('/months/:month', (req, res) => {
 router.get('/search', (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json({ items: [] });
-  const like = `%${q}%`;
+  // `_` and `%` are LIKE's own wildcards, so an unescaped term searched for
+  // something else entirely: "c_urt" found "court", and five underscores
+  // matched every item in the database. A student searching "50%" or
+  // "Article_21" got nonsense back and no way to tell it was nonsense.
+  // `~` rather than the conventional backslash. The SQL below is a JS template
+  // literal, so a backslash has to survive two layers of escaping to reach
+  // SQLite — written as `ESCAPE '\'` it arrives as `ESCAPE ''`, an empty string,
+  // and every search 500s. `~` needs escaping in neither layer, and is escaped
+  // by the same rule as the wildcards if a student ever types one.
+  const like = `%${q.replace(/[~%_]/g, '~$&')}%`;
   const items = db
     .prepare(
       `SELECT ${itemColumns()}, d.date AS day_date
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE ${VISIBLE}
-          AND (i.headline LIKE ? OR i.notes_markdown LIKE ? OR i.g1_fact LIKE ?
-               OR i.g1_angle LIKE ? OR i.prelims_facts LIKE ?
-               OR EXISTS (SELECT 1 FROM ca_item_keywords k WHERE k.item_id = i.id AND k.keyword LIKE ?))
+          AND (i.headline LIKE ? ESCAPE '~' OR i.notes_markdown LIKE ? ESCAPE '~'
+               OR i.g1_fact LIKE ? ESCAPE '~' OR i.g1_angle LIKE ? ESCAPE '~'
+               OR i.prelims_facts LIKE ? ESCAPE '~'
+               OR EXISTS (SELECT 1 FROM ca_item_keywords k
+                           WHERE k.item_id = i.id AND k.keyword LIKE ? ESCAPE '~'))
         ORDER BY d.date DESC
         LIMIT 50`
     )
