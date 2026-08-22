@@ -34,7 +34,10 @@ export default function LensToggle({ className = '' }) {
             onClick={() => setLens(key)}
             title={HINTS[key]}
             aria-pressed={active}
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+            // 44px on a phone: this is the control a student touches every
+            // day to switch between the two exams, and at 24px it was the
+            // smallest tap target on the page.
+            className={`min-h-[44px] rounded-md px-3.5 py-1 text-xs font-semibold transition sm:min-h-0 sm:px-2.5 ${
               active
                 ? 'bg-brand-600 text-white'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

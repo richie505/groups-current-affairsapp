@@ -80,8 +80,11 @@ export default function Navbar() {
   return (
     <header className="bg-ink text-white">
       <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
-        <Link to={isAdmin ? '/admin' : '/'} className="shrink-0 font-bold tracking-tight">
-          APPSC <span className="text-brand-300">Current Affairs</span>
+        {/* `shrink-0` here plus a 215px theme toggle was what pushed the header
+            past the viewport. The wordmark may shrink; on the narrowest screens
+            the second half drops, which is what a masthead should do. */}
+        <Link to={isAdmin ? '/admin' : '/'} className="min-w-0 truncate font-bold tracking-tight">
+          APPSC <span className="hidden text-brand-300 xs:inline">Current Affairs</span>
         </Link>
 
         <nav className="ml-2 hidden flex-1 items-center gap-0.5 lg:flex">
@@ -111,7 +114,7 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="rounded-md p-1.5 text-lg hover:bg-white/10 lg:hidden"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-1.5 text-lg hover:bg-white/10 lg:hidden"
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
           >

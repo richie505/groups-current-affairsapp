@@ -27,6 +27,10 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      // Tailwind's smallest default breakpoint is 640px, which is a tablet.
+      // Phones sit between 320 and 430, and the header has to degrade inside
+      // that range rather than at the far end of it.
+      screens: { xs: '400px' },
       colors: {
         // `white` stays literally white. It is used 41 times as *text on a
         // coloured button* (bg-brand-600 text-white, bg-green-700 text-white),
