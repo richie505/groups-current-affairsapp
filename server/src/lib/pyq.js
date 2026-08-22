@@ -266,24 +266,40 @@ function keywordFrequency(db, { limit = 40 } = {}) {
  * across two papers in two years. Any tier derived from half the evidence is
  * worse than the hand-assigned tier it replaces.
  *
- * So the two are unioned: question-level counts from the Group-II bank, and
- * topic-level counts from the Group-I blueprint's own recurrence observations.
+ * So the sources are unioned: question-level counts from the Group-II bank, the
+ * same from the hand-compiled Group-I Mains papers, and topic-level counts from
+ * the Group-I blueprint's recurrence observations where no real paper covers it.
+ *
+ * The exam filter matters. Before the Group-I papers were seeded, the first
+ * query took every row in `pyq_questions` and called the result 'group2' —
+ * harmless while the table held only Group-II questions, and wrong the moment
+ * 252 Mains slots landed in it.
  */
 function topicRecurrence(db) {
-  const g2 = db
-    .prepare(
-      `SELECT t.id, COUNT(DISTINCT qt.question_id) AS questions,
-              COUNT(DISTINCT q.paper_id) AS papers
-         FROM topics t
-         JOIN pyq_question_topics qt ON qt.topic_id = t.id
-         JOIN pyq_questions q ON q.id = qt.question_id
-        GROUP BY t.id`
-    )
-    .all();
+  const byExam = (exam) =>
+    db
+      .prepare(
+        `SELECT t.id, COUNT(DISTINCT qt.question_id) AS questions,
+                COUNT(DISTINCT q.paper_id) AS papers
+           FROM topics t
+           JOIN pyq_question_topics qt ON qt.topic_id = t.id
+           JOIN pyq_questions q ON q.id = qt.question_id
+           JOIN pyq_papers p ON p.id = q.paper_id
+          WHERE p.exam = ?
+          GROUP BY t.id`
+      )
+      .all(exam);
 
-  let g1 = [];
+  const g2 = byExam('group2');
+  const g1Measured = byExam('group1');
+
+  // The blueprint's own observations, used only where a real paper does not
+  // already cover the topic. Summing both would double-count: the blueprint is
+  // a reading OF the 2023 and 2025 papers, which are now seeded themselves.
+  const measured = new Set(g1Measured.map((r) => r.id));
+  let g1Blueprint = [];
   try {
-    g1 = db
+    g1Blueprint = db
       .prepare(
         `SELECT topic_id AS id, SUM(questions) AS questions,
                 COUNT(DISTINCT paper) AS papers
@@ -291,10 +307,12 @@ function topicRecurrence(db) {
           WHERE exam = 'group1'
           GROUP BY topic_id`
       )
-      .all();
+      .all()
+      .filter((r) => !measured.has(r.id));
   } catch {
     // topic_evidence is optional.
   }
+  const g1 = [...g1Measured, ...g1Blueprint];
 
   const merged = new Map();
   const add = (row, source) => {
