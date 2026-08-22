@@ -69,7 +69,7 @@ function findingsFor(db, article) {
 
   const topics = db
     .prepare(
-      `SELECT t.name, t.tier, at.hits, at.in_headline, at.matched
+      `SELECT t.name, t.tier, t.ap AS topic_ap, at.hits, at.in_headline, at.matched
          FROM np_article_topics at JOIN topics t ON t.id = at.topic_id
         WHERE at.article_id = ?
         ORDER BY at.in_headline DESC, at.hits DESC`
@@ -128,9 +128,49 @@ function sourceTextFor(db, article, edition) {
     `RELEVANCE: ${article.score == null ? 'unscored' : Math.round(article.score)}/100` +
       `${article.band ? ` (${article.band.toUpperCase()})` : ''}`
   );
+  // The scorer's own one-line justification. It is already written and already
+  // stored; withholding it would be another case of this function discarding
+  // what Section 2 measured.
+  try {
+    const why = JSON.parse(article.breakdown || '{}').why;
+    if (why) lines.push(`SCORED BECAUSE: ${why}`);
+  } catch {
+    // A breakdown that will not parse is not worth failing a draft over.
+  }
   lines.push(`BUCKET: ${article.bucket || 'national'}`);
   if (article.subjects) lines.push(`SUBJECTS: ${article.subjects}`);
-  lines.push(`ANDHRA PRADESH STORY: ${article.ap ? 'yes' : 'no'}`);
+  // The AP signal, with its provenance — NOT a flat yes/no.
+  //
+  // `np_articles.ap` is a literal NAME test: does the text say "Andhra",
+  // "Amaravati", "Polavaram"? That is precise and it is not the same question as
+  // "is this an AP story". A Krishna-water report filed from Hyderabad, where
+  // Telangana argues against "unilateral actions that prejudice the rights of
+  // downstream States", names Andhra Pradesh nowhere and is entirely about it.
+  //
+  // Observed: of 90 articles in the 21 Aug edition, 4 carried ap = 0 while
+  // matching an AP-flagged master topic — including the highest-scoring article
+  // of the whole edition. `relevance.js` already handles this, awarding half the
+  // AP weight for "touches an AP topic"; this function was throwing that away
+  // and telling the model a flat "no", which is how a Krishna dispute came back
+  // with "there is no new Andhra Pradesh-specific development in this report".
+  //
+  // So both signals go in, labelled. The reverse case is real too — 9 articles
+  // named an AP place with no AP topic behind it — which is why neither signal
+  // is allowed to overwrite the other.
+  const apTopics = f.topics.filter((t) => t.topic_ap);
+  if (article.ap) {
+    lines.push('ANDHRA PRADESH: named directly in the text.');
+  } else if (apTopics.length) {
+    lines.push(
+      'ANDHRA PRADESH: not named, but this updates AP master topic(s): ' +
+        `${apTopics.map((t) => t.name).join('; ')}. ` +
+        'Andhra Pradesh may be the unnamed party — "the downstream State", ' +
+        '"the successor State", "the neighbouring State". Work out whether it is, ' +
+        'and give the AP angle if so. Say plainly that there is none only if there is none.'
+    );
+  } else {
+    lines.push('ANDHRA PRADESH: no signal — neither named nor touching an AP topic.');
+  }
 
   if (f.keywords.length) {
     lines.push('');
@@ -358,6 +398,20 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       `UPDATE np_articles SET item_id = ?, status = 'drafted', discard_reason = ''
         WHERE id = ?`
     );
+    const priorItemOf = db.prepare('SELECT item_id FROM np_articles WHERE id = ?');
+    // Supersede, rather than delete or leave. A redraft repoints the article at
+    // its new item and would otherwise strand the old one in the review queue as
+    // a second, unlinked draft of the same story — observed the first time
+    // --redraft was used. Discarding it keeps the repo's rule that a rejection is
+    // a row with a reason.
+    //
+    // Only a DRAFT is superseded. A published item is knowledge in its own right
+    // and must not be withdrawn because somebody re-ran the drafter — the same
+    // rule the edition delete follows.
+    const supersede = db.prepare(
+      `UPDATE ca_items SET status = 'discarded', discard_reason = ?, updated_at = datetime('now')
+        WHERE id = ? AND status = 'draft'`
+    );
     const discardArticle = db.prepare(
       `UPDATE np_articles SET status = 'discarded', discard_reason = ? WHERE id = ?`
     );
@@ -452,7 +506,15 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         });
       }
 
-      if (r._articleId) linkArticle.run(itemId, r._articleId);
+      if (r._articleId) {
+        const prior = priorItemOf.get(r._articleId);
+        if (prior && prior.item_id && prior.item_id !== itemId) {
+          const n = supersede.run(`Superseded by item #${itemId} on redraft.`, prior.item_id)
+            .changes;
+          if (n) onLog(`      superseded draft item #${prior.item_id}`);
+        }
+        linkArticle.run(itemId, r._articleId);
+      }
     }
 
     // Discards are rows, not deletions. A run that discards nothing has stopped
