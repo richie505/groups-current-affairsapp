@@ -6,6 +6,7 @@ import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import Markdown from '../../components/Markdown';
+import RichText from '../../components/RichText';
 import {
   BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, GenreBadge, Chip,
 } from '../../components/Badges';
@@ -222,7 +223,7 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
 
       {item.verify_note ? (
         <p className="mb-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-          <strong>To verify:</strong> {item.verify_note}
+          <strong>To verify:</strong> <RichText>{item.verify_note}</RichText>
         </p>
       ) : null}
 
@@ -277,7 +278,9 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 Static linkage
               </p>
-              <p className="text-sm text-slate-700">{item.static_linkage}</p>
+              <p className="text-sm text-slate-700">
+                <RichText>{item.static_linkage}</RichText>
+              </p>
             </div>
           ) : null}
           {item.static_notes ? (
@@ -295,7 +298,9 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">
                 Prelims facts (G2)
               </p>
-              <p className="whitespace-pre-line text-sm text-slate-700">{item.prelims_facts}</p>
+              <p className="whitespace-pre-line text-sm text-slate-700">
+                <RichText>{item.prelims_facts}</RichText>
+              </p>
             </div>
           ) : null}
           {item.g1_fact ? (
@@ -303,7 +308,9 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">
                 The fact (G1)
               </p>
-              <p className="text-sm text-slate-700">{item.g1_fact}</p>
+              <p className="text-sm text-slate-700">
+                <RichText>{item.g1_fact}</RichText>
+              </p>
             </div>
           ) : null}
           {item.g1_angle ? (
@@ -311,7 +318,9 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">
                 The angle (G1)
               </p>
-              <p className="text-sm text-slate-900">{item.g1_angle}</p>
+              <p className="text-sm text-slate-900">
+                <RichText>{item.g1_angle}</RichText>
+              </p>
             </div>
           ) : (
             <p className="text-xs text-red-700">

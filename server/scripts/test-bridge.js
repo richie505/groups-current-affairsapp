@@ -252,6 +252,72 @@ check('an archive reprint is vetoed, not scored', archive.score === 0 && !!archi
 check('the veto says why', /not a report of a current event/.test(archive.why));
 
 // ---------------------------------------------------------------------------
+// 6. paced learning — the reading clock
+//
+// The arithmetic and the clock are pure logic and pin cleanly. What is NOT
+// covered here is the route that enforces it; that is one `if` in content.js and
+// the thing worth pinning is the state machine underneath it.
+// ---------------------------------------------------------------------------
+
+const P = require(path.join(__dirname, '..', 'src', 'lib', 'pacing'));
+
+const short = { id: 1, notes_markdown: 'Nine words is not enough to be a note.' };
+const long = { id: 2, notes_markdown: 'word '.repeat(2000) };
+const medium = { id: 3, notes_markdown: 'word '.repeat(300) };
+
+check('pacing off asks for no time at all', P.requiredSecondsFor(medium, 'off') === 0);
+check('an unknown pace is treated as off', P.requiredSecondsFor(medium, 'nonsense') === 0);
+check('a short item gets the floor, not nine seconds', P.requiredSecondsFor(short, 'steady') === P.MIN_SECONDS);
+check('a very long item is capped', P.requiredSecondsFor(long, 'thorough') === P.MAX_SECONDS);
+check(
+  'a thorough pace asks for more time than a brisk one',
+  P.requiredSecondsFor(medium, 'thorough') > P.requiredSecondsFor(medium, 'brisk')
+);
+check(
+  '300 words at a steady pace lands near 100 seconds',
+  Math.abs(P.requiredSecondsFor(medium, 'steady') - 100) <= 2
+);
+check(
+  'only the fields a student reads are counted',
+  P.wordsIn({ notes_markdown: 'one two three', verify_note: 'four five six seven eight' }) === 3
+);
+
+// A user and a published item to run a clock against.
+const userId = db
+  .prepare("INSERT INTO users (name, email, password_hash, role) VALUES ('T','t@example.com','x','student')")
+  .run().lastInsertRowid;
+const pacedItemId = out2.itemIds[0];
+const pacedItem = db.prepare('SELECT * FROM ca_items WHERE id = ?').get(pacedItemId);
+
+const before = P.stateFor(db, userId, pacedItem, 'steady', false);
+check('an unopened item reports its whole time as remaining', before.remaining_seconds === before.required_seconds);
+check('an unopened item is locked', before.unlocked === false && before.started_at === null);
+
+const opened = P.stateFor(db, userId, pacedItem, 'steady', true);
+check('opening the item starts the clock', !!opened.started_at);
+check('a freshly started item is still locked', opened.unlocked === false);
+
+// Reopening must not restart it. Backdated first, so a restart would be visible
+// as the elapsed time collapsing back to zero.
+db.prepare(
+  "UPDATE ca_progress SET reading_started_at = datetime('now', '-2 minutes') WHERE user_id = ? AND item_id = ?"
+).run(userId, pacedItemId);
+const reopened = P.stateFor(db, userId, pacedItem, 'steady', true);
+check('reopening does not restart the clock', reopened.elapsed_seconds >= 115);
+
+db.prepare(
+  "UPDATE ca_progress SET reading_started_at = datetime('now', '-3 hours') WHERE user_id = ? AND item_id = ?"
+).run(userId, pacedItemId);
+check('the clock unlocks once its time has run', P.stateFor(db, userId, pacedItem, 'steady', false).unlocked);
+
+check('with pacing off everything is unlocked', P.stateFor(db, userId, pacedItem, 'off', false).unlocked === true);
+
+const plan = P.planFor(db, userId, [pacedItem], 'steady');
+check('a finished item owes no more time', plan.remaining_seconds === 0 && plan.locked === 0);
+check('the plan still reports what the day totals', plan.total_seconds > 0);
+check('the plan is empty when pacing is off', P.planFor(db, userId, [pacedItem], 'off').mode === 'off');
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

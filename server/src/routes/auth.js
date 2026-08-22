@@ -8,6 +8,7 @@ const { findValidReset, consumeReset } = require('../lib/passwordReset');
 const router = express.Router();
 
 const TRACKS = ['g1', 'g2', 'both'];
+const { MODES: PACING_MODES } = require('../lib/pacing');
 
 router.post('/register', (req, res) => {
   const { name, email, password, exam_track } = req.body || {};
@@ -39,6 +40,7 @@ router.post('/register', (req, res) => {
     email: cleanEmail,
     role: 'student',
     exam_track: track,
+    pacing: 'off',
   };
   res.json({ token: signToken(user), user });
 });
@@ -62,6 +64,7 @@ router.post('/login', loginRateLimit, (req, res) => {
       email: user.email,
       role: user.role,
       exam_track: user.exam_track,
+      pacing: user.pacing || 'off',
     },
   });
 });
@@ -92,7 +95,7 @@ router.post('/reset/:token', (req, res) => {
   });
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
     .get(reset.user_id);
 
   // A reset is the recovery path for someone locked out, so it clears that
@@ -103,8 +106,22 @@ router.post('/reset/:token', (req, res) => {
   res.json({ ok: true, token: signToken(user), user });
 });
 
+// Who am I, NOW.
+//
+// This used to hand back the decoded token, which made it a mirror rather than
+// an answer: the token lives thirty days, so any setting changed since login —
+// or changed on another device — came back at its old value. Paced learning made
+// that visible, because the account page seeds its control from here and showed
+// "Off" for a student whose pace was set.
+//
+// Reading the row costs one indexed lookup on app load, and it is the one
+// endpoint whose whole job is to be current.
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  const user = db
+    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
+    .get(req.user.id);
+  if (!user) return res.status(401).json({ error: 'Account no longer exists.' });
+  res.json({ user });
 });
 
 // Update your own name, exam track and/or password.
@@ -115,7 +132,7 @@ router.get('/me', requireAuth, (req, res) => {
 // authenticated — a token left live on a borrowed device shouldn't be enough
 // to lock the real owner out.
 router.put('/me', requireAuth, (req, res) => {
-  const { name, exam_track, current_password, new_password } = req.body || {};
+  const { name, exam_track, pacing, current_password, new_password } = req.body || {};
   const updates = [];
   const values = [];
 
@@ -132,6 +149,17 @@ router.put('/me', requireAuth, (req, res) => {
     }
     updates.push('exam_track = ?');
     values.push(exam_track);
+  }
+
+  // Paced learning. Changing it takes effect on the next request and never
+  // touches a clock that is already running — turning it off unlocks whatever
+  // was waiting, turning it on does not retroactively lock what was open.
+  if (pacing !== undefined) {
+    if (!PACING_MODES.includes(pacing)) {
+      return res.status(400).json({ error: `Pace must be one of ${PACING_MODES.join(', ')}.` });
+    }
+    updates.push('pacing = ?');
+    values.push(pacing);
   }
 
   if (new_password !== undefined && new_password !== '') {
@@ -153,7 +181,7 @@ router.put('/me', requireAuth, (req, res) => {
   db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
     .get(req.user.id);
   // Both the name and the track are baked into the JWT (the navbar and the
   // lens read them from there), so a save has to hand back a fresh token or

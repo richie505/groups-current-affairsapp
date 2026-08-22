@@ -11,6 +11,7 @@ import {
   Chip,
 } from './Badges';
 import { shortDate } from '../lib/caFormat';
+import RichText from './RichText';
 import { IconCheck, IconBookmark } from './Icon';
 
 // One news item, in whichever shape the lens asks for.
@@ -69,7 +70,7 @@ export default function ItemCard({ item, showDate = false }) {
           ) : null}
           {item.prelims_facts ? (
             <p className="mb-2 whitespace-pre-line text-sm leading-relaxed text-slate-700">
-              {item.prelims_facts}
+              <RichText>{item.prelims_facts}</RichText>
             </p>
           ) : null}
           {item.keywords?.length ? (
@@ -101,10 +102,13 @@ export default function ItemCard({ item, showDate = false }) {
             </p>
           ) : null}
           {item.g1_why_news ? (
-            <p className="mb-2 text-sm leading-relaxed text-slate-900">{item.g1_why_news}</p>
+            <p className="mb-2 text-sm leading-relaxed text-slate-900">
+              <RichText>{item.g1_why_news}</RichText>
+            </p>
           ) : item.g1_angle ? (
             <p className="mb-2 text-sm leading-relaxed text-slate-800">
-              <span className="font-semibold">The angle:</span> {item.g1_angle}
+              <span className="font-semibold">The angle:</span>{' '}
+              <RichText>{item.g1_angle}</RichText>
             </p>
           ) : null}
           <div className="flex flex-wrap gap-1">

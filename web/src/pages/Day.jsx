@@ -7,7 +7,8 @@ import ItemCard from '../components/ItemCard';
 import LensToggle from '../components/LensToggle';
 import Markdown from '../components/Markdown';
 import { BUCKETS, longDate, readingMinutes } from '../lib/caFormat';
-import { IconCalendar, IconChevronLeft, IconChevronRight } from '../components/Icon';
+import { IconCalendar, IconChevronLeft, IconChevronRight, IconLock } from '../components/Icon';
+import { formatDuration } from '../components/PacingBar';
 
 // One day's digest.
 //
@@ -25,13 +26,14 @@ export default function Day() {
   if (loading) return <Loading label="Loading the digest…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
-  const { day, items, prev, next } = data;
+  const { day, items, pacing, prev, next } = data;
   const grouped = BUCKET_ORDER.map((bucket) => ({
     bucket,
     items: items.filter((i) => i.bucket === bucket),
   })).filter((g) => g.items.length);
 
   const readCount = items.filter((i) => i.marked_read).length;
+  const paced = !!pacing && pacing.mode !== 'off';
 
   return (
     <div>
@@ -41,10 +43,38 @@ export default function Day() {
           <LensToggle className="ml-auto" />
         </div>
         {day.title ? <p className="mb-2 text-slate-700">{day.title}</p> : null}
+        {/* One reading estimate, not two.
+            With a pace set, the header's figure IS the paced figure — the
+            generic 200-words-a-minute guess sitting beside "31 min of reading
+            left at a steady pace" would make a liar of both. */}
         <p className="text-sm text-slate-600">
-          {items.length} item{items.length === 1 ? '' : 's'} · about {readingMinutes(items)} min ·{' '}
+          {items.length} item{items.length === 1 ? '' : 's'} · about{' '}
+          {paced ? formatDuration(pacing.total_seconds) : `${readingMinutes(items)} min`} ·{' '}
           {readCount}/{items.length} read
         </p>
+        {/* The day's plan at the student's chosen pace. Shown only when a pace
+            is set, and stated as what is LEFT rather than what the day totals —
+            an estimate that never falls stops being information after the third
+            item. See server/src/lib/pacing.js. */}
+        {paced && pacing.locked ? (
+          <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-sm text-brand-900">
+            <IconLock />
+            {/* Before anything is opened, "43 min left" only repeats the header
+                two lines above it. What a student needs at that point is what
+                the pace DOES; what they need afterwards is how much is left. */}
+            {pacing.remaining_seconds >= pacing.total_seconds ? (
+              <span>
+                Paced learning is on at a {pacing.mode} pace — each item&rsquo;s questions open once
+                its reading time has run.
+              </span>
+            ) : (
+              <span>
+                <strong>{formatDuration(pacing.remaining_seconds)}</strong> of reading left today —{' '}
+                {pacing.locked} item{pacing.locked === 1 ? '' : 's'} still to open their questions.
+              </span>
+            )}
+          </p>
+        ) : null}
         {day.intro_markdown ? (
           <div className="prose-notes mt-3 rounded-lg border border-slate-200 bg-surface p-4 text-sm">
             <Markdown>{day.intro_markdown}</Markdown>

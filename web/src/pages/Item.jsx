@@ -10,6 +10,8 @@ import ErrorState from '../components/ErrorState';
 import Markdown from '../components/Markdown';
 import McqCard from '../components/McqCard';
 import G1Note from '../components/G1Note';
+import RichText from '../components/RichText';
+import PacingBar from '../components/PacingBar';
 import {
   BucketBadge,
   ImportanceBadge,
@@ -33,6 +35,11 @@ export default function Item() {
   const { data, error, loading, reload, setData } = useResource(`/items/${id}`);
   const { showG1, showG2 } = useLens();
   const [busy, setBusy] = useState('');
+  // Mirrors the clock in PacingBar so the button below can enable itself the
+  // moment the time is up, without another round trip. The server still decides
+  // — this only stops the student clicking a button that would be refused.
+  const [paceDone, setPaceDone] = useState(false);
+  const [paceError, setPaceError] = useState('');
 
   if (loading) return <Loading label="Loading…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -41,12 +48,18 @@ export default function Item() {
 
   async function toggleRead() {
     setBusy('read');
+    setPaceError('');
     try {
       if (item.marked_read) await api.del(`/items/${item.id}/read`);
       else await api.post(`/items/${item.id}/read`, {});
       // Reload rather than patch local state: marking read unlocks the MCQs,
       // which the server only sends once the flag is set.
       reload();
+    } catch (err) {
+      // The pacing gate answers 409 when the reading clock has not run. Shown
+      // where the click happened rather than as a page-level error: it is not a
+      // failure, it is the feature working.
+      setPaceError(err.message);
     } finally {
       setBusy('');
     }
@@ -90,7 +103,21 @@ export default function Item() {
 
       {item.needs_verify && item.verify_note ? (
         <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <strong>Not fully verified:</strong> {item.verify_note}
+          <strong>Not fully verified:</strong> <RichText>{item.verify_note}</RichText>
+        </p>
+      ) : null}
+
+      {/* The reading clock, when paced learning is on. Hidden entirely when it
+          is off, which is the default — see server/src/lib/pacing.js. */}
+      <PacingBar
+        pacing={item.pacing}
+        markedRead={!!item.marked_read}
+        onUnlock={() => setPaceDone(true)}
+      />
+
+      {paceError ? (
+        <p className="mb-3 rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm text-brand-900" role="alert">
+          {paceError}
         </p>
       ) : null}
 
@@ -98,8 +125,8 @@ export default function Item() {
         <button
           type="button"
           onClick={toggleRead}
-          disabled={busy === 'read'}
-          className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold ${
+          disabled={busy === 'read' || (!item.marked_read && !!item.pacing?.required_seconds && !paceDone)}
+          className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
             item.marked_read
               ? 'border border-green-300 bg-green-50 text-green-800'
               : 'bg-brand-600 text-white hover:bg-brand-700'

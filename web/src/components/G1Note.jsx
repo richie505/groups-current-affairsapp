@@ -1,4 +1,5 @@
 import Markdown from './Markdown';
+import RichText from './RichText';
 import { BankBadge, UnitBadge, Chip } from './Badges';
 import { longDate } from '../lib/caFormat';
 
@@ -199,13 +200,13 @@ export default function G1Note({ item }) {
         {item.g1_fact ? (
           <p className="mb-1.5 text-sm text-slate-800">
             <span className="font-semibold">The fact: </span>
-            {item.g1_fact}
+            <RichText>{item.g1_fact}</RichText>
           </p>
         ) : null}
         {item.g1_angle ? (
           <p className="mb-2 text-sm text-slate-900">
             <span className="font-semibold">The angle: </span>
-            {item.g1_angle}
+            <RichText>{item.g1_angle}</RichText>
           </p>
         ) : null}
         <div className="flex flex-wrap gap-1">

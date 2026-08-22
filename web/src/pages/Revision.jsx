@@ -6,6 +6,7 @@ import Loading from '../components/Loading';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
 import McqCard from '../components/McqCard';
+import RichText from '../components/RichText';
 import { BucketBadge, Chip } from '../components/Badges';
 import { shortDate } from '../lib/caFormat';
 import { IconRepeat } from '../components/Icon';
@@ -87,7 +88,9 @@ export default function Revision() {
                     {it.headline}
                   </Link>
                   {it.g1_angle ? (
-                    <p className="mt-1 text-sm text-slate-600">{it.g1_angle}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      <RichText>{it.g1_angle}</RichText>
+                    </p>
                   ) : null}
                   {state ? (
                     <p className="mt-2 text-xs font-medium text-green-700">

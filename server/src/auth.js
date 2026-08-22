@@ -14,6 +14,11 @@ function signToken(user) {
       name: user.name,
       email: user.email,
       exam_track: user.exam_track || 'both',
+      // The pacing setting rides in the token for the same reason the track
+      // does: the item page decides whether to show a reading clock on first
+      // paint, and fetching it separately would mean the clock appears a beat
+      // after the notes.
+      pacing: user.pacing || 'off',
     },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }

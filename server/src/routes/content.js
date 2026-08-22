@@ -16,6 +16,18 @@ const BUCKETS = ['international', 'national', 'ap', 'dynamic'];
 // still be held back or discarded within an approved day.
 const VISIBLE = `i.status = 'published' AND d.status = 'published'`;
 
+const P = require('../lib/pacing');
+
+// The pacing setting, read from the database rather than from the JWT.
+//
+// The token carries it too, and the client uses that for first paint — but a
+// token lives thirty days and this is the setting the gate below is enforced on.
+// Reading the row is the difference between "what the browser was told when it
+// logged in" and "what the student has chosen".
+function pacingOf(userId) {
+  return db.prepare('SELECT pacing FROM users WHERE id = ?').get(userId)?.pacing || 'off';
+}
+
 function itemColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
           ${alias}.subject_tag, ${alias}.notes_markdown, ${alias}.static_linkage,
@@ -238,7 +250,12 @@ router.get('/days/:date', (req, res) => {
     .prepare(`SELECT date FROM ca_days WHERE date > ? AND status = 'published' ORDER BY date ASC LIMIT 1`)
     .get(day.date);
 
-  res.json({ day, items, prev: prev?.date || null, next: next?.date || null });
+  // What the day will cost at this student's pace, and how much of it is still
+  // owed. Sent with the digest so the plan is visible before the reading starts,
+  // which is the whole point of choosing a pace.
+  const pacing = P.planFor(db, req.user.id, items, pacingOf(req.user.id));
+
+  res.json({ day, items, pacing, prev: prev?.date || null, next: next?.date || null });
 });
 
 // The latest published digest — what "Today" actually resolves to.
@@ -282,6 +299,11 @@ router.get('/items/:id', (req, res) => {
   attachTags([item]);
   attachUserState([item], req.user.id);
 
+  // Opening the item starts its reading clock, once. Re-opening does not restart
+  // it: reading is not a single sitting, and a feature that assumed it was would
+  // punish exactly the student who goes back to check something.
+  item.pacing = P.stateFor(db, req.user.id, item, pacingOf(req.user.id), true);
+
   // MCQs stay hidden until the notes are marked read. Same rule as the static
   // app, for the same reason: a question answered before the notes teaches the
   // answer, not the topic. The count is still returned so the lock has a
@@ -308,6 +330,28 @@ router.post('/items/:id/read', (req, res) => {
     .prepare(`SELECT i.id FROM ca_items i JOIN ca_days d ON d.id = i.day_id WHERE i.id = ? AND ${VISIBLE}`)
     .get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found.' });
+
+  // The pacing gate, and the only place it is enforced.
+  //
+  // Everything downstream — the item page's questions, the quiz builder, the
+  // revision queue — already keys off `marked_read`, so refusing to set it here
+  // is enough. One gate rather than five is also the only version of this that
+  // stays true as those five callers change.
+  //
+  // 409 rather than 403: nothing is forbidden, the request is simply early.
+  const mode = pacingOf(req.user.id);
+  if (mode !== 'off') {
+    const full = db.prepare(`SELECT ${itemColumns()} FROM ca_items i WHERE i.id = ?`).get(item.id);
+    const state = P.stateFor(db, req.user.id, full, mode, true);
+    if (!state.unlocked) {
+      return res.status(409).json({
+        error:
+          `Still reading — ${P.remainingLabel(state.remaining_seconds)} to go at your chosen ` +
+          'pace. You can change or switch off pacing in Your account.',
+        pacing: state,
+      });
+    }
+  }
 
   db.prepare(
     `INSERT INTO ca_progress (user_id, item_id, marked_read, marked_at)

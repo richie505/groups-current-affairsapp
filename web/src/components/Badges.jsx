@@ -1,4 +1,5 @@
 import { BUCKETS, BANKS, IMPORTANCE, formatLabel } from '../lib/caFormat';
+import { plainText } from './RichText';
 
 // The small labelled chips that carry an item's routing. They matter more than
 // decoration here: the bucket, the tier, the keyword angle and the paper unit
@@ -141,7 +142,7 @@ export function VerifyBadge({ note }) {
   return (
     <Chip
       className="bg-amber-100 text-amber-900 border-amber-400"
-      title={note || 'This detail could not be confirmed at a second source — check before memorising it.'}
+      title={plainText(note) || 'This detail could not be confirmed at a second source — check before memorising it.'}
     >
       ⚠ Verify
     </Chip>
