@@ -11,6 +11,7 @@
 //     --model <id>       override OPENAI_MODEL
 //     --mcqs-per 4       questions per item (default 4)
 //     --no-mcqs          draft the notes only, skip question generation
+//     --article ID,ID    redraft these specific articles, whatever they score
 //     --redraft          include articles that already produced an item
 //     --dry-run          print what would be drafted, write nothing
 //
@@ -78,6 +79,11 @@ function parseArgs(argv) {
     dryRun: false,
     noMcqs: false,
     mcqsPer: 4,
+    // Specific articles, by id. For re-drafting a known-bad item after the
+    // segmenter has been corrected: the score gate and the already-drafted
+    // filter are both bypassed, because the reason for the run is the article,
+    // not its rank.
+    articleIds: null,
   };
   for (let i = 3; i < argv.length; i += 1) {
     const a = argv[i];
@@ -88,6 +94,7 @@ function parseArgs(argv) {
     else if (a === '--no-mcqs') args.noMcqs = true;
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--article') args.articleIds = String(argv[++i]).split(',').map(Number).filter(Boolean);
   }
   return args;
 }
@@ -108,17 +115,25 @@ async function main() {
   // Ordered by score so that if --limit bites, it takes the best articles and
   // not an arbitrary page-order slice. A limit that silently drops the most
   // examinable story would make the whole score pointless.
-  const articles = db
-    .prepare(
-      `SELECT * FROM np_articles
-        WHERE edition_id = ?
-          AND status NOT IN ('duplicate', 'discarded')
-          AND (score IS NOT NULL AND score >= ?)
-          ${args.redraft ? '' : 'AND item_id IS NULL'}
-        ORDER BY score DESC, ap DESC, page
-        LIMIT ?`
-    )
-    .all(edition.id, args.minScore, args.limit);
+  const articles = args.articleIds
+    ? db
+        .prepare(
+          `SELECT * FROM np_articles WHERE edition_id = ? AND id IN (${args.articleIds
+            .map(() => '?')
+            .join(',')}) ORDER BY page`
+        )
+        .all(edition.id, ...args.articleIds)
+    : db
+        .prepare(
+          `SELECT * FROM np_articles
+            WHERE edition_id = ?
+              AND status NOT IN ('duplicate', 'discarded')
+              AND (score IS NOT NULL AND score >= ?)
+              ${args.redraft ? '' : 'AND item_id IS NULL'}
+            ORDER BY score DESC, ap DESC, page
+            LIMIT ?`
+        )
+        .all(edition.id, args.minScore, args.limit);
 
   const log = [];
   const say = (line) => {

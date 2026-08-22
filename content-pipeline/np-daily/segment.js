@@ -323,7 +323,78 @@ function segmentPage(page, profile, opts = {}) {
   const maxBodyWidth = colW ? colW * 3 : Infinity;
 
   const dropped = [];
-  const headlines = blocks.filter((b) => b.role === 'headline').sort((a, b) => y0(a) - y0(b));
+  let headlines = blocks.filter((b) => b.role === 'headline').sort((a, b) => y0(a) - y0(b));
+
+  // A drop cap opens a story, so the headline-face line directly above one is
+  // that story's headline — whatever size it is set in.
+  //
+  // WHY THIS IS NEEDED
+  //
+  // The headline test carries an absolute floor (`minSize`, 13pt for The Hindu)
+  // to stop small Banner text — standfirsts, pull-quotes, kickers — inventing
+  // articles. That floor is right for news pages, where headlines run 17-41pt,
+  // and wrong for the editorial page, where the unsigned editorials are set at
+  // 11.7pt. "Trial by fire — West Bengal should rebuild its crumbling..." and
+  // "Socialist surge — Affordability issues propel democratic socialists..."
+  // both came back as 'secondary', were discarded as pull-quotes, and their body
+  // was then orphaned into the neighbouring op-ed.
+  //
+  // The result was two full editorials welded onto one signed column: an 8,835
+  // character article headlined "Centre's fiscal outlook faces geopolitical,
+  // revenue risks" whose first 2,700 characters were about fires in West Bengal.
+  // It was drafted and published, and its prelims facts list Shikha Inn and
+  // Tarapith inside a note about tax revenue.
+  //
+  // It also corrupted the opening word. The drop-cap re-attach prepends a letter
+  // when the assembled text starts lowercase; with the fire editorial's body
+  // ("hat is it with West Bengal") leading the article, it fired using the
+  // fiscal piece's drop cap and stored "Ghat is it" for "What is it".
+  //
+  // THE GUARD
+  //
+  // Only where the drop cap has NO owning headline already. A drop cap sitting
+  // under a real headline with a standfirst between them must not promote the
+  // standfirst — that would invent an article on every news page. Asking
+  // `ownerOf` first means this fires exactly where a story visibly begins and
+  // nothing claims it.
+  const promoted = [];
+  for (const d of blocks.filter((b) => b.role === 'dropcap')) {
+    if (ownerOf(d, headlines)) continue;
+    const above = blocks
+      .filter(
+        (b) =>
+          b.role === 'secondary' &&
+          y0(b) < y0(d) &&
+          y0(d) - y0(b) <= 90 &&
+          x0(b) < x1(d) + COVER_SLACK &&
+          x1(b) > x0(d) - COVER_SLACK
+      )
+      .sort((a, b) => y0(b) - y0(a));
+    if (!above.length) continue;
+
+    // A headline set over two lines arrives as one block per line, and the line
+    // nearest the drop cap is the SECOND one. Taking it verbatim produced the
+    // headline "socialists in the United States" for an editorial actually
+    // headlined "Socialist surge — Affordability issues propel democratic
+    // socialists in the United States". So the promotion starts at the nearest
+    // line that opens like a headline and folds the continuation lines back on.
+    const startIdx = above.findIndex((b) => !isFragment(b.text));
+    if (startIdx === -1) continue;
+    const candidate = above[startIdx];
+    const continuation = above.slice(0, startIdx).reverse();
+    if (continuation.length) {
+      candidate.text = clean([candidate.text, ...continuation.map((b) => b.text)].join(' '));
+      for (const b of continuation) b.role = 'noise';
+    }
+    candidate.role = 'headline';
+    promoted.push(candidate.text.slice(0, 70));
+  }
+  if (promoted.length) {
+    headlines = blocks.filter((b) => b.role === 'headline').sort((a, b) => y0(a) - y0(b));
+    for (const t of promoted) {
+      dropped.push({ reason: 'promoted to headline — a drop cap opens a story here', text: t });
+    }
+  }
 
   // No headline means nothing to hang body text on. Rather than emit one
   // undifferentiated blob, say so - it is a signal that the profile is wrong for
