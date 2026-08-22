@@ -64,8 +64,11 @@ export default function Day() {
                 the pace DOES; what they need afterwards is how much is left. */}
             {pacing.remaining_seconds >= pacing.total_seconds ? (
               <span>
-                Paced learning is on at a {pacing.mode} pace — each item&rsquo;s questions open once
-                its reading time has run.
+                Paced learning is on
+                {pacing.mode === 'custom'
+                  ? ` at your own ${pacing.minutes} minutes an item`
+                  : ` at a ${pacing.mode} pace`}{' '}
+                — each item&rsquo;s questions open once its reading time has run.
               </span>
             ) : (
               <span>

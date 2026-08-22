@@ -318,6 +318,57 @@ check('the plan still reports what the day totals', plan.total_seconds > 0);
 check('the plan is empty when pacing is off', P.planFor(db, userId, [pacedItem], 'off').mode === 'off');
 
 // ---------------------------------------------------------------------------
+// 7. the student's own time
+//
+// The three paces above are a reading SPEED, so a long item is given longer.
+// This one is a flat number the student chose, and the point of the checks is
+// that it is used AS CHOSEN — the floor and cap that protect a computed number
+// must not overrule a deliberate one.
+// ---------------------------------------------------------------------------
+
+check(
+  'a chosen time is used exactly',
+  P.requiredSecondsFor(medium, { mode: 'custom', minutes: 4 }) === 240
+);
+check(
+  'the same chosen time applies whatever the length',
+  P.requiredSecondsFor(short, { mode: 'custom', minutes: 4 }) ===
+    P.requiredSecondsFor(long, { mode: 'custom', minutes: 4 })
+);
+// The smallest choosable time is one minute, and the computed floor is 45
+// seconds — so the floor can never bite a chosen time in the first place. Worth
+// pinning, because lowering MIN_MINUTES below 45 seconds later would silently
+// start rounding a student's choice UP without anything saying so.
+check(
+  'the smallest choosable time clears the computed floor',
+  P.MIN_MINUTES * 60 >= P.MIN_SECONDS &&
+    P.requiredSecondsFor(short, { mode: 'custom', minutes: P.MIN_MINUTES }) === P.MIN_MINUTES * 60
+);
+check(
+  'a chosen time above the computed cap is still honoured',
+  P.requiredSecondsFor(short, { mode: 'custom', minutes: 20 }) === 1200 &&
+    1200 > P.MAX_SECONDS
+);
+check('a mistyped zero is clamped, not obeyed', P.clampMinutes(0) === P.MIN_MINUTES);
+check('a mistyped 600 is clamped', P.clampMinutes(600) === P.MAX_MINUTES);
+check('nonsense falls back to the default', P.clampMinutes('abc') === P.DEFAULT_MINUTES);
+
+check('a bare mode string is still a valid preference', P.normalisePref('steady').mode === 'steady');
+check('an unknown mode is off', P.normalisePref({ mode: 'sideways' }).mode === 'off');
+
+const customState = P.stateFor(db, userId, pacedItem, { mode: 'custom', minutes: 6 }, false);
+check('the state reports a chosen time in minutes', customState.minutes === 6);
+check('the state carries the chosen time as seconds', customState.required_seconds === 360);
+check(
+  'a computed pace reports no chosen minutes',
+  P.stateFor(db, userId, pacedItem, 'steady', false).minutes === null
+);
+
+const customPlan = P.planFor(db, userId, [pacedItem, pacedItem], { mode: 'custom', minutes: 5 });
+check('a day plan multiplies the chosen time', customPlan.total_seconds === 600);
+check('the day plan names the chosen minutes', customPlan.minutes === 5);
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

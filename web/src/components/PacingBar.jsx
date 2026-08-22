@@ -100,7 +100,11 @@ export default function PacingBar({ pacing, markedRead, onUnlock }) {
           </span>
         )}
         <span className="ml-auto text-xs text-slate-600 dark:text-slate-400">
-          {formatDuration(required)} at a {pacing.mode} pace
+          {/* Where the number came from, which matters: a student who set four
+              minutes should be told it is their four minutes, not the app's. */}
+          {pacing.mode === 'custom'
+            ? `${formatDuration(required)} — your own setting`
+            : `${formatDuration(required)} at a ${pacing.mode} pace`}
         </span>
       </div>
 

@@ -25,7 +25,13 @@ db.exec(schema);
     // it is a column with a default rather than a settings table: the feature is
     // a discipline, and a discipline nobody opted into is an obstacle.
     // See server/src/lib/pacing.js.
-    users: [['pacing', "TEXT NOT NULL DEFAULT 'off'"]],
+    users: [
+      ['pacing', "TEXT NOT NULL DEFAULT 'off'"],
+      // The student's own reading time, in minutes, used when pacing is set to
+      // 'custom'. Stored even while another mode is selected, so switching to
+      // 'Your own time' and back does not lose the number they chose.
+      ['pacing_minutes', 'INTEGER NOT NULL DEFAULT 4'],
+    ],
     // When the reading clock started for this item. On the progress row rather
     // than in a table of its own because it is the same fact as `marked_read`
     // seen earlier: one row per user per item, already indexed, already deleted

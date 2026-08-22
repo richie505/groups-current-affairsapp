@@ -15,27 +15,36 @@ const TRACKS = [
 const PACES = [
   { key: 'off', label: 'Off', hint: 'Questions open as soon as you mark an item read.' },
   {
+    key: 'custom',
+    label: 'Your own time — you set the minutes',
+    hint: 'The same time on every item, however long it is.',
+  },
+  {
     key: 'steady',
     label: 'Steady — a first read of the digest',
-    hint: 'About 3 minutes on a full note. The usual choice.',
+    hint: 'Works from each item’s length: about 3½ minutes on a typical note.',
   },
   {
     key: 'thorough',
     label: 'Thorough — material to write an answer from',
-    hint: 'Longer, for notes you mean to use in Mains practice.',
+    hint: 'Works from each item’s length: about 4½ minutes on a typical note.',
   },
   {
     key: 'brisk',
     label: 'Brisk — revisiting what you have already done',
-    hint: 'Shorter, for a second pass through older items.',
+    hint: 'Works from each item’s length: about 2½ minutes on a typical note.',
   },
 ];
+
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 30;
 
 export default function Profile() {
   const { user, applyIdentity } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [track, setTrack] = useState(user?.exam_track || 'both');
   const [pacing, setPacing] = useState(user?.pacing || 'off');
+  const [paceMinutes, setPaceMinutes] = useState(user?.pacing_minutes ?? 4);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [msg, setMsg] = useState('');
@@ -48,7 +57,7 @@ export default function Profile() {
     setError('');
     setMsg('');
     try {
-      const body = { name, exam_track: track, pacing };
+      const body = { name, exam_track: track, pacing, pacing_minutes: Number(paceMinutes) || 4 };
       if (next) {
         body.current_password = current;
         body.new_password = next;
@@ -121,11 +130,36 @@ export default function Profile() {
           <span className="mt-1 block text-xs text-slate-500">
             {PACES.find((p) => p.key === pacing)?.hint}
           </span>
+
+          {/* The number itself, when the student is setting it. A stepper rather
+              than a free text box: the value is minutes, the range is small, and
+              typing "0" or "600" is a mistake nobody meant to make. */}
+          {pacing === 'custom' ? (
+            <span className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min={MIN_MINUTES}
+                max={MAX_MINUTES}
+                step={1}
+                value={paceMinutes}
+                onChange={(e) => setPaceMinutes(e.target.value)}
+                onBlur={(e) =>
+                  setPaceMinutes(
+                    Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Math.round(Number(e.target.value) || 4)))
+                  )
+                }
+                aria-label="Minutes on each item"
+                className="w-20 rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"
+              />
+              <span className="text-sm text-slate-700">minutes on each item</span>
+            </span>
+          ) : null}
+
           {pacing !== 'off' ? (
-            <span className="mt-1 block text-xs text-slate-500">
-              With a pace set, an item&rsquo;s questions stay shut until its reading time has run.
-              The clock starts when you open the item and keeps its place if you leave and come
-              back. Switch it off here at any time.
+            <span className="mt-2 block text-xs text-slate-500">
+              An item&rsquo;s questions stay shut until its reading time has run. The clock starts
+              when you open the item and keeps its place if you leave and come back. Change the time
+              or switch it off here at any moment &mdash; it takes effect on your next click.
             </span>
           ) : null}
         </label>

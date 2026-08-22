@@ -68,9 +68,33 @@ const PACES = {
     wpm: 130,
     hint: 'For material you intend to write an answer from.',
   },
+  // The student’s own number, in minutes, applied to every item.
+  //
+  // The three paces above are a reading SPEED, so a long note is given longer
+  // than a short one. This one is not: it is a flat time the student chose, and
+  // it is the only setting here that is theirs rather than the app’s.
+  //
+  // Both belong. A speed is the better model of reading and a worse model of a
+  // person’s day — somebody who has forty minutes before work wants to say
+  // “four minutes an item” and have that be true, not have the app decide which
+  // items deserve five. Offering only the speeds meant the one number a student
+  // actually cares about was the one number they could not set.
+  custom: {
+    label: 'Your own time',
+    wpm: 0,
+    flat: true,
+    hint: 'The same time on every item, however long it is.',
+  },
 };
 
 const MODES = Object.keys(PACES);
+
+// Bounds on the custom time, in minutes. Wide, because it is the student’s
+// judgement and not the app’s — narrow enough only to keep a mistyped 0 or 600
+// from locking the questions for ever or opening them instantly.
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 30;
+const DEFAULT_MINUTES = 4;
 
 // A floor and a ceiling, because the arithmetic alone is wrong at both ends.
 // Without the floor a three-line item unlocks in nine seconds, which is not a
@@ -119,6 +143,26 @@ function wordsIn(item) {
   return n;
 }
 
+const clampMinutes = (minutes) => {
+  const n = Math.round(Number(minutes));
+  if (!Number.isFinite(n)) return DEFAULT_MINUTES;
+  return Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, n));
+};
+
+/**
+ * A pacing preference, from whatever the caller has.
+ *
+ * Accepts a bare mode string as well as a {mode, minutes} pair. That is not
+ * looseness for its own sake: for four of the five modes the mode IS the whole
+ * preference, and making every caller and every test wrap 'steady' in an object
+ * would be noise around the one case that needs it.
+ */
+function normalisePref(value) {
+  const raw = typeof value === 'string' || value == null ? { mode: value } : value;
+  const mode = MODES.includes(String(raw.mode)) ? String(raw.mode) : 'off';
+  return { mode, minutes: clampMinutes(raw.minutes ?? raw.pacing_minutes ?? DEFAULT_MINUTES) };
+}
+
 /**
  * How long this item should take at this pace, in whole seconds.
  *
@@ -126,14 +170,22 @@ function wordsIn(item) {
  * paced?" and "how long?" are one question with one answer rather than two that
  * can disagree.
  */
-function requiredSecondsFor(item, mode) {
+function requiredSecondsFor(item, pref) {
+  const { mode, minutes } = normalisePref(pref);
   const pace = PACES[mode];
-  if (!pace || !pace.wpm) return 0;
+  if (!pace) return 0;
+
+  // A time the student set is used as they set it. The floor and cap below
+  // exist to protect a computed number from the arithmetic going silly at the
+  // extremes; applying them to a deliberate choice would just be overruling it.
+  if (pace.flat) return minutes * 60;
+
+  if (!pace.wpm) return 0;
   const seconds = Math.round((wordsIn(item) / pace.wpm) * 60);
   return Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, seconds));
 }
 
-const normaliseMode = (mode) => (MODES.includes(String(mode)) ? String(mode) : 'off');
+const normaliseMode = (mode) => normalisePref(mode).mode;
 
 /**
  * Starts the reading clock for an item, if pacing is on and it has not already
@@ -165,9 +217,9 @@ function startClock(db, userId, itemId) {
  * @param {string} mode      the user's pacing setting
  * @param {boolean} [start]  start the clock if it has not started
  */
-function stateFor(db, userId, item, mode, start = false) {
-  const paceMode = normaliseMode(mode);
-  const required = requiredSecondsFor(item, paceMode);
+function stateFor(db, userId, item, pref, start = false) {
+  const { mode: paceMode, minutes } = normalisePref(pref);
+  const required = requiredSecondsFor(item, { mode: paceMode, minutes });
   if (!required) {
     return { mode: 'off', required_seconds: 0, started_at: null, elapsed_seconds: 0, remaining_seconds: 0, unlocked: true };
   }
@@ -191,6 +243,9 @@ function stateFor(db, userId, item, mode, start = false) {
 
   return {
     mode: paceMode,
+    // Sent so the item page can say "4 min — your own setting" rather than
+    // "at a custom pace", which tells a reader nothing they did not just choose.
+    minutes: PACES[paceMode].flat ? minutes : null,
     required_seconds: required,
     started_at: started,
     elapsed_seconds: elapsed,
@@ -206,20 +261,28 @@ function stateFor(db, userId, item, mode, start = false) {
  * should not still be billed for, or the day's estimate never falls and stops
  * being information.
  */
-function planFor(db, userId, items, mode) {
-  const paceMode = normaliseMode(mode);
-  if (paceMode === 'off') return { mode: 'off', total_seconds: 0, remaining_seconds: 0, locked: 0 };
+function planFor(db, userId, items, pref) {
+  const { mode: paceMode, minutes } = normalisePref(pref);
+  if (paceMode === 'off') {
+    return { mode: 'off', minutes: null, total_seconds: 0, remaining_seconds: 0, locked: 0 };
+  }
 
   let total = 0;
   let remaining = 0;
   let locked = 0;
   for (const item of items) {
-    const s = stateFor(db, userId, item, paceMode, false);
+    const s = stateFor(db, userId, item, { mode: paceMode, minutes }, false);
     total += s.required_seconds;
     remaining += s.remaining_seconds;
     if (!s.unlocked) locked += 1;
   }
-  return { mode: paceMode, total_seconds: total, remaining_seconds: remaining, locked };
+  return {
+    mode: paceMode,
+    minutes: PACES[paceMode].flat ? minutes : null,
+    total_seconds: total,
+    remaining_seconds: remaining,
+    locked,
+  };
 }
 
 /**
@@ -237,5 +300,7 @@ function remainingLabel(seconds) {
 
 module.exports = {
   PACES, MODES, MIN_SECONDS, MAX_SECONDS, READ_FIELDS,
-  wordsIn, requiredSecondsFor, normaliseMode, startClock, stateFor, planFor, remainingLabel,
+  MIN_MINUTES, MAX_MINUTES, DEFAULT_MINUTES,
+  wordsIn, requiredSecondsFor, normaliseMode, normalisePref, clampMinutes,
+  startClock, stateFor, planFor, remainingLabel,
 };

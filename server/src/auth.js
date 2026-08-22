@@ -19,6 +19,7 @@ function signToken(user) {
       // paint, and fetching it separately would mean the clock appears a beat
       // after the notes.
       pacing: user.pacing || 'off',
+      pacing_minutes: user.pacing_minutes ?? 4,
     },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }

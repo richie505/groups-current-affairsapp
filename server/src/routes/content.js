@@ -25,7 +25,8 @@ const P = require('../lib/pacing');
 // Reading the row is the difference between "what the browser was told when it
 // logged in" and "what the student has chosen".
 function pacingOf(userId) {
-  return db.prepare('SELECT pacing FROM users WHERE id = ?').get(userId)?.pacing || 'off';
+  const row = db.prepare('SELECT pacing, pacing_minutes FROM users WHERE id = ?').get(userId);
+  return { mode: row?.pacing || 'off', minutes: row?.pacing_minutes ?? 4 };
 }
 
 function itemColumns(alias = 'i') {
@@ -339,10 +340,10 @@ router.post('/items/:id/read', (req, res) => {
   // stays true as those five callers change.
   //
   // 409 rather than 403: nothing is forbidden, the request is simply early.
-  const mode = pacingOf(req.user.id);
-  if (mode !== 'off') {
+  const pref = pacingOf(req.user.id);
+  if (pref.mode !== 'off') {
     const full = db.prepare(`SELECT ${itemColumns()} FROM ca_items i WHERE i.id = ?`).get(item.id);
-    const state = P.stateFor(db, req.user.id, full, mode, true);
+    const state = P.stateFor(db, req.user.id, full, pref, true);
     if (!state.unlocked) {
       return res.status(409).json({
         error:

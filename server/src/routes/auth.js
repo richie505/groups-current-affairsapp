@@ -8,7 +8,7 @@ const { findValidReset, consumeReset } = require('../lib/passwordReset');
 const router = express.Router();
 
 const TRACKS = ['g1', 'g2', 'both'];
-const { MODES: PACING_MODES } = require('../lib/pacing');
+const { MODES: PACING_MODES, MIN_MINUTES, MAX_MINUTES } = require('../lib/pacing');
 
 router.post('/register', (req, res) => {
   const { name, email, password, exam_track } = req.body || {};
@@ -41,6 +41,7 @@ router.post('/register', (req, res) => {
     role: 'student',
     exam_track: track,
     pacing: 'off',
+    pacing_minutes: 4,
   };
   res.json({ token: signToken(user), user });
 });
@@ -65,6 +66,7 @@ router.post('/login', loginRateLimit, (req, res) => {
       role: user.role,
       exam_track: user.exam_track,
       pacing: user.pacing || 'off',
+      pacing_minutes: user.pacing_minutes ?? 4,
     },
   });
 });
@@ -95,7 +97,7 @@ router.post('/reset/:token', (req, res) => {
   });
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
     .get(reset.user_id);
 
   // A reset is the recovery path for someone locked out, so it clears that
@@ -118,7 +120,7 @@ router.post('/reset/:token', (req, res) => {
 // endpoint whose whole job is to be current.
 router.get('/me', requireAuth, (req, res) => {
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
     .get(req.user.id);
   if (!user) return res.status(401).json({ error: 'Account no longer exists.' });
   res.json({ user });
@@ -132,7 +134,7 @@ router.get('/me', requireAuth, (req, res) => {
 // authenticated — a token left live on a borrowed device shouldn't be enough
 // to lock the real owner out.
 router.put('/me', requireAuth, (req, res) => {
-  const { name, exam_track, pacing, current_password, new_password } = req.body || {};
+  const { name, exam_track, pacing, pacing_minutes, current_password, new_password } = req.body || {};
   const updates = [];
   const values = [];
 
@@ -162,6 +164,20 @@ router.put('/me', requireAuth, (req, res) => {
     values.push(pacing);
   }
 
+  // The student's own reading time. Saved whichever mode is selected, so
+  // choosing a preset and coming back to 'Your own time' finds the number they
+  // set rather than the default.
+  if (pacing_minutes !== undefined) {
+    const n = Math.round(Number(pacing_minutes));
+    if (!Number.isFinite(n) || n < MIN_MINUTES || n > MAX_MINUTES) {
+      return res
+        .status(400)
+        .json({ error: `Your own reading time must be between ${MIN_MINUTES} and ${MAX_MINUTES} minutes.` });
+    }
+    updates.push('pacing_minutes = ?');
+    values.push(n);
+  }
+
   if (new_password !== undefined && new_password !== '') {
     if (String(new_password).length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters.' });
@@ -181,7 +197,7 @@ router.put('/me', requireAuth, (req, res) => {
   db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
     .get(req.user.id);
   // Both the name and the track are baked into the JWT (the navbar and the
   // lens read them from there), so a save has to hand back a fresh token or
