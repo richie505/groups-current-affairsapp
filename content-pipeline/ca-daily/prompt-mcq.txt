@@ -74,6 +74,7 @@ Return ONLY a JSON array. No preamble, no code fence.
     "explanation": "...",
     "format": "<one of the eight format keys above>",
     "keyword": "<one of the item's blueprint angles>",
+    "unit_code": "<the syllabus unit this question tests, from the list supplied>",
     "difficulty": 1 | 2 | 3,
     "fact_as_of": "YYYY-MM-DD"
   }
@@ -82,6 +83,13 @@ Return ONLY a JSON array. No preamble, no code fence.
 Rules:
   - Vary which letter is correct. Do not put the key on (a) every time.
   - All four options must be distinct.
+  - "unit_code" must be one of the codes in the SYLLABUS UNITS block, copied
+    exactly. If that block is absent, leave it as "". Do not invent a code and
+    do not guess one that looks plausible: a question filed under a unit it does
+    not test is worse than one filed under none, because it answers "what covers
+    this unit" with the wrong thing.
+  - Spread the questions across the units supplied. Three units and four
+    questions means roughly one or two each, not four on the first.
   - Ask only what the supplied notes actually support. Do not introduce facts
     from memory to make a question work — drop the question instead.
   - Write nothing whose answer you would not be able to defend from the notes.

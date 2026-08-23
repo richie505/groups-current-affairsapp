@@ -9,7 +9,10 @@
 //     --min-score N      only articles scoring at or above this (default 45)
 //     --limit N          stop after N articles (default: no limit — draft them all)
 //     --model <id>       override OPENAI_MODEL
-//     --mcqs-per 4       questions per item (default 4)
+//     --mcqs-per 4       BASE questions per item (default 4). The actual count
+//                        rises with how many objective syllabus units the item
+//                        feeds — see mcqCountFor in src/lib/draft.js. Three of
+//                        the four APPSC papers are answered by ticking a box.
 //     --no-mcqs          draft the notes only, skip question generation
 //     --article ID,ID    redraft these specific articles, whatever they score
 //     --redraft          include articles that already produced an item

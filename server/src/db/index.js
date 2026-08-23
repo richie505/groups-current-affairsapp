@@ -59,6 +59,14 @@ db.exec(schema);
     // seen earlier: one row per user per item, already indexed, already deleted
     // with the item.
     ca_progress: [['reading_started_at', 'TEXT']],
+    // Which syllabus unit a question TESTS.
+    //
+    // Three of the four APPSC papers are objective, and until now every
+    // question was tagged with a keyword angle and a format but with no unit at
+    // all — so "how well is Group-I Prelims section B covered" was a question
+    // the bank could not answer about itself. Coverage was measurable on
+    // articles and invisible on the thing a student actually practises.
+    ca_mcqs: [['unit_code', "TEXT NOT NULL DEFAULT ''"]],
     // The eight-section Group-I note template. Added after the first version
     // shipped with a single angle field, so existing rows keep their fact and
     // angle and simply have the new sections empty until edited or redrafted.

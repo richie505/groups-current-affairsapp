@@ -412,7 +412,48 @@ const Rev = require(path.join(__dirname, '..', 'src', 'lib', 'revision'));
 check('a card read at 2 a.m. local is due the NEXT local day', Rev.fmt(Rev.addDays(lateNight, 1)) === '2026-08-24');
 
 // ---------------------------------------------------------------------------
-// 9. which provider serves which model, and the cacheable prompt prefix
+// 9. how many questions an item is worth
+//
+// Three of the four APPSC papers are objective and one is written, and the app
+// was built the other way round: 25,421 words of descriptive material serving
+// one paper, and 3.9 questions an item serving three. The count now follows how
+// much syllabus ground the item actually covers.
+// ---------------------------------------------------------------------------
+
+const u = (n) => Array.from({ length: n }, (_, i) => ({ unit_code: `X${i}` }));
+
+check('an item feeding nothing still gets the base four', D.mcqCountFor(u(0)) === 4);
+check('one unit gets the base four', D.mcqCountFor(u(1)) === 4);
+check('two units are worth more than one', D.mcqCountFor(u(2)) > D.mcqCountFor(u(1)));
+check('the count rises with the ground covered', D.mcqCountFor(u(3)) === 8);
+check('and is capped, because a press conference runs out of questions', D.mcqCountFor(u(9)) === 10);
+check('the base is overridable', D.mcqCountFor(u(1), 6) === 6);
+
+// The unit tag has to survive the round trip, and an invented one must not.
+const mcqItem = D.insertDrafted(db, {
+  date: '2026-08-21',
+  drafted: [
+    {
+      ...record,
+      headline: 'An item whose questions carry units',
+      mcqs: [
+        { question: 'Real unit?', option_a: 'a', option_b: 'b', option_c: 'c', option_d: 'd',
+          correct_option: 'a', format: 'direct_recall', unit_code: 'P3-U7' },
+        { question: 'Invented unit?', option_a: 'a', option_b: 'b', option_c: 'c', option_d: 'd',
+          correct_option: 'b', format: 'direct_recall', unit_code: 'G9-NOPE' },
+      ],
+    },
+  ],
+  onLog: () => {},
+});
+const written = db
+  .prepare('SELECT question, unit_code FROM ca_mcqs WHERE item_id = ? ORDER BY id')
+  .all(mcqItem.itemIds[0]);
+check('a real unit code is stored on the question', written[0]?.unit_code === 'P3-U7');
+check('an invented unit code is stored as blank, not as itself', written[1]?.unit_code === '');
+
+// ---------------------------------------------------------------------------
+// 10. which provider serves which model, and the cacheable prompt prefix
 // ---------------------------------------------------------------------------
 
 const L = require(path.join(__dirname, '..', '..', 'content-pipeline', 'ca-daily', 'lib'));

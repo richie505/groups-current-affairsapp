@@ -93,6 +93,45 @@ for (const u of units) {
   const bar = '█'.repeat(Math.min(20, u.n)) || '·';
   console.log(`  ${String(u.n).padStart(3)} ${u.unit_code.padEnd(10)} ${bar}  ${u.label.slice(0, 44)}`);
 }
+// THE SAME QUESTION ASKED OF THE QUESTIONS.
+//
+// Which units the paper feeds is about the source. Which units a STUDENT can
+// actually practise is about the bank, and the two are not the same number: an
+// article can feed a unit and yield no question testing it.
+//
+// Three of the four papers are objective, so this is the coverage that matters
+// most for the majority of what a candidate sits.
+const questions = db
+  .prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN TRIM(m.unit_code) <> '' THEN 1 ELSE 0 END) AS tagged,
+            COUNT(DISTINCT NULLIF(TRIM(m.unit_code), '')) AS units
+       FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id
+      WHERE i.status <> 'discarded'`
+  )
+  .get();
+
+console.log(
+  `\nQUESTION BANK: ${questions.total} question(s), ${questions.tagged} tagged to a syllabus ` +
+    `unit, covering ${questions.units} unit(s).`
+);
+if (questions.tagged < questions.total) {
+  console.log(
+    `  ${questions.total - questions.tagged} were written before questions carried a unit, or ` +
+      'were tagged\n  to a code the checker did not recognise. Re-draft their items to tag them.'
+  );
+}
+const perUnit = db
+  .prepare(
+    `SELECT m.unit_code, COUNT(*) AS n FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id
+      WHERE i.status <> 'discarded' AND TRIM(m.unit_code) <> ''
+      GROUP BY m.unit_code ORDER BY n DESC`
+  )
+  .all();
+for (const q of perUnit.slice(0, 12)) {
+  console.log(`  ${String(q.n).padStart(3)} ${q.unit_code}`);
+}
+
 const cold = units.filter((u) => !u.n);
 if (cold.length) {
   console.log(

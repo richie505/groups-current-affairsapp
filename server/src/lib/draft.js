@@ -681,9 +681,9 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
     );
     const insMcq = db.prepare(
       `INSERT INTO ca_mcqs (item_id, question, option_a, option_b, option_c, option_d,
-         correct_option, explanation, format, keyword, difficulty, fact_as_of)
+         correct_option, explanation, format, keyword, unit_code, difficulty, fact_as_of)
        VALUES (@item_id, @question, @option_a, @option_b, @option_c, @option_d,
-         @correct_option, @explanation, @format, @keyword, @difficulty, @fact_as_of)`
+         @correct_option, @explanation, @format, @keyword, @unit_code, @difficulty, @fact_as_of)`
     );
     const insDiscarded = db.prepare(
       `INSERT INTO ca_items (day_id, headline, bucket, status, discard_reason,
@@ -804,6 +804,10 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
           explanation: m.explanation || '',
           format: m.format || 'direct_recall',
           keyword: m.keyword || '',
+          // Canonicalised against ref_units, same as the item's own unit tags:
+          // a code the checker will not recognise is a tag nothing can query,
+          // and it goes in as blank rather than as a code that looks real.
+          unit_code: unitOf(m.unit_code) || '',
           difficulty: Number(m.difficulty) || 2,
           fact_as_of: m.fact_as_of || null,
         });
@@ -956,22 +960,105 @@ function plannedFormatsFor(db, record, index, n, onLog = () => {}) {
 //
 // `seenHashes` is shared across a whole run and mutated here, which is what
 // stops the same question being generated twice from two related articles.
+/**
+ * The objective syllabus units this article feeds, with APPSC's own wording.
+ *
+ * Read from np_article_units, which the scorer wrote before any model was
+ * asked — so the question-writer is TOLD which units to test rather than left
+ * to infer them from the prose.
+ */
+function objectiveUnitsFor(db, articleId) {
+  if (!articleId) return [];
+  try {
+    return db
+      .prepare(
+        `SELECT au.unit_code, au.in_headline, u.label, u.syllabus_text, u.exam
+           FROM np_article_units au JOIN ref_units u ON u.unit_code = au.unit_code
+          WHERE au.article_id = ? AND u.format = 'objective'
+                AND u.broad = 0 AND u.unfeedable = 0
+          ORDER BY au.in_headline DESC, au.hits DESC
+          LIMIT 4`
+      )
+      .all(articleId);
+  } catch {
+    // An older database without the syllabus map writes questions as before.
+    return [];
+  }
+}
+
+/**
+ * How many questions this item is worth.
+ *
+ * WHY IT IS NOT A FIXED FOUR
+ *
+ * Because three of the four APPSC papers are objective and one is written, and
+ * the app was built the other way round. Measured on the first 33 published
+ * items: 25,421 words of descriptive material serving ONE paper, and 129
+ * questions — 3.9 an item — serving THREE.
+ *
+ * A flat count is the wrong shape even at the right total. An article that
+ * feeds three syllabus units carries three times as much testable ground as one
+ * feeding a single unit, and four questions each over-tests the thin one while
+ * under-testing the rich one. So the count follows the units.
+ *
+ * Capped at ten because a single day's story does eventually run out of
+ * distinct things to ask, and the tenth question about one press conference is
+ * where a bank starts padding.
+ */
+function mcqCountFor(units, base = 4) {
+  const n = units.length;
+  if (n <= 1) return base;
+  return Math.min(base + 2 * (n - 1), 10);
+}
+
 async function generateMcqs(
   db,
   { record, index, count = 4, model, mcqPrompt, seenHashes, fallbackDate, onLog = () => {} }
 ) {
   const { validateMcq } = L.serverValidators();
-  const wanted = plannedFormatsFor(db, record, index, count, onLog);
+  const units = objectiveUnitsFor(db, record._articleId);
+  const wanted = plannedFormatsFor(db, record, index, mcqCountFor(units, count), onLog);
+  const valid = new Set(units.map((u) => u.unit_code));
 
-  const brief = [
+  const lines = [
     `NOTES:\n${record.notes_markdown || ''}`,
     `PRELIMS FACTS:\n${record.prelims_facts || ''}`,
     `KEYWORD ANGLES: ${(record.keywords || []).join(', ')}`,
     `FACTS TRUE AS OF: ${record.event_date || fallbackDate}`,
+  ];
+
+  if (units.length) {
+    lines.push(
+      '',
+      '=== THE SYLLABUS UNITS THIS ITEM FEEDS ===',
+      '',
+      'These are OBJECTIVE papers — Group-I Prelims and Group-II, both answered by',
+      'ticking a box. Three of the four papers this app serves are of that kind, and',
+      'they are what these questions are for.',
+      '',
+      'Each unit is quoted in the commission’s own words. WRITE TO THE UNIT, not to',
+      'the article: the article is today’s occasion, the unit is what is actually',
+      'examined, and a question that tests the article without testing the unit is a',
+      'question the paper would never ask.',
+      '',
+      ...units.map(
+        (u) =>
+          `${u.unit_code}${u.in_headline ? ' (named in the headline)' : ''} — ${u.label}\n` +
+          `    ${u.syllabus_text}`
+      ),
+      '',
+      'Put the unit code in "unit_code" on every question, exactly as written above.',
+      'Spread the questions across the units rather than crowding one: an item that',
+      'feeds three units and tests only the first has wasted two thirds of itself.'
+    );
+  }
+
+  lines.push(
     '',
     `Write exactly ${wanted.length} questions, in these formats, in this order:`,
-    ...wanted.map((f, i) => `${i + 1}. ${f}`),
-  ].join('\n');
+    ...wanted.map((f, i) => `${i + 1}. ${f}`)
+  );
+  const brief = lines.join('\n');
 
   const out = [];
   try {
@@ -989,10 +1076,29 @@ async function generateMcqs(
         continue;
       }
       if (seenHashes) seenHashes.add(hash);
-      out.push({ ...m, fact_as_of: m.fact_as_of || record.event_date || fallbackDate });
+      // A unit the model invented, or one this article does not feed, is worse
+      // than no unit at all: it would answer "what covers G1P-B2?" with a
+      // question about something else. Only a code from the list it was handed
+      // survives; anything else is recorded as blank and said out loud.
+      const unit = valid.has(String(m.unit_code || '').trim()) ? String(m.unit_code).trim() : '';
+      if (units.length && !unit) {
+        onLog(`    question tagged to no known unit (${m.unit_code || 'blank'})`);
+      }
+      out.push({
+        ...m,
+        unit_code: unit,
+        fact_as_of: m.fact_as_of || record.event_date || fallbackDate,
+      });
     }
   } catch (e) {
     onLog(`    MCQ generation failed (${e.message}) — item kept without questions`);
+  }
+  if (units.length) {
+    const covered = new Set(out.map((m) => m.unit_code).filter(Boolean));
+    onLog(
+      `    ${out.length} question(s) covering ${covered.size} of ${units.length} unit(s) ` +
+        `(${units.map((u) => u.unit_code).join(', ')})`
+    );
   }
   return out;
 }
@@ -1011,5 +1117,7 @@ module.exports = {
   insertDrafted,
   formatsFor,
   plannedFormatsFor,
+  objectiveUnitsFor,
+  mcqCountFor,
   generateMcqs,
 };
