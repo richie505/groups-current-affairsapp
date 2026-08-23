@@ -184,9 +184,56 @@ if (top && median && top.n >= 3 * median) {
   console.log(
     `  ${single} of those rest on a single matched term. A unit that matches a third of the\n` +
       '  paper cannot answer "which items feed it", which is the only question it exists to\n' +
-      '  answer. If most of the single-term matches are one generic word, that word belongs\n' +
-      '  in server/scripts/g2-syllabus.js as a removal, not as an alias.'
+      '  answer.'
   );
+
+  // THE COST OF THE OBVIOUS FIX, BEFORE ANYONE PAYS IT.
+  //
+  // The reflex is to delete the over-firing alias. Sometimes that is right and
+  // sometimes it moves the problem: an article can be matched to a runaway unit
+  // by a weak term AND be genuinely examinable, and dropping the term leaves it
+  // mapped to nothing rather than mapped correctly. That is not a fix, it is a
+  // different kind of miss, and it is invisible until someone counts.
+  //
+  // So the two numbers that decide it are printed together: how many articles
+  // would lose their only objective unit, and how many already-written
+  // questions would end up tagged to a unit their article no longer feeds.
+  // The second is money — re-tagging means re-drafting.
+  const singles = db
+    .prepare(
+      `SELECT au.article_id FROM np_article_units au
+        WHERE au.unit_code = ? AND au.matched NOT LIKE '%,%'`
+    )
+    .all(top.unit_code)
+    .map((r) => r.article_id);
+  if (singles.length) {
+    const holes = singles.map(() => '?').join(',');
+    const orphaned = singles.filter(
+      (id) =>
+        db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM np_article_units au JOIN ref_units u ON u.unit_code = au.unit_code
+              WHERE au.article_id = ? AND u.format = 'objective' AND u.broad = 0
+                AND u.unfeedable = 0 AND au.unit_code <> ?`
+          )
+          .get(id, top.unit_code).n === 0
+    ).length;
+    const stranded = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM ca_mcqs m
+           JOIN ca_items i ON i.id = m.item_id
+           JOIN np_articles a ON a.item_id = i.id
+          WHERE m.unit_code = ? AND a.id IN (${holes})`
+      )
+      .get(top.unit_code, ...singles).n;
+    console.log(
+      `\n  Dropping the weak term would cost: ${orphaned} article(s) left feeding NO objective\n` +
+        `  unit at all, and ${stranded} existing question(s) tagged to a unit their article no\n` +
+        '  longer feeds — those need their items re-drafted, which is a paid operation.\n' +
+        '  A high number there usually means the other units are too NARROW rather than this\n' +
+        '  one being too broad. Widen those first; it costs nothing already written.'
+    );
+  }
 }
 
 const cold = units.filter((u) => !u.n);

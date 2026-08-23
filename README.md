@@ -63,10 +63,17 @@ cd ../web && npm install && npm run build
 ```
 
 `npm run seed` creates `server/data/ca.db` with an admin account and the
-reference vocabularies: **492 blueprint keyword angles** across 9 subjects, **50
-paper units**, and the **4 known corrections**.
+reference vocabularies: **492 blueprint keyword angles** across 9 subjects, the
+**syllabus map** (50 Group-I Mains units, 27 Group-I Prelims, 25 Group-II), and
+the **4 known corrections**.
 
-Then load six digests of real, researched, cross-checked content:
+The two objective syllabi are seeded separately, because they arrived later:
+
+```bash
+node server/scripts/seed-g2-syllabus.js
+```
+
+Then load the seeded digests of researched, cross-checked content:
 
 ```bash
 node server/scripts/seed-content.js --publish
@@ -91,6 +98,43 @@ For frontend work, run Vite separately — it proxies `/api` to port 4100:
 cd web && npm run dev
 ```
 
+## Before it is reachable by anyone else
+
+```bash
+npm --prefix server run preflight
+```
+
+Checks the things that leave the app **working perfectly while being totally
+wrong**: an unset `JWT_SECRET` (the fallback is a secret published in this
+repository, so anyone who has read the source can mint an admin token), a
+`web/dist` older than `web/src`, an unopenable database, an admin still on the
+seed password. Exits non-zero, so it can gate a deploy.
+
+Set `NODE_ENV=production`. It is what turns the missing-secret **warning** into
+a **refusal to start** — this app once signed every token it ever issued with
+the development secret, and the only evidence was a console line nobody read.
+
+```bash
+npm --prefix server run backup          # safe while running; --verify opens the copy
+node server/scripts/repair-datelines.js # re-derive byline/dateline from the PDFs
+```
+
+Backups use SQLite's online backup API, not a file copy — a `cp` of a WAL-mode
+database can silently produce one missing its most recent writes, and it opens
+cleanly, so you find out during a restore.
+
+**Deployment, systemd, nginx, restore and a symptom table: [`ops/RUNBOOK.md`](ops/RUNBOOK.md).**
+
+### The checks that run with the tests
+
+`npm --prefix server test` is the bridge suite plus two static gates, both
+written after the fault they catch shipped:
+
+| Gate | Catches |
+|---|---|
+| `check-rich-text.js` | A model-written field printed raw, so its `**bold**` shows as asterisks — and a self-closing `<RichText />`, which renders *nothing* |
+| `check-routes.js` | An internal link pointing at no declared route. The router answers with the 404 page rather than an error, so nothing else notices |
+
 ---
 
 ## Layout
@@ -106,7 +150,11 @@ server/
   src/routes/admin.js        admin API + the validators the pipeline reuses
   scripts/seed.js            admin + reference vocabularies
   scripts/reference-data.js  keywords, paper units, themes, corrections
-  scripts/seed-content.js    six digests of researched content
+  scripts/seed-content.js    seeded digests of researched content
+  scripts/preflight.js       what must be true before anyone else can reach it
+  scripts/backup.js          online backup, safe while running
+  scripts/requestion-items.js  rewrite an item's questions against the syllabus
+  scripts/syllabus-coverage.js what the map fed, missed, and over-matched
 web/
   src/context/LensContext.jsx   the G1/G2/both lens every screen reads
   src/components/ItemCard.jsx   where dual routing shows up on screen
@@ -153,7 +201,53 @@ paper reads as "go and read" rather than "the bank is empty".
 
 ---
 
-## The pipeline — one command a day
+## The pipeline
+
+Two lanes into the same review queue. The **newspaper lane** is the primary one
+and produced every item currently in the app; the **web lane** below predates it
+and still covers PIB.
+
+### The newspaper lane — upload a PDF, get a review queue
+
+The admin uploads the day's paper in **Admin → Editions**. Everything after that
+is one button each, and both long steps run out of process so a browser tab or a
+server restart cannot lose a run that has already been paid for.
+
+```bash
+node server/scripts/process-edition.js <editionId>   # extract → segment → score
+node server/scripts/draft-articles.js  <editionId>   # notes + questions
+```
+
+| Stage | Model | What it does |
+|---|---|---|
+| Extract | **none** | `layout.py` → text with bounding boxes, OCR only where there is no text layer |
+| Segment | **none** | Columns → articles, by one rule (below). Genre from the paper's own running head |
+| Score | **none** | 0–100 on five weighted factors: syllabus 30 · PYQ 20 · AP 20 · importance 15 · reuse 15 |
+| Draft | main | Dual-lane note, then questions written **to the syllabus unit** |
+
+**Segmentation is one rule**, and it needs no column grid: a body block belongs
+to *the nearest headline above it whose horizontal span covers the block's
+centre*. That works because of how pages are designed rather than by luck — a
+headline placed in a column is exactly the mark that the story above it ended
+there. A six-column headline owns six columns of text; a one-column headline
+owns one. Checked by hand against all twelve ambiguous blocks on a real page
+that sets its upper half and lower strip on different pitches.
+
+**Genre comes from the paper, not from a classifier.** The Hindu names its own
+pages in the running head, so "Editorial", "Opinion" and the `PARLEY` and
+`NOTEBOOK` kickers are read directly. It matters because the same sentence is a
+*fact* in a report and a *claim* in an op-ed, and an item drafted from signed
+opinion gets a different prompt, a forced `needs_verify`, and the author's name
+on the page.
+
+Then, standing reports rather than one-off tuning:
+
+```bash
+node server/scripts/syllabus-coverage.js            # fed, never fed, over-matched
+node server/scripts/requestion-items.js --dry-run   # re-tag questions, priced first
+```
+
+### The web lane — one command a day
 
 ```bash
 node content-pipeline/ca-daily/daily.js --date 2026-08-21 --dry-run   # look first
@@ -206,17 +300,25 @@ propagate each other's errors.
 
 ## Content status
 
-Six digests (5–21 Aug 2026), researched live and cross-checked. **3 of 7 items
-rest on a primary source; the other 4 on two or three independent secondaries.**
-That ratio is a real constraint, not a preference: RBI's document server is
-CAPTCHA-gated to automated clients, and the AP plan was reported from a
-review meeting rather than a notified order.
+Built from **3 print editions of The Hindu (Vijayawada), 64 pages, 21–23 August
+2026** — uploaded as PDFs, segmented, scored, and drafted in the app.
 
-Two items carry `needs_verify` with a note saying what to check — a
-forward-looking ISRO launch date, and a Visakhapatnam Economic Region figure
-reported inconsistently as ₹9 lakh crore and ₹9.5 lakh crore. Those are left in
-deliberately: it is what an honest current-affairs pipeline looks like, and the
-review queue needs real examples of the state to be worth anything.
+| | |
+|---|---|
+| Articles segmented and scored | **314** |
+| Drafted into items | **127** (33 published, 86 in the review queue, 8 discarded) |
+| Questions | **690**, of which **558 carry a syllabus unit** across **41 units** |
+| Syllabus units mapped | **102** — 50 Group-I Mains, 27 Group-I Prelims, 25 Group-II |
+
+Three of the four APPSC papers are answered by ticking a box — Group-I Prelims,
+Group-II Screening and Group-II Mains — and only Group-I Mains is written. The
+question count per item follows the number of objective syllabus units the
+article feeds, from a base of 4 up to a cap of 10, rather than a flat four.
+
+**Nothing reaches a student unreviewed**, and that now has two gates rather than
+one: an item is held by its own status, and a question regenerated onto an
+*already-published* item is held separately, under Admin → Review queue →
+Questions waiting on review.
 
 Two worked examples of why reading the source matters, both from building this:
 
@@ -238,11 +340,20 @@ Two worked examples of why reading the source matters, both from building this:
   because PIB's month filter runs through an ASP.NET postback rather than the
   query string.
 - **No shared login** with `appsc-group2-prep-app`. Standalone means standalone.
-- **No PDF import yet.** The sibling `ca-monthly` parser already handles monthly
-  compendiums and can be pointed at this database to backfill Jan–Jul 2026.
+- **One publication, one language.** The segmenter is tuned to The Hindu's
+  layout: it reads the paper's own running head to tell an opinion page from a
+  news page, and the column-ownership rule was checked by hand against the
+  ambiguous blocks on a real page. Another masthead needs a profile in
+  `np-daily/profiles.js`.
+- **`G2-P1-U7` is fed by 49 articles against a median of 5**, mostly on
+  "Supreme Court" or "High Court" appearing in a story that is really about
+  something else. `syllabus-coverage.js` reports it, and prices the obvious
+  fix: dropping the weak term would leave 10 articles feeding no objective unit
+  and strand 59 written questions. Usually a sign the *other* units are too
+  narrow.
 - **The service worker does not register inside the in-app browser pane.** It
   serves correctly (200, `Cache-Control: no-cache`) and works in a normal
   browser; the pane's sandbox refuses the registration.
-- **The content bottleneck is real but no longer manual.** Seven items is a
-  demo. The value compounds with daily runs — a month in, Practice has hundreds
-  of questions and the banks start meaning something.
+- **The value compounds with daily runs.** Three editions in, Practice has 690
+  questions and the syllabus map covers 41 units; a month in, the banks and the
+  per-unit coverage start being worth reading rather than worth checking.
