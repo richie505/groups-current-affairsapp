@@ -563,6 +563,29 @@ try {
 }
 check('genuinely broken JSON still throws', stillThrows);
 
+// A truncated array is not nothing. Ten questions with explanations is a long
+// answer, and a model that runs out of room stops mid-object — which threw away
+// a 61-score Supreme Court item's whole question set. Raising the count from
+// four to ten made this MORE likely, not less.
+const salvaged = LIB.parseJson('[{"q":"one"},{"q":"two"},{"q":"thr', { array: true });
+check('the whole questions from a truncated array survive', salvaged.length === 2);
+check('the half-written one is dropped, not guessed at', salvaged[1].q === 'two');
+check(
+  'a brace inside a quoted explanation does not end the object',
+  LIB.parseJson('[{"q":"a } b"},{"q":"c"', { array: true })[0].q === 'a } b'
+);
+check(
+  'an intact array is untouched by any of this',
+  LIB.parseJson('[{"a":1},{"a":2}]', { array: true }).length === 2
+);
+let proseThrows = false;
+try {
+  LIB.parseJson('sorry, I cannot help with that', { array: true });
+} catch {
+  proseThrows = true;
+}
+check('prose instead of JSON still throws', proseThrows);
+
 // 3. The model answered with `CODE — label` and the exact-match check filed four
 //    correct answers under no unit at all.
 const validUnits = new Set(['G2-P1-U7', 'G1P-C5', 'G2-P1-U1', 'G2-P1-U10']);

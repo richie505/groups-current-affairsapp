@@ -232,6 +232,15 @@ function parseJson(text, { array = false } = {}) {
   const close = array ? ']' : '}';
   const start = t.indexOf(open);
   const end = t.lastIndexOf(close);
+  // A truncated array has an opening bracket and no closing one, so the usual
+  // "outermost [ … ]" slice finds nothing and reports "no JSON array" — which
+  // reads as "the model answered with prose" when in fact it answered with nine
+  // good questions and ran out of room on the tenth. Salvage from the opening
+  // bracket instead of giving up at the missing one.
+  if (start !== -1 && end === -1 && array) {
+    const salvaged = salvageObjects(escapeControlCharsInStrings(t.slice(start)));
+    if (salvaged.length) return salvaged;
+  }
   if (start === -1 || end === -1) throw new Error(`No JSON ${array ? 'array' : 'object'} found in response.`);
   const body = t.slice(start, end + 1);
   try {
@@ -248,11 +257,71 @@ function parseJson(text, { array = false } = {}) {
     // the newlines between fields, which JSON allows, are untouched. Anything
     // else wrong with the payload still throws, because a parser that guesses at
     // broken JSON eventually invents a field.
-    if (!/[Bb]ad control character|Unexpected token|control character/.test(e.message)) throw e;
     const repaired = escapeControlCharsInStrings(body);
-    if (repaired === body) throw e;
-    return JSON.parse(repaired);
+    if (repaired !== body) {
+      try {
+        return JSON.parse(repaired);
+      } catch {
+        // Fall through: the control characters were not the only problem.
+      }
+    }
+    // A TRUNCATED ARRAY IS NOT NOTHING.
+    //
+    // Asking for ten questions with explanations is a long answer, and a model
+    // that runs out of room stops mid-object. `JSON.parse` then rejects the
+    // whole payload, so an item that produced seven perfectly good questions
+    // and half of an eighth was recorded as producing none — which is what
+    // happened to a 61-score Supreme Court story on the 23 August run, and is a
+    // risk that went UP when the question count was raised from four to ten.
+    //
+    // Only whole objects are kept, each parsed on its own. Nothing is
+    // reconstructed and nothing is closed off with a guessed brace: a
+    // half-written question is discarded, and the ones that were finished
+    // before the model ran out are not punished for it.
+    if (array) {
+      const salvaged = salvageObjects(repaired);
+      if (salvaged.length) return salvaged;
+    }
+    throw e;
   }
+}
+
+// Every complete top-level `{...}` in the text, parsed individually. Tracks
+// string state so a brace inside a quoted explanation does not end an object.
+function salvageObjects(text) {
+  const out = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        try {
+          out.push(JSON.parse(text.slice(start, i + 1)));
+        } catch {
+          // One unparseable object does not invalidate its neighbours.
+        }
+        start = -1;
+      }
+    }
+  }
+  return out;
 }
 
 // Walks the text tracking whether it is inside a quoted string, honouring
