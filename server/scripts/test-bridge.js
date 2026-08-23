@@ -731,6 +731,46 @@ check('a byline that is ONLY a place keeps it', SEG.withoutDateline('VIJAYAWADA'
 check('an empty byline stays empty', SEG.withoutDateline('') === '');
 
 // ---------------------------------------------------------------------------
+// The drafter writes TO THE SYLLABUS, and the vocabulary it is offered must not
+// contradict the instruction that says so.
+//
+// Both halves shipped broken in the same afternoon: told nothing, the model
+// returned 14 units for one story, half of them objective codes copied back out
+// of the findings; told not to copy them, it returned 3 objective codes and no
+// descriptive ones at all. A prompt whose instructions and vocabulary disagree
+// is decided by the vocabulary.
+// ---------------------------------------------------------------------------
+
+check(
+  'the syllabus addendum is in the cacheable head, not per-article',
+  typeof D.SYLLABUS_ADDENDUM === 'string' && D.SYLLABUS_ADDENDUM.includes('WRITE TO THE SYLLABUS')
+);
+// The head must stay byte-identical between a report and an op-ed, or the
+// 10k-token prefix re-bills at full price on every call after the first op-ed.
+const headWith = (opinion) =>
+  `P\n\n${D.PRINT_ADDENDUM}\n\n${D.SYLLABUS_ADDENDUM}\n\n${'V'.repeat(500)}` +
+  (opinion ? `\n\n${D.OPINION_ADDENDUM}` : '');
+const plain = headWith(false);
+const oped = headWith(true);
+let common = 0;
+while (common < plain.length && plain[common] === oped[common]) common += 1;
+check('adding the syllabus block keeps the whole head cacheable', common === plain.length);
+
+// The vocabulary offered to the drafter must be the WRITTEN papers only.
+db.prepare(
+  `INSERT INTO ref_units (unit_code, paper, label, exam, format)
+   VALUES ('ZZ-OBJ', 'ZZ', 'objective probe', 'g2', 'objective')`
+).run();
+const offered = db
+  .prepare(
+    `SELECT unit_code FROM ref_units WHERE format = 'descriptive' AND unfeedable = 0`
+  )
+  .all()
+  .map((r) => r.unit_code);
+check('an objective unit is never offered as a choice', !offered.includes('ZZ-OBJ'));
+check('the descriptive units still are', offered.includes('P3-U7'));
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

@@ -129,6 +129,84 @@ function findingsFor(db, article) {
   return { keywords, topics, units, entities };
 }
 
+/**
+ * The OBJECTIVE syllabus units this article feeds, in the commission's own
+ * words.
+ *
+ * Section 2 established these deterministically, against APPSC's published
+ * syllabus vocabulary. They were reaching the question-writer and not the
+ * note-writer, which is the wrong way round: the note is what a candidate
+ * reads, and if it is not written to the unit then the questions are being
+ * asked of prose that was written to something else.
+ */
+function syllabusFor(db, article) {
+  try {
+    return db
+      .prepare(
+        `SELECT au.unit_code, au.in_headline, u.label, u.syllabus_text, u.exam, u.paper
+           FROM np_article_units au JOIN ref_units u ON u.unit_code = au.unit_code
+          WHERE au.article_id = ? AND u.format = 'objective'
+                AND u.broad = 0 AND u.unfeedable = 0
+          ORDER BY au.in_headline DESC, au.hits DESC
+          LIMIT 5`
+      )
+      .all(article.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * How APPSC has ACTUALLY asked this material — from the real papers, not from
+ * an assumption about them.
+ *
+ * 1,389 past questions are in this database and the note-writer had never been
+ * shown one. It was told which keyword angles matched; it was not told that
+ * "Scheme" has been asked 52 times, nor what one of those questions looked
+ * like. So the note was written to the article and the pattern was applied
+ * afterwards, when generating questions — by which point the prose either
+ * happens to carry what the paper asks for or it does not.
+ *
+ * Two real stems, not twenty. The point is to show the SHAPE — how specific,
+ * which detail gets tested, how the options are built — and a long list would
+ * push the article itself out of the model's attention for no extra signal.
+ */
+function pyqEvidenceFor(db, article) {
+  try {
+    const rows = db
+      .prepare(
+        `SELECT k.keyword, COUNT(*) AS n,
+                GROUP_CONCAT(DISTINCT q.format) AS formats
+           FROM np_article_keywords ak
+           JOIN pyq_question_keywords k ON k.keyword = ak.keyword
+           JOIN pyq_questions q ON q.id = k.question_id
+          WHERE ak.article_id = ?
+          GROUP BY k.keyword
+          ORDER BY n DESC
+          LIMIT 4`
+      )
+      .all(article.id);
+    if (!rows.length) return { angles: [], examples: [] };
+
+    const examples = db
+      .prepare(
+        `SELECT q.stem, q.format, p.exam, p.year
+           FROM np_article_keywords ak
+           JOIN pyq_question_keywords k ON k.keyword = ak.keyword
+           JOIN pyq_questions q ON q.id = k.question_id
+           JOIN pyq_papers p ON p.id = q.paper_id
+          WHERE ak.article_id = ? AND LENGTH(q.stem) BETWEEN 40 AND 320
+                AND COALESCE(q.needs_review, 0) = 0
+          ORDER BY p.year DESC
+          LIMIT 2`
+      )
+      .all(article.id);
+    return { angles: rows, examples };
+  } catch {
+    return { angles: [], examples: [] };
+  }
+}
+
 function sourceTextFor(db, article, edition) {
   const f = findingsFor(db, article);
   const lines = [];
@@ -246,6 +324,54 @@ function sourceTextFor(db, article, edition) {
     lines.push('  Take only the ones THIS story genuinely feeds, and add any they miss.');
   }
 
+  // THE SYLLABUS ITSELF, IN THE COMMISSION'S WORDS.
+  //
+  // The candidate list above comes from `topic_units`, and every one of those
+  // 248 mappings is a Group-I MAINS paper unit — so a drafter working from that
+  // list alone is writing for the one paper of four that is written, and the
+  // three that are answered by ticking a box get whatever falls out.
+  //
+  // These are different: matched by Section 2 against the published syllabus,
+  // and quoted rather than paraphrased. A label is enough to recognise a unit
+  // and not enough to write to; the syllabus_text is the sentence the paper is
+  // actually set from.
+  const syllabus = syllabusFor(db, article);
+  if (syllabus.length) {
+    lines.push('');
+    lines.push('=== THE SYLLABUS THIS STORY BELONGS TO ===');
+    lines.push('');
+    lines.push(
+      'Objective papers — Group-II Screening and Mains, and Group-I Prelims. Three of the'
+    );
+    lines.push('four papers this app serves are of that kind. Quoted from APPSC:');
+    lines.push('');
+    for (const u of syllabus) {
+      lines.push(
+        `  ${u.unit_code}${u.in_headline ? ' (named in the headline)' : ''} — ${u.label}`
+      );
+      if (u.syllabus_text) lines.push(`      ${u.syllabus_text}`);
+    }
+  }
+
+  // HOW THE COMMISSION HAS ACTUALLY ASKED THIS.
+  //
+  // Real stems from real papers. The note is being written so that a question
+  // can be asked of it later, and the surest way to make that possible is to
+  // show what those questions look like before the note is written rather than
+  // after.
+  const pyq = pyqEvidenceFor(db, article);
+  if (pyq.angles.length) {
+    lines.push('');
+    lines.push('=== HOW APPSC HAS ASKED THIS BEFORE (from the real papers) ===');
+    for (const a of pyq.angles) {
+      lines.push(`  "${a.keyword}" — ${a.n} past question(s); formats: ${a.formats || 'mixed'}`);
+    }
+    for (const e of pyq.examples) {
+      lines.push('');
+      lines.push(`  ${e.exam} ${e.year} [${e.format}]: ${e.stem.replace(/\s+/g, ' ').trim()}`);
+    }
+  }
+
   if (f.entities.length) {
     lines.push('');
     lines.push('ENTITIES EXTRACTED:');
@@ -270,6 +396,71 @@ function sourceTextFor(db, article, edition) {
 // Appended to the standard drafting prompt. The base prompt was written for a
 // web candidate with URLs; a print article differs in two ways that matter, and
 // both are honesty constraints rather than formatting ones.
+// WRITE TO THE SYLLABUS AND TO THE PATTERN — the whole point of the app.
+//
+// This exists because of a gap between what the pipeline knew and what the
+// note-writer was told. Section 2 matched every article to the published
+// syllabus units; 1,389 real past questions sit in the database. Neither
+// reached this step. The note was written to the ARTICLE, tagged to the
+// syllabus afterwards, and only the question-writer was shown what the paper
+// actually asks — by which point the prose either happens to carry the
+// examinable detail or it does not, and no amount of prompting at question
+// time can put back a figure the note never recorded.
+//
+// So both are supplied with the article now, and this says what to do with
+// them. It is deliberately not a new output format: the fields are unchanged,
+// and what changes is WHICH FACTS go in them.
+const SYLLABUS_ADDENDUM = `
+=== WRITE TO THE SYLLABUS, AND TO THE PATTERN ===
+
+The source text may carry two extra blocks: THE SYLLABUS THIS STORY BELONGS TO,
+and HOW APPSC HAS ASKED THIS BEFORE. They are the reason this app exists — the
+job is not to summarise a newspaper, it is to turn one day's paper into
+material for a specific syllabus, examined in a known way.
+
+WHAT THAT CHANGES
+
+1. The syllabus unit decides WHICH FACTS SURVIVE. The same story yields
+   different notes for different units: under an economy unit the figure and
+   the scheme name matter; under a polity unit the authority, the section and
+   the procedure matter. Where a unit is quoted, prefer the facts that unit is
+   set from over the ones the article leads with.
+
+2. "prelims_facts" IS THE EXAMINABLE RESIDUE, and it is written for the three
+   objective papers. Every line should be something a question could be built
+   on without reading the article again — a name with its post, a figure with
+   its unit and date, a scheme with its ministry, a body with its parent Act.
+   A line nobody could ask about is a line that does not belong in it.
+
+3. The past-question examples show the SHAPE, not the subject. If the
+   commission asks this angle by matching a scheme to its ministry, then the
+   note must carry the ministry. If it asks by altering one figure in an
+   otherwise true statement, the note must carry the figure exactly. Read the
+   stems for what they demand, then make sure the note supplies it.
+
+4. "static_linkage" names the standing topic this updates — and where a
+   syllabus unit is quoted, name it in the unit's own terms. That is what makes
+   the item findable by a candidate revising that unit rather than that week.
+
+5. THE QUOTED UNIT CODES ARE CONTEXT, NOT A LIST TO RETURN. They are already
+   settled — matched against the syllabus before you were called — and are
+   attached to the item automatically. Use them to decide what the note should
+   say; do not put them in "units".
+
+   "units" takes only codes from the PAPER UNITS vocabulary, which lists the
+   written Group-I Mains papers and nothing else. Fewer and right beats more and
+   hedged: a unit list long enough to fit any story is a default block, not a
+   routing decision.
+
+WHAT IT DOES NOT CHANGE
+
+Do not invent a fact to satisfy a unit, and do not stretch a story to reach one.
+An article that genuinely feeds no listed unit is still worth drafting on its
+own merits — the 30-mark Group-II Current Affairs paper takes anything in the
+news. Discard remains the right answer for a story with nothing examinable in
+it at all.
+`;
+
 const PRINT_ADDENDUM = `
 === THIS ITEM CAME FROM A PRINT NEWSPAPER ===
 
@@ -469,7 +660,11 @@ async function draftArticle(db, { article, edition, model, vocabulary, prompt })
   //
   // Its position does not change what it says. It is still the last thing before
   // the article, which is where a binding instruction belongs.
-  const system = `${prompt}\n\n${PRINT_ADDENDUM}\n\n${vocabulary}${opinion}`;
+  // SYLLABUS_ADDENDUM sits inside the cacheable head, beside PRINT_ADDENDUM,
+  // because it is identical on every call of the day. Only `opinion` varies,
+  // and it stays last for the reason above.
+  const system =
+    `${prompt}\n\n${PRINT_ADDENDUM}\n\n${SYLLABUS_ADDENDUM}\n\n${vocabulary}${opinion}`;
   const raw = await L.complete({
     system,
     user: sourceTextFor(db, article, edition),
@@ -1193,6 +1388,7 @@ async function generateMcqs(
 module.exports = {
   DIMENSIONS,
   PRINT_ADDENDUM,
+  SYLLABUS_ADDENDUM,
   OPINION_ADDENDUM,
   FORMAT_CYCLE,
   findingsFor,

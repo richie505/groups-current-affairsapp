@@ -139,7 +139,13 @@ async function main() {
   const keywords = database
     .prepare(`SELECT keyword, subject FROM ref_keywords ORDER BY subject, order_index`)
     .all();
-  const units = database.prepare('SELECT unit_code, label FROM ref_units ORDER BY order_index').all();
+  const units = database
+    .prepare(
+      `SELECT unit_code, label FROM ref_units
+        WHERE format = 'descriptive' AND unfeedable = 0
+        ORDER BY order_index`
+    )
+    .all();
 
   const vocabulary = [
     '=== BLUEPRINT KEYWORD ANGLES (choose from these exactly) ===',
@@ -150,7 +156,12 @@ async function main() {
       }, {})
     ).map(([subject, list]) => `${subject}: ${list.join(', ')}`),
     '',
-    '=== PAPER UNITS (choose from these exactly) ===',
+    // The WRITTEN papers only. The objective syllabus units belong to the
+    // newspaper lane's deterministic match and are not the model's to choose;
+    // offering them here would reintroduce the contradiction removed from
+    // server/scripts/draft-articles.js — instructions saying one thing and the
+    // vocabulary saying another.
+    '=== GROUP-I MAINS PAPER UNITS — the WRITTEN papers (choose from these exactly) ===',
     ...units.map((u) => `${u.unit_code} — ${u.label}`),
     '',
     correctionsPromptBlock(database),

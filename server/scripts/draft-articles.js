@@ -176,12 +176,36 @@ async function main() {
   // database rather than a file so the prompt and the canonicaliser in
   // insertDrafted are always looking at the same list — a prompt offering units
   // the checker will reject is how tags go missing.
-  const units = db.prepare('SELECT unit_code, label FROM ref_units ORDER BY unit_code').all();
+  // DESCRIPTIVE units only.
+  //
+  // The listing used to be every row in ref_units, which quietly put the
+  // objective syllabus units — Group-II and Group-I Prelims — in front of the
+  // model as things to choose. They are not: Section 2 matched them against the
+  // published syllabus before this ran, and insertDrafted attaches them itself.
+  //
+  // Offering them anyway did real damage in both directions. Told nothing, the
+  // model returned fourteen units for one story, half of them objective codes
+  // it had copied back from the findings; told not to copy them, it returned
+  // three objective codes and no descriptive ones at all. Both are the same
+  // fault — a prompt that says one thing in the instructions and the opposite
+  // in the vocabulary, and the vocabulary wins.
+  //
+  // So the contradiction is removed at source. What is left is the one question
+  // that is genuinely the model's: which of the five WRITTEN papers this story
+  // serves.
+  const units = db
+    .prepare(
+      `SELECT unit_code, label FROM ref_units
+        WHERE format = 'descriptive' AND unfeedable = 0
+        ORDER BY unit_code`
+    )
+    .all();
   const keywords = db
     .prepare('SELECT keyword, subject FROM ref_keywords ORDER BY subject, keyword')
     .all();
   const vocabulary = [
-    '=== PAPER UNITS (use the CODE only, e.g. "P3-U7") ===',
+    '=== GROUP-I MAINS PAPER UNITS — the WRITTEN papers (use the CODE only, e.g. "P3-U7") ===',
+    'The objective syllabus units are settled elsewhere and are not chosen here.',
     ...units.map((u) => `${u.unit_code} — ${u.label}`),
     '',
     // Grouped by subject, matching the web lane, rather than one term per line
