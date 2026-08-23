@@ -16,7 +16,26 @@ const { KEYWORDS, UNITS, CORRECTIONS } = require('./reference-data');
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@appscca.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@123';
 
+// THE QUESTION IS "IS THERE AN ADMIN", NOT "IS THERE THIS ADMIN".
+//
+// This used to look up ADMIN_EMAIL alone, which is the same thing right up
+// until the users table is replaced — by a restore, or by shipping a database
+// from another machine. Then the seeded address is genuinely absent, and a seed
+// that runs on every boot cheerfully recreates it with the default password
+// published in this repository.
+//
+// On a laptop that is harmless. On a public URL it means an admin account whose
+// password everyone knows, reappearing after every deploy, no matter how
+// carefully the real one was chosen — and reappearing silently, because from
+// the outside nothing about the app looks any different.
+//
+// So: if the database already has an administrator, it does not need this one.
 function seedAdmin() {
+  const anyAdmin = db.prepare(`SELECT id, email FROM users WHERE role = 'admin' LIMIT 1`).get();
+  if (anyAdmin) {
+    console.log(`  admin already present (${anyAdmin.email}) — no seed account created`);
+    return;
+  }
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
   if (existing) {
     console.log(`  admin ${ADMIN_EMAIL} already exists — left unchanged`);
