@@ -92,6 +92,17 @@ db.exec(schema);
       // np_articles because it has to survive the article: an item outlives the
       // edition row it came from, and "is this a fact or a columnist's claim"
       // must stay answerable for as long as a student can read the item.
+      // The item this one is a redraft of, when that item is still live.
+      //
+      // A redraft repoints the article at its new item. When the old item was a
+      // DRAFT the drafter discards it as superseded, which is correct. When the
+      // old item was PUBLISHED it is deliberately left alone — published
+      // knowledge must not be withdrawn because somebody re-ran a script — and
+      // the result was a new draft with no link back to the live item it
+      // duplicates. Item #133 sat in the review queue for a day as a better
+      // version of published item #59, and nothing on either row said so;
+      // publishing it would have shown a student the same story twice.
+      ['supersedes', 'INTEGER'],
       ['source_genre', "TEXT NOT NULL DEFAULT 'report'"],
       // Who is making the claim, where the source was signed opinion. Rendered
       // beside the item so an argument is never presented as anonymous record.

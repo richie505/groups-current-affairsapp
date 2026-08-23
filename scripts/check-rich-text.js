@@ -138,6 +138,42 @@ for (const file of walk(SRC)) {
   }
 }
 
+// A SECOND CHECK, FOR THE FAILURE THIS ONE MISSED.
+//
+// `<RichText text={item.headline} />` looks exactly like rendering, so the scan
+// above walks straight past it — the field IS wrapped. But RichText takes
+// `children` and nothing else, so a self-closing tag renders an empty fragment
+// and the text disappears entirely. That is worse than the fault this file was
+// written to catch: printed asterisks are ugly, a blank card is a missing
+// question.
+//
+// It shipped to a review screen and was only found by reading the rendered
+// page. Cheap to check, and there is no legitimate self-closing RichText.
+const emptyRender = [];
+for (const file of walk(SRC)) {
+  const text = fs.readFileSync(file, 'utf8');
+  const re = /<(RichText|Markdown)\b[^>]*\/>/g;
+  let m;
+  while ((m = re.exec(text))) {
+    emptyRender.push({
+      file: path.relative(ROOT, file).replace(/\\/g, '/'),
+      line: text.slice(0, m.index).split('\n').length,
+      snippet: m[0].slice(0, 96),
+    });
+  }
+}
+if (emptyRender.length) {
+  console.log(
+    `${emptyRender.length} self-closing <RichText>/<Markdown> — these render NOTHING:\n`
+  );
+  for (const f of emptyRender) console.log(`  ${f.file}:${f.line}  ${f.snippet}`);
+  console.log(
+    '\nBoth take their content as children, not as a prop:\n' +
+      '  <RichText>{item.headline}</RichText>   not   <RichText text={item.headline} />'
+  );
+  process.exit(1);
+}
+
 if (!findings.length) {
   console.log(`PASS  every model-written field in web/src is rendered, not printed`);
   process.exit(0);

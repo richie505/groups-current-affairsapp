@@ -33,12 +33,33 @@ export default function AdminQueue() {
   if (loading) return <Loading label="Loading the queue…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
-  async function publishItem(id) {
+  // A redraft of an item that is STILL LIVE has to answer one extra question
+  // before it can be published: does the live one stay? Both is a valid answer
+  // and so is neither, so it is asked rather than assumed — publishing a
+  // duplicate silently is how a student ends up reading the same story twice,
+  // and retiring the old one silently is a withdrawal of published knowledge
+  // performed by a button that says "publish".
+  async function publishItem(id, supersedes) {
+    let retire = false;
+    if (supersedes) {
+      const answer = window.confirm(
+        [
+          `This is a redraft of published item #${supersedes.id}, which is still live:`,
+          '',
+          `“${supersedes.headline}”`,
+          '',
+          'OK — publish this and retire the old one.',
+          'Cancel — publish this and leave both live.',
+        ].join('\n')
+      );
+      retire = answer;
+    }
     setBusy(id);
     setActionError('');
     try {
-      await api.post(`/admin/items/${id}/publish`, {});
+      const res = await api.post(`/admin/items/${id}/publish`, { retire_superseded: retire });
       reload();
+      if (res.retired) setActionError(`Published. Item #${res.retired} was retired.`);
     } catch (e) {
       setActionError(e.message);
     } finally {
@@ -177,7 +198,7 @@ export default function AdminQueue() {
                     key={it.id}
                     item={it}
                     busy={busy === it.id}
-                    onPublish={() => publishItem(it.id)}
+                    onPublish={() => publishItem(it.id, it.supersedes_item)}
                     onDiscard={() => discardItem(it.id)}
                     defaultOpen={expandAll}
                   />
@@ -218,6 +239,22 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
       </div>
 
       <h3 className="mb-1 font-semibold leading-snug text-slate-900">{item.headline}</h3>
+
+      {/* This draft is a redraft of an item a student can ALREADY read. Shown
+          on the card rather than only in the publish dialog, because the
+          decision a reviewer makes here is whether to bother reading it at
+          all, and that decision changes if the story is already published. */}
+      {item.supersedes_item ? (
+        <div className="mb-2 rounded-md border border-sky-300 bg-sky-50 p-2.5 text-sm text-sky-900">
+          <span className="font-semibold">Redraft of a live item.</span> Item #
+          {item.supersedes_item.id} is published and says the same thing:{' '}
+          <Link to={`/admin/items/${item.supersedes_item.id}`} className="underline">
+            <RichText>{item.supersedes_item.headline}</RichText>
+          </Link>
+          . Publishing this without retiring that one shows a student the story twice — the
+          publish button will ask.
+        </div>
+      ) : null}
 
       {/* The corrections guard. A 'high' hit means the text carries a phrase
           associated with the superseded position — worth blocking on. A 'low'

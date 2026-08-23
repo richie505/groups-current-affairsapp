@@ -216,6 +216,28 @@ router.get('/queue', (req, res) => {
     // The correction guard, run at review time as well as at draft time — the
     // corrections table can gain an entry after an item was drafted.
     for (const it of items) it.correction_hits = checkCorrections(db, it);
+
+    // The live item this draft duplicates, where there is one. Resolved to a
+    // headline rather than left as a bare id, because "supersedes 59" asks the
+    // reviewer to go and look it up and "supersedes a published item: Telangana
+    // Deputy Chief Minister seeks…" does not.
+    const superIds = items.map((i) => i.supersedes).filter(Boolean);
+    if (superIds.length) {
+      const holes2 = superIds.map(() => '?').join(',');
+      const live = new Map(
+        db
+          .prepare(`SELECT id, headline, status FROM ca_items WHERE id IN (${holes2})`)
+          .all(...superIds)
+          .map((r) => [r.id, r])
+      );
+      for (const it of items) {
+        const prior = it.supersedes ? live.get(it.supersedes) : null;
+        // Only worth showing while the old item is still published. Once it has
+        // been discarded the duplication is resolved and the banner would be
+        // noise on every future review of this item.
+        it.supersedes_item = prior && prior.status === 'published' ? prior : null;
+      }
+    }
   }
 
   // A SECOND QUEUE: published items whose QUESTIONS are waiting on review.
@@ -532,8 +554,34 @@ router.post('/items/:id/publish', (req, res) => {
   if (!item) return res.status(404).json({ error: 'Item not found.' });
   const errors = validateItem(item, { forPublish: true });
   if (errors.length) return res.status(400).json({ error: errors.join(' ') });
-  db.prepare(`UPDATE ca_items SET status = 'published', updated_at = datetime('now') WHERE id = ?`).run(item.id);
-  res.json({ ok: true });
+  // Publishing a redraft of a still-live item, and retiring that item in the
+  // same action.
+  //
+  // Only when the caller asks for it. The alternative — retiring automatically
+  // whenever `supersedes` is set — would withdraw published knowledge as a side
+  // effect of a button labelled "publish", and the reviewer might legitimately
+  // want both: a redraft is not always a replacement.
+  //
+  // Done in one transaction so the two items are never both live, which is the
+  // state the whole column exists to prevent.
+  const retire = req.body && req.body.retire_superseded;
+  let retired = null;
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE ca_items SET status = 'published', updated_at = datetime('now') WHERE id = ?`
+    ).run(item.id);
+    if (retire && item.supersedes) {
+      const n = db
+        .prepare(
+          `UPDATE ca_items SET status = 'discarded', updated_at = datetime('now'),
+             discard_reason = ? WHERE id = ? AND status = 'published'`
+        )
+        .run(`Replaced by item #${item.id}, a redraft of the same article.`, item.supersedes)
+        .changes;
+      if (n) retired = item.supersedes;
+    }
+  })();
+  res.json({ ok: true, retired });
 });
 
 // Discarding is a decision, not a deletion. The row stays with its reason, so
@@ -580,10 +628,76 @@ router.get('/items/:id/corrections', (req, res) => {
 router.post('/items/:id/mcqs/publish', (req, res) => {
   const item = db.prepare('SELECT id FROM ca_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found.' });
-  const info = db
-    .prepare(`UPDATE ca_mcqs SET status = 'published' WHERE item_id = ? AND status <> 'published'`)
-    .run(item.id);
-  res.json({ ok: true, published: info.changes });
+
+  // THE SWAP HAPPENS HERE, NOT WHEN THE QUESTIONS WERE WRITTEN.
+  //
+  // A regenerated set REPLACES the item's old questions, and doing the delete
+  // at write time left a published item showing zero questions for as long as
+  // the new ones sat in this queue. So the old set stays live until the moment
+  // the new one is approved, and both halves happen in one transaction — there
+  // is no instant at which the item has neither.
+  //
+  // A question a student has already answered is never deleted: the attempt and
+  // the Leitner box hang off its id, and that is real work, not a stale tag.
+  let published = 0;
+  let replaced = 0;
+  db.transaction(() => {
+    const pending = db
+      .prepare(`SELECT COUNT(*) AS n FROM ca_mcqs WHERE item_id = ? AND status <> 'published'`)
+      .get(item.id).n;
+    if (pending) {
+      replaced = db
+        .prepare(
+          `DELETE FROM ca_mcqs
+            WHERE item_id = ? AND status = 'published'
+              AND NOT EXISTS (SELECT 1 FROM ca_attempts a WHERE a.mcq_id = ca_mcqs.id)
+              AND NOT EXISTS (SELECT 1 FROM ca_mcq_flags f WHERE f.mcq_id = ca_mcqs.id)`
+        )
+        .run(item.id).changes;
+    }
+    published = db
+      .prepare(`UPDATE ca_mcqs SET status = 'published' WHERE item_id = ? AND status <> 'published'`)
+      .run(item.id).changes;
+  })();
+  res.json({ ok: true, published, replaced });
+});
+
+// Approve every pending question in the queue at once.
+//
+// A bulk approve is normally the wrong shape for a review screen — it is a
+// button that says "I did not read these". It earns its place here because the
+// regeneration is one mechanical change applied uniformly: the same prompt, the
+// same syllabus map, over thirty items at once. A reviewer who has read five of
+// them and is satisfied should not have to click thirty times to act on that,
+// and making them click thirty times is how the fifth one stops being read too.
+//
+// Per-item approval is still the default path and is listed above this button.
+router.post('/mcqs/publish-all', (req, res) => {
+  let published = 0;
+  let replaced = 0;
+  db.transaction(() => {
+    const ids = db
+      .prepare(
+        `SELECT DISTINCT m.item_id AS id FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id
+          WHERE m.status <> 'published'`
+      )
+      .all()
+      .map((r) => r.id);
+    for (const id of ids) {
+      replaced += db
+        .prepare(
+          `DELETE FROM ca_mcqs
+            WHERE item_id = ? AND status = 'published'
+              AND NOT EXISTS (SELECT 1 FROM ca_attempts a WHERE a.mcq_id = ca_mcqs.id)
+              AND NOT EXISTS (SELECT 1 FROM ca_mcq_flags f WHERE f.mcq_id = ca_mcqs.id)`
+        )
+        .run(id).changes;
+      published += db
+        .prepare(`UPDATE ca_mcqs SET status = 'published' WHERE item_id = ? AND status <> 'published'`)
+        .run(id).changes;
+    }
+  })();
+  res.json({ ok: true, published, replaced });
 });
 
 // Reject them, which means delete: an unreviewed question that was rejected has

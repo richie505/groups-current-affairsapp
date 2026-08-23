@@ -30,6 +30,34 @@ export default function QuestionReview({ items, onChanged }) {
   if (!items || !items.length) return null;
 
   const totalPending = items.reduce((n, it) => n + it.pending, 0);
+  // Live items with NOTHING to practise against. A different and sharper
+  // urgency than the rest of this queue: a student can open one of these right
+  // now and find an empty question list. It happened because the first version
+  // of the regeneration deleted the old questions at write time instead of at
+  // approval time.
+  const starved = items.filter((it) => !it.live);
+
+  async function actAll() {
+    const ok = window.confirm(
+      [
+        `Approve all ${totalPending} questions across ${items.length} items?`,
+        '',
+        'Each item’s old questions are replaced by its new ones in the same step.',
+        'Questions a student has already answered are kept.',
+      ].join('\n')
+    );
+    if (!ok) return;
+    setBusy('all');
+    setError('');
+    try {
+      await api.post('/admin/mcqs/publish-all', {});
+      onChanged();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(itemId, verb) {
     if (verb === 'discard') {
@@ -59,6 +87,30 @@ export default function QuestionReview({ items, onChanged }) {
         item{items.length === 1 ? '' : 's'}. The notes are live; these questions are not, and no
         student can see them until they are approved here.
       </p>
+      {starved.length ? (
+        <p className="mt-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <strong>
+            {starved.length} of these item{starved.length === 1 ? ' is' : 's are'} live with no
+            questions at all
+          </strong>{' '}
+          while these wait. A student can read {starved.length === 1 ? 'it' : 'them'} and has
+          nothing to practise against.
+        </p>
+      ) : null}
+      {/* A bulk approve is normally the wrong shape for a review screen — it is
+          a button that says "I did not read these". It earns its place because
+          the regeneration is ONE mechanical change applied uniformly across
+          every item, and making a reviewer click thirty times to act on a
+          judgement they formed after five is how the fifth stops being read. */}
+      <button
+        type="button"
+        disabled={busy === 'all'}
+        onClick={() => actAll()}
+        className="mt-3 inline-flex items-center gap-1 rounded-md bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+      >
+        <IconCheck className="h-4 w-4" />
+        Approve all {totalPending}
+      </button>
 
       {error ? (
         <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
@@ -75,11 +127,16 @@ export default function QuestionReview({ items, onChanged }) {
                   to={`/admin/items/${it.id}`}
                   className="font-semibold text-slate-900 hover:underline"
                 >
-                  <RichText text={it.headline} />
+                  <RichText>{it.headline}</RichText>
                 </Link>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {it.day_date} · {it.live} live question{it.live === 1 ? '' : 's'} ·{' '}
-                  {it.pending} waiting
+                  {it.day_date} ·{' '}
+                  {it.live ? (
+                    `${it.live} live question${it.live === 1 ? '' : 's'}`
+                  ) : (
+                    <span className="font-semibold text-red-700">no live questions</span>
+                  )}{' '}
+                  · {it.pending} waiting
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -124,7 +181,7 @@ export default function QuestionReview({ items, onChanged }) {
                     )}
                   </div>
                   <p className="font-medium text-slate-900">
-                    <RichText text={m.question} />
+                    <RichText>{m.question}</RichText>
                   </p>
                   <ul className="mt-1 space-y-0.5">
                     {['a', 'b', 'c', 'd'].map((k) => (
@@ -137,14 +194,14 @@ export default function QuestionReview({ items, onChanged }) {
                         }
                       >
                         <span className="font-mono text-xs">({k})</span>{' '}
-                        <RichText text={m[`option_${k}`]} />
+                        <RichText>{m[`option_${k}`]}</RichText>
                         {m.correct_option === k ? ' ✓' : ''}
                       </li>
                     ))}
                   </ul>
                   {m.explanation ? (
                     <p className="mt-1 text-xs text-slate-600">
-                      <RichText text={m.explanation} />
+                      <RichText>{m.explanation}</RichText>
                     </p>
                   ) : null}
                 </li>

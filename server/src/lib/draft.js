@@ -708,6 +708,7 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       `UPDATE ca_items SET status = 'discarded', discard_reason = ?, updated_at = datetime('now')
         WHERE id = ? AND status = 'draft'`
     );
+    const markSuperseded = db.prepare('UPDATE ca_items SET supersedes = ? WHERE id = ?');
     const discardArticle = db.prepare(
       `UPDATE np_articles SET status = 'discarded', discard_reason = ? WHERE id = ?`
     );
@@ -819,6 +820,16 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
           const n = supersede.run(`Superseded by item #${itemId} on redraft.`, prior.item_id)
             .changes;
           if (n) onLog(`      superseded draft item #${prior.item_id}`);
+          // Nothing changed means the prior item was NOT a draft, so it is
+          // published and has been left live on purpose. That is the case worth
+          // recording: the new draft is a duplicate of something a student can
+          // already read, and publishing both would show the same story twice.
+          // The reviewer cannot see that from either row unless it is written
+          // down here.
+          else {
+            markSuperseded.run(prior.item_id, itemId);
+            onLog(`      NOTE: this redrafts PUBLISHED item #${prior.item_id}, which stays live`);
+          }
         }
         linkArticle.run(itemId, r._articleId);
       }

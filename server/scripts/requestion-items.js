@@ -347,7 +347,23 @@ async function run(args, plan) {
     const status = p.row.status === 'published' ? 'draft' : 'published';
 
     db.transaction(() => {
-      deleteReplaceable.run(p.row.id);
+      // THE OLD QUESTIONS ARE ONLY REMOVED WHEN THE NEW ONES ARE ACTUALLY LIVE.
+      //
+      // Deleting first was wrong in exactly one case, and it is the case that
+      // matters: on a PUBLISHED item the replacements go in held back for
+      // review, so deleting the old set left a live item showing a student zero
+      // questions until an admin clicked approve. 18 items were in that state
+      // before this was caught. The item was live, its practice was gone, and
+      // nothing on the student's screen explained why.
+      //
+      // On a DRAFT item there is no such gap — the replacements are visible the
+      // moment the item is published, and leaving the old ones would just
+      // double the list — so the delete still happens there.
+      //
+      // For a published item the delete moves to the approval step, in the same
+      // transaction that promotes the new questions. See
+      // POST /admin/items/:id/mcqs/publish.
+      if (status === 'published') deleteReplaceable.run(p.row.id);
       for (const m of mcqs) {
         insert.run({
           item_id: p.row.id,
