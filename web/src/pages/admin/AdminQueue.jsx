@@ -7,6 +7,7 @@ import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import Markdown from '../../components/Markdown';
 import RichText from '../../components/RichText';
+import QuestionReview from '../../components/admin/QuestionReview';
 import {
   BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, GenreBadge, Chip,
 } from '../../components/Badges';
@@ -83,11 +84,29 @@ export default function AdminQueue() {
     }
   }
 
-  if (!data.items.length && !data.days.length) {
+  const questionReview = data.question_review || [];
+
+  if (!data.items.length && !data.days.length && !questionReview.length) {
     return (
       <div>
         <h1 className="mb-1 text-2xl font-bold text-slate-900">Review queue</h1>
         <EmptyState icon={IconList} text="Nothing is waiting for review." />
+      </div>
+    );
+  }
+
+  // Questions on live items come FIRST, above the draft items.
+  //
+  // Not because there are more of them, but because they are the only thing on
+  // this screen attached to something a student is already reading. A draft item
+  // left unreviewed shows a student nothing; an approved question set left
+  // unreviewed is the one queue where doing nothing is not the safe default —
+  // the item is live and its question count is visibly short.
+  if (!data.items.length && !data.days.length) {
+    return (
+      <div>
+        <h1 className="mb-4 text-2xl font-bold text-slate-900">Review queue</h1>
+        <QuestionReview items={questionReview} onChanged={reload} />
       </div>
     );
   }
@@ -119,6 +138,8 @@ export default function AdminQueue() {
           {actionError}
         </p>
       ) : null}
+
+      <QuestionReview items={questionReview} onChanged={reload} />
 
       <div className="space-y-8">
         {Object.entries(byDay).map(([date, items]) => {

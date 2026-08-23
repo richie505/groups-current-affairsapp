@@ -16,6 +16,14 @@ const BUCKETS = ['international', 'national', 'ap', 'dynamic'];
 // still be held back or discarded within an approved day.
 const VISIBLE = `i.status = 'published' AND d.status = 'published'`;
 
+// A published item can carry an unreviewed QUESTION. Two gates, not one.
+//
+// Regenerating the bank against the syllabus map rewrites the questions on
+// items that are already live, so "the item is published" stopped being enough
+// to mean "a student may see this". Every student-facing read of ca_mcqs is
+// filtered on both; the admin reads are deliberately not.
+const MCQ_VISIBLE = `m.status = 'published'`;
+
 const P = require('../lib/pacing');
 const T = require('../lib/appTime');
 
@@ -213,7 +221,7 @@ function attachUserState(items, userId) {
          LEFT JOIN (
               SELECT mcq_id, MAX(id) AS id FROM ca_attempts WHERE user_id = ? GROUP BY mcq_id
          ) a ON a.mcq_id = m.id
-        WHERE m.item_id IN (${holes})
+        WHERE m.item_id IN (${holes}) AND ${MCQ_VISIBLE}
         GROUP BY m.item_id`
     )
     .all(userId, ...ids)) {
@@ -386,8 +394,8 @@ router.get('/items/:id', (req, res) => {
     ? db
         .prepare(
           `SELECT id, question, option_a, option_b, option_c, option_d, correct_option,
-                  explanation, format, keyword, difficulty, fact_as_of
-             FROM ca_mcqs WHERE item_id = ? ORDER BY id`
+                  explanation, format, keyword, difficulty, fact_as_of, unit_code
+             FROM ca_mcqs m WHERE item_id = ? AND ${MCQ_VISIBLE} ORDER BY id`
         )
         .all(item.id)
     : [];
@@ -577,7 +585,7 @@ router.post('/mcqs/:id/attempt', (req, res) => {
     .prepare(
       `SELECT m.id, m.correct_option, m.explanation, m.fact_as_of, m.item_id
          FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id JOIN ca_days d ON d.id = i.day_id
-        WHERE m.id = ? AND ${VISIBLE}`
+        WHERE m.id = ? AND ${VISIBLE} AND ${MCQ_VISIBLE}`
     )
     .get(req.params.id);
   if (!mcq) return res.status(404).json({ error: 'Question not found.' });
@@ -683,6 +691,7 @@ router.get('/revision/due', (req, res) => {
          JOIN ca_items i ON i.id = m.item_id
          JOIN ca_days d ON d.id = i.day_id
         WHERE r.user_id = ? AND r.item_type = 'mcq' AND r.due_date <= ? AND ${VISIBLE}
+              AND ${MCQ_VISIBLE}
         ORDER BY r.due_date
         LIMIT 40`
     )
@@ -734,7 +743,7 @@ router.get('/mistakes', (req, res) => {
          JOIN ca_mcqs m ON m.id = l.mcq_id
          JOIN ca_items i ON i.id = m.item_id
          JOIN ca_days d ON d.id = i.day_id
-        WHERE a.is_correct = 0 AND ${VISIBLE}
+        WHERE a.is_correct = 0 AND ${VISIBLE} AND ${MCQ_VISIBLE}
         ORDER BY a.attempted_at DESC`
     )
     .all(req.user.id);
@@ -802,7 +811,7 @@ router.get('/progress', (req, res) => {
               COUNT(*) AS attempts,
               SUM(a.is_correct) AS correct
          FROM ca_attempts a JOIN ca_mcqs m ON m.id = a.mcq_id
-        WHERE a.user_id = ? AND m.keyword <> ''
+        WHERE a.user_id = ? AND m.keyword <> '' AND ${MCQ_VISIBLE}
         GROUP BY m.keyword
        HAVING attempts >= 3
         ORDER BY (CAST(SUM(a.is_correct) AS REAL) / COUNT(*)) ASC
@@ -879,7 +888,7 @@ router.get('/months/:month', (req, res) => {
     .prepare(
       `SELECT COUNT(*) AS n FROM ca_mcqs m
          JOIN ca_items i ON i.id = m.item_id JOIN ca_days d ON d.id = i.day_id
-        WHERE d.date LIKE ? AND ${VISIBLE}`
+        WHERE d.date LIKE ? AND ${VISIBLE} AND ${MCQ_VISIBLE}`
     )
     .get(`${month}-%`);
 

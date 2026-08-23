@@ -101,6 +101,10 @@ router.get('/overview', (req, res) => {
          (SELECT COUNT(*) FROM ca_items WHERE needs_verify = 1
                                           AND status <> 'discarded')          AS needs_verify,
          (SELECT COUNT(*) FROM ca_mcqs)                                      AS mcqs,
+         (SELECT COUNT(*) FROM ca_mcqs WHERE status <> 'published')          AS pending_mcqs,
+         (SELECT COUNT(DISTINCT m.item_id) FROM ca_mcqs m
+            JOIN ca_items i ON i.id = m.item_id
+           WHERE m.status <> 'published' AND i.status = 'published')          AS pending_mcq_items,
          (SELECT COUNT(*) FROM ca_mcq_flags WHERE status = 'open')            AS open_flags,
          (SELECT COUNT(*) FROM users WHERE role = 'student')                  AS students`
     )
@@ -194,17 +198,55 @@ router.get('/queue', (req, res) => {
       .all(...ids))
       byId.get(r.item_id)?.sources.push(r);
     for (const r of db
-      .prepare(`SELECT item_id, COUNT(*) AS n FROM ca_mcqs WHERE item_id IN (${holes}) GROUP BY item_id`)
+      .prepare(
+        `SELECT item_id, COUNT(*) AS n,
+                SUM(CASE WHEN status <> 'published' THEN 1 ELSE 0 END) AS pending
+           FROM ca_mcqs WHERE item_id IN (${holes}) GROUP BY item_id`
+      )
       .all(...ids)) {
       const it = byId.get(r.item_id);
-      if (it) it.mcq_count = r.n;
+      if (it) {
+        it.mcq_count = r.n;
+        // Questions written onto an already-published item, waiting for review.
+        // Surfaced on the card because otherwise the only way to discover them
+        // is to open every item and count.
+        it.mcq_pending = r.pending || 0;
+      }
     }
     // The correction guard, run at review time as well as at draft time — the
     // corrections table can gain an entry after an item was drafted.
     for (const it of items) it.correction_hits = checkCorrections(db, it);
   }
 
-  res.json({ days, items });
+  // A SECOND QUEUE: published items whose QUESTIONS are waiting on review.
+  //
+  // The queue above asks "which items are unreviewed", and that was the whole
+  // question while questions only ever arrived with the item carrying them.
+  // Re-tagging the bank to syllabus units rewrites the questions on items that
+  // are already live, so an item can be fully reviewed and still hold questions
+  // no one has read. Those are invisible to a queue filtered on i.status, which
+  // is exactly how unreviewed content reaches a student by accident.
+  const questionReview = db
+    .prepare(
+      `SELECT i.id, i.headline, i.bucket, i.importance, d.date AS day_date,
+              COUNT(*) AS pending,
+              (SELECT COUNT(*) FROM ca_mcqs p
+                WHERE p.item_id = i.id AND p.status = 'published') AS live
+         FROM ca_mcqs m
+         JOIN ca_items i ON i.id = m.item_id
+         JOIN ca_days d ON d.id = i.day_id
+        WHERE m.status <> 'published' AND i.status = 'published'
+        GROUP BY i.id
+        ORDER BY d.date DESC, i.order_index`
+    )
+    .all();
+  for (const it of questionReview) {
+    it.mcqs = db
+      .prepare(`SELECT * FROM ca_mcqs WHERE item_id = ? AND status <> 'published' ORDER BY id`)
+      .all(it.id);
+  }
+
+  res.json({ days, items, question_review: questionReview });
 });
 
 // ---- Days ---------------------------------------------------------------
@@ -528,6 +570,33 @@ router.get('/items/:id/corrections', (req, res) => {
 });
 
 // ---- MCQs ---------------------------------------------------------------
+
+// Approve every pending question on one item, in one action.
+//
+// Per-question approval exists too (PUT /mcqs/:id sets status), but the unit of
+// review here is the SET: the regeneration replaces an item's whole question
+// list at once, and asking the reviewer to tick eight boxes for one item would
+// make the honest choice the tedious one.
+router.post('/items/:id/mcqs/publish', (req, res) => {
+  const item = db.prepare('SELECT id FROM ca_items WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found.' });
+  const info = db
+    .prepare(`UPDATE ca_mcqs SET status = 'published' WHERE item_id = ? AND status <> 'published'`)
+    .run(item.id);
+  res.json({ ok: true, published: info.changes });
+});
+
+// Reject them, which means delete: an unreviewed question that was rejected has
+// no later use, and keeping it would leave the pending count permanently above
+// zero with nothing the reviewer can do about it.
+router.post('/items/:id/mcqs/discard', (req, res) => {
+  const item = db.prepare('SELECT id FROM ca_items WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found.' });
+  const info = db
+    .prepare(`DELETE FROM ca_mcqs WHERE item_id = ? AND status <> 'published'`)
+    .run(item.id);
+  res.json({ ok: true, discarded: info.changes });
+});
 
 router.post('/mcqs', (req, res) => {
   const body = req.body || {};

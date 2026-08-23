@@ -521,6 +521,106 @@ check(
 check('the opinion block is still present, just last', b.length > a.length && b.includes('OPINION, NOT REPORTAGE'));
 
 // ---------------------------------------------------------------------------
+// THE THREE FAULTS THAT COST THE 23 AUGUST RUN
+//
+// Each of these was a silent loss, not a crash: the run reported itself done
+// and the missing work was only findable by counting. They are pinned here for
+// that reason — a regression would look exactly as healthy as the bug did.
+// ---------------------------------------------------------------------------
+
+const LIB = require(path.join(__dirname, '..', '..', 'content-pipeline', 'ca-daily', 'lib'));
+
+// 1. A dropped connection is transient. 29 of 72 articles were lost because it
+//    was not treated as one, and the retry budget was spent only on 429s.
+const netErr = () => {
+  const e = new TypeError('fetch failed');
+  e.cause = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+  return e;
+};
+check('a dropped connection is retried', LIB.isTransient(netErr()));
+check('a timeout is retried', LIB.isTransient(Object.assign(new Error('x'), { name: 'TimeoutError' })));
+check('a flagged 429 is still retried', LIB.isTransient(Object.assign(new Error('HTTP 429'), { retryable: true })));
+check(
+  'a genuine programming error is NOT retried',
+  !LIB.isTransient(new TypeError('rows.map is not a function'))
+);
+
+// 2. A literal newline inside a JSON string threw away a whole 70-score draft.
+check(
+  'a raw newline inside a string is repaired, not fatal',
+  LIB.parseJson('{"a": "one\ntwo"}').a === 'one\ntwo'
+);
+check(
+  'a tab inside a string is repaired too',
+  LIB.parseJson('[{"q":"a\tb"}]', { array: true })[0].q === 'a\tb'
+);
+check('escaped quotes still survive the repair', LIB.parseJson('{"x":"a\\"b"}').x === 'a"b');
+let stillThrows = false;
+try {
+  LIB.parseJson('{"a": }');
+} catch {
+  stillThrows = true;
+}
+check('genuinely broken JSON still throws', stillThrows);
+
+// 3. The model answered with `CODE — label` and the exact-match check filed four
+//    correct answers under no unit at all.
+const validUnits = new Set(['G2-P1-U7', 'G1P-C5', 'G2-P1-U1', 'G2-P1-U10']);
+check('an exact code passes through', D.canonicalUnit('G2-P1-U7', validUnits) === 'G2-P1-U7');
+check(
+  'a code followed by its label is read as the code',
+  D.canonicalUnit('G2-P1-U7 — Union and State government — legislature', validUnits) === 'G2-P1-U7'
+);
+check(
+  'a code in parentheses is read as the code',
+  D.canonicalUnit('G1P-C5 (named in the headline)', validUnits) === 'G1P-C5'
+);
+check('an invented code is still rejected', D.canonicalUnit('G2-P9-U1', validUnits) === '');
+check(
+  'two codes in one field is an ambiguity, not a guess',
+  D.canonicalUnit('G2-P1-U7 or G1P-C5', validUnits) === ''
+);
+// The codes are not prefix-free. A substring test would see "G2-P1-U1" inside
+// "G2-P1-U10", call it ambiguous, and drop a tag that was never in doubt.
+check(
+  'U10 is not confused with U1',
+  D.canonicalUnit('G2-P1-U10 — Andhra Pradesh economy', validUnits) === 'G2-P1-U10'
+);
+check('U1 is still itself', D.canonicalUnit('G2-P1-U1', validUnits) === 'G2-P1-U1');
+
+// 4. A question on a published item must not reach a student before review.
+db.prepare("INSERT INTO ca_days (id, date, status) VALUES (900, '2026-08-01', 'published')").run();
+db.prepare(
+  `INSERT INTO ca_items (id, day_id, headline, bucket, status, relevance_g1)
+     VALUES (900, 900, 'H', 'national', 'published', 0)`
+).run();
+const insQ = db.prepare(
+  `INSERT INTO ca_mcqs (item_id, question, option_a, option_b, option_c, option_d,
+     correct_option, status) VALUES (900, ?, 'a', 'b', 'c', 'd', 'a', ?)`
+);
+insQ.run('reviewed', 'published');
+insQ.run('not yet reviewed', 'draft');
+check(
+  'a question defaults to visible, so the pre-existing bank keeps working',
+  db
+    .prepare(
+      `INSERT INTO ca_mcqs (item_id, question, option_a, option_b, option_c, option_d, correct_option)
+       VALUES (900, 'no status given', 'a', 'b', 'c', 'd', 'a') RETURNING status`
+    )
+    .get().status === 'published'
+);
+check(
+  'an unreviewed question on a published item is not served',
+  db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id
+        JOIN ca_days d ON d.id = i.day_id
+        WHERE i.status = 'published' AND d.status = 'published' AND m.status = 'published'`
+    )
+    .get().n === 2
+);
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

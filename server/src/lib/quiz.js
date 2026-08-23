@@ -31,7 +31,10 @@ const FORMAT_WEIGHTS = {
   count_based: 0.02,
 };
 
-const VISIBLE = `i.status = 'published' AND d.status = 'published'`;
+// Both gates: the item must be published AND the question itself reviewed.
+// Questions can now be regenerated onto an item that is already live, so the
+// item's status alone no longer answers "may a student see this".
+const VISIBLE = `i.status = 'published' AND d.status = 'published' AND m.status = 'published'`;
 
 function resolveWindow({ scope, from, to, month, date }) {
   // Returns [sqlFragment, params] constraining d.date, plus a human label.

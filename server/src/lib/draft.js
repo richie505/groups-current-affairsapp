@@ -1011,6 +1011,49 @@ function mcqCountFor(units, base = 4) {
   return Math.min(base + 2 * (n - 1), 10);
 }
 
+/**
+ * The unit code out of whatever the model actually returned.
+ *
+ * WHY THIS IS NOT JUST `valid.has(trim(x))`
+ *
+ * It was, and it silently discarded correct answers. The prompt shows each unit
+ * as `CODE — label`, and on the 23 August recovery run the model copied the
+ * whole line back:
+ *
+ *   "G2-P1-U7 — Union and State government — legislature, executive, judiciary"
+ *
+ * That is the RIGHT unit, identified correctly, and an exact-match check filed
+ * all four of that item's questions under no unit at all. The model was not
+ * wrong; the reader was too literal.
+ *
+ * The check stays strict about which codes are acceptable — only a unit this
+ * article actually feeds — and becomes tolerant only about the punctuation
+ * around it. A code that is not in the supplied set is still rejected, because
+ * that is the failure this guard exists for.
+ */
+function canonicalUnit(raw, valid) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  if (valid.has(text)) return text;
+
+  // Ambiguity is checked FIRST, before the leading token is trusted.
+  //
+  // Reading the head of the string is what makes "G2-P1-U7 — Union and State
+  // government" work, but applied blindly it would also read "G2-P1-U7 or
+  // G1P-C5" as a confident G2-P1-U7 — and a field naming two units is the model
+  // saying it could not choose. Picking the one that happens to be written
+  // first is not a repair, it is a coin toss recorded as a fact.
+  // Matched with a boundary rather than `includes`, because the codes are not
+  // prefix-free: "G2-P1-U10" contains "G2-P1-U1", so a plain substring test
+  // would call every U10 tag ambiguous and throw away a correct answer to avoid
+  // a collision that is not there. `\b` is no use — the codes contain hyphens —
+  // so the boundary is spelled out.
+  const hits = [...valid].filter((code) =>
+    new RegExp(`(?:^|[^A-Za-z0-9-])${code}(?![A-Za-z0-9])`).test(text)
+  );
+  return hits.length === 1 ? hits[0] : '';
+}
+
 async function generateMcqs(
   db,
   { record, index, count = 4, model, mcqPrompt, seenHashes, fallbackDate, onLog = () => {} }
@@ -1080,7 +1123,7 @@ async function generateMcqs(
       // than no unit at all: it would answer "what covers G1P-B2?" with a
       // question about something else. Only a code from the list it was handed
       // survives; anything else is recorded as blank and said out loud.
-      const unit = valid.has(String(m.unit_code || '').trim()) ? String(m.unit_code).trim() : '';
+      const unit = canonicalUnit(m.unit_code, valid);
       if (units.length && !unit) {
         onLog(`    question tagged to no known unit (${m.unit_code || 'blank'})`);
       }
@@ -1119,5 +1162,6 @@ module.exports = {
   plannedFormatsFor,
   objectiveUnitsFor,
   mcqCountFor,
+  canonicalUnit,
   generateMcqs,
 };

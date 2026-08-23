@@ -45,6 +45,18 @@ export default function AdminDashboard() {
       icon: IconList,
       tone: 'amber',
     },
+    // Above the unsourced count deliberately. An unreviewed item shows a student
+    // nothing; unreviewed questions sit on an item that is already live, whose
+    // question count is visibly short until someone acts.
+    c.pending_mcqs > 0 && {
+      label:
+        `${c.pending_mcqs} question${c.pending_mcqs === 1 ? '' : 's'} waiting on review` +
+        `${c.pending_mcq_items ? ` on ${c.pending_mcq_items} published item${c.pending_mcq_items === 1 ? '' : 's'}` : ''}`,
+      detail: 'The items are live; these questions are held back until they are approved.',
+      to: '/admin/queue',
+      icon: IconList,
+      tone: 'amber',
+    },
     c.unsourced > 0 && {
       label: `${c.unsourced} item${c.unsourced === 1 ? '' : 's'} with no source`,
       detail: 'Publishing one of these is how an unverifiable claim gets into the bank.',

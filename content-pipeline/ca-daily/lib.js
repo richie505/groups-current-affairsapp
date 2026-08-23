@@ -98,7 +98,52 @@ function endpointFor(model) {
   return { url: `${base.replace(/\/+$/, '')}/chat/completions`, key, provider: useAlt ? 'alt' : 'openai' };
 }
 
-async function complete({ system, user, model, temperature = 0.3, maxRetries = 3 }) {
+// WHAT COUNTS AS WORTH RETRYING, AND WHY THIS LIST EXISTS
+//
+// Measured, not guessed. Edition 3 was drafted from 72 hand-picked articles and
+// 29 of them came back "FAILED — fetch failed", permanently, in two bursts. The
+// run kept going and reported itself done. The articles lost were not the tail:
+// they scored 61, 61, 58, 57, 57, 54, 52, 50, 48, 47, 47.
+//
+// The cause was one line — `if (!e.retryable) break`. HTTP 429 and 5xx were
+// marked retryable and duly retried; a dropped TCP connection arrives as a bare
+// TypeError with no status and no flag, so it fell to the default and broke out
+// on the first attempt. The single most common transient failure there is was
+// the only one with no retry at all.
+//
+// `fetch` reports every network-layer fault as the same opaque "fetch failed",
+// so the cause has to be dug out of `.cause`. Undici's codes are listed
+// explicitly rather than retrying every TypeError, because a genuine programming
+// error in this file is also a TypeError and should fail loudly on the first
+// attempt rather than three times slowly.
+const RETRYABLE_CODES = new Set([
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN',
+  'ENETUNREACH', 'EHOSTUNREACH', 'ERR_SOCKET_CONNECTION_TIMEOUT',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET', 'UND_ERR_RESPONSE_STATUS_CODE',
+]);
+
+function isTransient(e) {
+  if (!e) return false;
+  if (e.retryable) return true;
+  // An abort raised by our own timeout below: the request took too long, which
+  // is exactly the case worth trying again.
+  if (e.name === 'AbortError' || e.name === 'TimeoutError') return true;
+  for (let cause = e; cause; cause = cause.cause) {
+    if (RETRYABLE_CODES.has(cause.code)) return true;
+    if (/fetch failed|socket hang up|network|terminated/i.test(cause.message || '')) return true;
+    if (cause === cause.cause) break;
+  }
+  return false;
+}
+
+// Long enough for a slow reasoning model on a long article, short enough that a
+// connection that has silently died does not hold the run open indefinitely.
+// Without this a stalled socket blocks a 70-article run forever, and the admin
+// sees a run stuck at 'running' with no way to tell it apart from a slow one.
+const REQUEST_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 180_000);
+
+async function complete({ system, user, model, temperature = 0.3, maxRetries = 4, onRetry }) {
   const useModel = model || process.env.OPENAI_MODEL || 'gpt-4o';
   const { url, key, provider } = endpointFor(useModel);
   if (!key) {
@@ -111,10 +156,15 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
 
   const drop = new Set();
   let lastError;
-  // The extra attempts are the parameter-dropping ones, so that shedding a
-  // rejected parameter never eats into the transient-failure retry budget.
-  for (let attempt = 1; attempt <= maxRetries + DROPPABLE_PARAMS.size; attempt++) {
+  // Two budgets, counted separately.
+  //
+  // They used to share one counter with a comment claiming they did not, which
+  // meant a model that rejects `temperature` — every gpt-5.x — spent one of the
+  // three transient retries before the first real attempt had been made.
+  let tries = 0;
+  for (let guard = 0; guard < maxRetries + DROPPABLE_PARAMS.size + 1; guard++) {
     try {
+      tries += 1;
       const payload = {
         model: useModel,
         messages: [
@@ -131,8 +181,9 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
           Authorization: `Bearer ${key}`,
         },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      if (res.status === 429 || res.status >= 500) {
+      if (res.status === 408 || res.status === 409 || res.status === 429 || res.status >= 500) {
         // Retry the transient ones with backoff. A rate limit forty items into a
         // run should cost a pause, not the run.
         throw Object.assign(new Error(`HTTP ${res.status}`), { retryable: true });
@@ -147,6 +198,7 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
         }
         if (res.status === 400 && DROPPABLE_PARAMS.has(param) && !drop.has(param)) {
           drop.add(param);
+          tries -= 1; // shedding a rejected parameter is not a failed attempt
           continue;
         }
         throw new Error(`${useModel} ${res.status}: ${body.slice(0, 300)}`);
@@ -155,11 +207,20 @@ async function complete({ system, user, model, temperature = 0.3, maxRetries = 3
       return json.choices?.[0]?.message?.content || '';
     } catch (e) {
       lastError = e;
-      if (!e.retryable || attempt === maxRetries) break;
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      if (!isTransient(e) || tries >= maxRetries) break;
+      // Exponential with jitter. Flat 2s * n meant a whole batch that hit the
+      // same blip retried in lockstep and hit it again together.
+      const wait = Math.round(1500 * 2 ** (tries - 1) * (0.75 + Math.random() * 0.5));
+      if (typeof onRetry === 'function') onRetry({ attempt: tries, wait, error: e });
+      await new Promise((r) => setTimeout(r, wait));
     }
   }
-  throw lastError;
+  // Say how many attempts were made. "fetch failed" alone left no way to tell a
+  // one-off blip from an endpoint that is simply down.
+  throw Object.assign(
+    new Error(`${lastError && lastError.message} (after ${tries} attempt${tries === 1 ? '' : 's'})`),
+    { cause: lastError, attempts: tries }
+  );
 }
 
 // Models wrap JSON in prose or a code fence often enough that stripping it is
@@ -172,7 +233,58 @@ function parseJson(text, { array = false } = {}) {
   const start = t.indexOf(open);
   const end = t.lastIndexOf(close);
   if (start === -1 || end === -1) throw new Error(`No JSON ${array ? 'array' : 'object'} found in response.`);
-  return JSON.parse(t.slice(start, end + 1));
+  const body = t.slice(start, end + 1);
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    // ONE repair, then give up.
+    //
+    // Measured: "Bad control character in string literal at position 1105" cost
+    // a 70-score article on the 23 August run. The model had written a literal
+    // newline inside a quoted string — valid prose, invalid JSON — and the whole
+    // draft was thrown away over a byte.
+    //
+    // The repair only escapes control characters that occur INSIDE a string, so
+    // the newlines between fields, which JSON allows, are untouched. Anything
+    // else wrong with the payload still throws, because a parser that guesses at
+    // broken JSON eventually invents a field.
+    if (!/[Bb]ad control character|Unexpected token|control character/.test(e.message)) throw e;
+    const repaired = escapeControlCharsInStrings(body);
+    if (repaired === body) throw e;
+    return JSON.parse(repaired);
+  }
+}
+
+// Walks the text tracking whether it is inside a quoted string, honouring
+// backslash escapes so that a `\"` does not look like the end of one.
+const CONTROL_ESCAPES = { '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f' };
+function escapeControlCharsInStrings(text) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString && ch < ' ') {
+      out += CONTROL_ESCAPES[ch] || `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 // ---- resumable state ----------------------------------------------------
@@ -259,6 +371,7 @@ module.exports = {
   complete,
   endpointFor,
   parseJson,
+  isTransient,
   loadState,
   recordState,
   questionHash,

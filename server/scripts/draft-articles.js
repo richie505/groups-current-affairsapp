@@ -204,9 +204,29 @@ async function main() {
 
   const drafted = [];
   const discarded = [];
+  const failed = [];
+  const itemIds = [];
 
-  for (const [i, article] of articles.entries()) {
-    const label = `[${i + 1}/${articles.length}] ${Math.round(article.score)} ${article.band}`;
+  // A QUEUE, NOT A LIST, SO THAT AN OUTAGE COSTS TIME RATHER THAN ARTICLES.
+  //
+  // The 23 August run drafted 72 hand-picked articles and lost 29 of them to
+  // "fetch failed" in two bursts — including everything scoring 61, 61, 58, 57,
+  // 57, 54, 52, 50 and 48. The call layer now retries a dropped connection
+  // (see isTransient in ca-daily/lib.js), which handles a blip. It does not
+  // handle a two-minute outage, because four retries at 1.5s doubling is about
+  // twenty seconds.
+  //
+  // So a failure goes to the back of the queue and is tried once more after
+  // every other article has had its turn. By then several minutes have passed
+  // without a fixed sleep, and the second pass costs nothing when the first one
+  // was clean. Only ONE re-queue: an article that fails twice, minutes apart, is
+  // failing for a reason a third attempt will not fix.
+  const queue = articles.map((a) => ({ article: a, pass: 1 }));
+  for (let i = 0; i < queue.length; i += 1) {
+    const { article, pass } = queue[i];
+    const label =
+      `[${Math.min(i + 1, articles.length)}/${articles.length}]` +
+      `${pass > 1 ? ' RETRY' : ''} ${Math.round(article.score)} ${article.band}`;
     let record;
     try {
       record = await D.draftArticle(db, {
@@ -217,7 +237,13 @@ async function main() {
         prompt,
       });
     } catch (e) {
-      say(`${label} FAILED — ${e.message}: ${(article.headline || '').slice(0, 60)}`);
+      if (pass === 1) {
+        say(`${label} failed (${e.message.slice(0, 80)}) — re-queued for a second pass`);
+        queue.push({ article, pass: 2 });
+      } else {
+        say(`${label} FAILED TWICE — ${e.message}: ${(article.headline || '').slice(0, 60)}`);
+        failed.push({ article, error: e.message });
+      }
       continue;
     }
 
@@ -350,6 +376,26 @@ async function main() {
       `${label} DRAFT — ${record.headline.slice(0, 70)} ` +
         `[${record.bucket}/T${record.importance || 2}] ${record.mcqs.length} question(s)`
     );
+
+    // WRITTEN NOW, NOT AT THE END.
+    //
+    // This used to accumulate every record in memory and insert once, after the
+    // last article. A 30-article run is about twenty minutes and a 70-article
+    // run is nearly an hour, and for that whole time everything already paid for
+    // lived only in a variable. Killing the process at article 13 of 30 — a
+    // timeout, a closed laptop, Ctrl-C on a run that looked stuck — threw away
+    // thirteen drafts and their questions and left nothing behind but the API
+    // charge. That is not hypothetical: it happened on the 23 August recovery
+    // run and cost the lot.
+    //
+    // One transaction per item instead of one for the batch. SQLite does not
+    // care at this scale, and a run can now be interrupted at any point with
+    // everything before that point already safe on disk. `--redraft` is the
+    // resume: articles that produced an item are skipped.
+    if (!args.dryRun) {
+      const written = D.insertDrafted(db, { date: edition.date, drafted: [record], onLog: say });
+      itemIds.push(...written.itemIds);
+    }
   }
 
   // The discard rate, reported for the same reason the web lane reports it: a
@@ -364,7 +410,31 @@ async function main() {
   const considered = articles.length;
   const rate = considered ? Math.round((discarded.length / considered) * 100) : 0;
   say('');
-  say(`Considered ${considered} · drafted ${drafted.length} · discarded ${discarded.length} (${rate}%)`);
+  say(
+    `Considered ${considered} · drafted ${drafted.length} · discarded ${discarded.length} (${rate}%)` +
+      `${failed.length ? ` · FAILED ${failed.length}` : ''}`
+  );
+
+  // A LOSS IS REPORTED AS A LOSS, WITH THE COMMAND THAT UNDOES IT.
+  //
+  // The old summary counted only what was drafted and what was discarded, so a
+  // run that lost 29 of 72 articles printed "drafted 33 · discarded 9" and
+  // called itself done. The two numbers did not add up to the input and nothing
+  // said so. Anything that failed is named here, with the exact re-run, because
+  // an admin who has to reconstruct an article list from a scrolled log will
+  // not do it.
+  if (failed.length) {
+    say('');
+    say(`${failed.length} article(s) could not be drafted after two passes:`);
+    for (const f of failed) {
+      say(`  ${f.article.id}  ${Math.round(f.article.score)}  ${(f.article.headline || '').slice(0, 58)}`);
+    }
+    say('Re-run just those with:');
+    say(
+      `  node server/scripts/draft-articles.js ${edition.id} ` +
+        `--article ${failed.map((f) => f.article.id).join(',')} --min-score 0`
+    );
+  }
   if (!discarded.length && considered >= 5) {
     say(
       'NOTE: nothing was discarded. The score gate upstream does most of the ' +
@@ -379,23 +449,21 @@ async function main() {
     process.exit(0);
   }
 
-  const result = D.insertDrafted(db, {
-    date: edition.date,
-    drafted,
-    discarded,
-    onLog: say,
-  });
+  // Only the discards are left to write — every draft was persisted as it was
+  // produced. A discard is one UPDATE against an article that is already on
+  // disk, so batching those costs nothing to lose.
+  D.insertDrafted(db, { date: edition.date, drafted: [], discarded, onLog: say });
 
   L.finishRun(db, runId, {
     status: 'done',
     candidates: articles.length,
-    drafted: result.itemIds.length,
+    drafted: itemIds.length,
     discarded: discarded.length,
     log: log.join('\n'),
   });
 
   say(
-    `Done: ${result.itemIds.length} item(s) into the review queue for ${edition.date}, ` +
+    `Done: ${itemIds.length} item(s) into the review queue for ${edition.date}, ` +
       `${discarded.length} discarded.`
   );
   say('Nothing is visible to students until you approve it in Admin → Review queue.');

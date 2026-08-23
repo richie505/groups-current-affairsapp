@@ -105,6 +105,7 @@ const questions = db
   .prepare(
     `SELECT COUNT(*) AS total,
             SUM(CASE WHEN TRIM(m.unit_code) <> '' THEN 1 ELSE 0 END) AS tagged,
+            SUM(CASE WHEN m.status <> 'published' THEN 1 ELSE 0 END) AS pending,
             COUNT(DISTINCT NULLIF(TRIM(m.unit_code), '')) AS units
        FROM ca_mcqs m JOIN ca_items i ON i.id = m.item_id
       WHERE i.status <> 'discarded'`
@@ -117,8 +118,21 @@ console.log(
 );
 if (questions.tagged < questions.total) {
   console.log(
-    `  ${questions.total - questions.tagged} were written before questions carried a unit, or ` +
-      'were tagged\n  to a code the checker did not recognise. Re-draft their items to tag them.'
+    `  ${questions.total - questions.tagged} carry no unit. Either they were written before ` +
+      'questions had one,\n  or the item they belong to feeds no objective unit — the second is ' +
+      'a finding, not a gap.\n  Re-tag the first kind with:\n' +
+      '    node server/scripts/requestion-items.js --dry-run'
+  );
+}
+// COUNTED SEPARATELY, BECAUSE A QUESTION NOBODY HAS APPROVED IS NOT COVERAGE.
+//
+// The totals above answer "what has been written". This answers "what can a
+// student actually practise", and conflating the two is how a bank reports
+// itself complete while the material is still sitting in a queue.
+if (questions.pending) {
+  console.log(
+    `  ${questions.pending} of those are NOT visible to students — they are on published items\n` +
+      '  and are waiting on review in Admin → Review queue.'
   );
 }
 const perUnit = db

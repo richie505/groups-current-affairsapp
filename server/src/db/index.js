@@ -66,7 +66,23 @@ db.exec(schema);
     // all — so "how well is Group-I Prelims section B covered" was a question
     // the bank could not answer about itself. Coverage was measurable on
     // articles and invisible on the thing a student actually practises.
-    ca_mcqs: [['unit_code', "TEXT NOT NULL DEFAULT ''"]],
+    ca_mcqs: [
+      ['unit_code', "TEXT NOT NULL DEFAULT ''"],
+      // Whether this particular QUESTION has been reviewed.
+      //
+      // Item status used to be the only gate, which was right while questions
+      // only ever arrived with the item that carried them. It stopped being
+      // right the moment questions could be regenerated on an item that is
+      // already published — re-tagging the bank to syllabus units rewrites the
+      // questions on 33 live items, and without this column every one of them
+      // would reach a student the instant the script finished.
+      //
+      // Defaults to 'published' so the 270 questions that existed before the
+      // column keep working: they were reviewed as part of their item, and a
+      // default of 'draft' would have silently emptied every practice screen.
+      // Only questions written onto an ALREADY-PUBLISHED item start as 'draft'.
+      ['status', "TEXT NOT NULL DEFAULT 'published'"],
+    ],
     // The eight-section Group-I note template. Added after the first version
     // shipped with a single angle field, so existing rows keep their fact and
     // angle and simply have the new sections empty until edited or redrafted.
