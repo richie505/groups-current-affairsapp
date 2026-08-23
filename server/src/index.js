@@ -1,5 +1,20 @@
-require('dotenv').config();
 const path = require('path');
+
+// The .env lives at the REPO ROOT, and dotenv resolves a bare config() against
+// process.cwd(). The server is started from `server/` — by npm --prefix, by the
+// launch config, by anyone in that directory — so the bare call found nothing
+// and silently loaded no environment at all.
+//
+// Silently is the problem. dotenv does not complain about a missing file, and
+// every variable has a working fallback, so the app ran perfectly: PORT already
+// defaults to 4100, CORS is empty anyway, and the drafting pipeline reads the
+// same file itself through its own loader with an explicit path.
+//
+// Except JWT_SECRET, whose fallback is a well-known development string. Every
+// session token this app has ever issued was signed with it, while the .env sat
+// beside the code carrying a generated secret and a comment explaining that
+// changing it would log everyone out. It had never been used.
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 

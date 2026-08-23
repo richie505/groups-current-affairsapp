@@ -442,6 +442,15 @@ function EditionList() {
 // ---------------------------------------------------------------------------
 
 function OneEdition({ id }) {
+  // Which articles the admin has ticked. Held here rather than in the panel
+  // because the ticking happens in the list and the drafting happens in the
+  // panel, and the two are siblings.
+  const [selected, setSelected] = useState([]);
+  const toggleSelected = (articleId) =>
+    setSelected((prev) =>
+      prev.includes(articleId) ? prev.filter((n) => n !== articleId) : [...prev, articleId]
+    );
+
   const { data, error, loading, reload } = useResource(`/admin/editions/${id}`);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const navigate = useNavigate();
@@ -529,13 +538,20 @@ function OneEdition({ id }) {
       ) : null}
 
       {e.status === 'processed' ? (
-        <DraftPanel editionId={id} articles={live} onFinished={reload} />
+        <DraftPanel
+          editionId={id}
+          articles={live}
+          selected={selected}
+          onClearSelection={() => setSelected([])}
+          onSelect={setSelected}
+          onFinished={reload}
+        />
       ) : null}
 
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Articles ({live.length})
       </h2>
-      <ArticleList rows={live} />
+      <ArticleList rows={live} selected={selected} onToggle={toggleSelected} />
 
       {dups.length ? (
         <section className="mt-5">
@@ -578,7 +594,7 @@ function OneEdition({ id }) {
 // bottom of the HIGH band; the counts below the slider say exactly how many
 // articles each choice would send, so the decision is made with the number in
 // view rather than after the bill.
-function DraftPanel({ editionId, articles, onFinished }) {
+function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelection, onFinished }) {
   // 45 rather than 55 — see the worker for the measurement. Above 55 an edition
   // yields a handful of items and the model discards none of them; the band from
   // 45 to 54 is where the examinable AP material sits.
@@ -622,7 +638,19 @@ function DraftPanel({ editionId, articles, onFinished }) {
   const eligible = articles.filter((a) => a.score != null && a.score >= minScore);
   const undrafted = eligible.filter((a) => !a.item_id);
   const alreadyDrafted = articles.filter((a) => a.item_id).length;
-  const todo = capped ? Math.min(undrafted.length, limit) : undrafted.length;
+
+  // A hand-picked list replaces the threshold rather than narrowing it. The
+  // score is a good default and a bad master: it cannot know that today's 38 is
+  // the Bill the State is arguing about, and the admin reading the page can.
+  const picking = selected.length > 0;
+  const todo = picking ? selected.length : capped ? Math.min(undrafted.length, limit) : undrafted.length;
+
+  // What the threshold would take that touches no syllabus unit at all — the
+  // filler, named rather than merely present. Offered as a one-click correction
+  // instead of a silent exclusion, because "the app quietly skipped things" is
+  // a worse property for this screen than a longer list.
+  const offSyllabus = undrafted.filter((a) => !a.units?.length);
+  const onSyllabus = undrafted.filter((a) => a.units?.length);
   // ~33s per article, measured across every run so far: one model call for the
   // note and one for the questions.
   const eta = Math.max(1, Math.round((todo * 33) / 60));
@@ -631,7 +659,9 @@ function DraftPanel({ editionId, articles, onFinished }) {
     setBusy(true);
     setMsg(null);
     try {
-      const qs = `min_score=${minScore}` + (capped ? `&limit=${limit}` : '');
+      const qs = picking
+        ? `articles=${selected.join(',')}`
+        : `min_score=${minScore}` + (capped ? `&limit=${limit}` : '');
       await api.post(`/admin/editions/${editionId}/draft?${qs}`, {});
       const now = new Date();
       const done = new Date(now.getTime() + todo * 33 * 1000);
@@ -701,23 +731,65 @@ function DraftPanel({ editionId, articles, onFinished }) {
         <button
           type="button"
           onClick={start}
-          disabled={busy || running || !undrafted.length}
+          disabled={busy || running || !todo}
           className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {running ? 'Drafting…' : `Draft ${todo} article(s) · about ${eta} min`}
+          {running
+            ? 'Drafting…'
+            : picking
+              ? `Draft the ${todo} you picked · about ${eta} min`
+              : `Draft ${todo} article(s) · about ${eta} min`}
         </button>
       </div>
 
       {/* The honest count. `eligible` is what the threshold selects; `undrafted`
           is what would actually be sent, and the gap between them is the work
           already done rather than work being skipped. */}
-      <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-        {eligible.length} article(s) at or above {minScore}
-        {alreadyDrafted ? ` · ${alreadyDrafted} already drafted` : ''}
-        {capped && undrafted.length > limit
-          ? ` · the cap holds this run to ${limit}, leaving ${undrafted.length - limit} for a second run`
-          : ''}
-      </p>
+      {picking ? (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-brand-800 dark:text-brand-200">
+          <strong>{selected.length} article(s) picked by hand.</strong>
+          <span className="text-slate-600 dark:text-slate-400">
+            The score threshold is ignored for this run — what you ticked is what gets drafted.
+          </span>
+          <button
+            type="button"
+            onClick={onClearSelection}
+            className="font-semibold text-brand-700 underline dark:text-brand-300"
+          >
+            Clear the selection
+          </button>
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+            {eligible.length} article(s) at or above {minScore}
+            {alreadyDrafted ? ` · ${alreadyDrafted} already drafted` : ''}
+            {capped && undrafted.length > limit
+              ? ` · the cap holds this run to ${limit}, leaving ${undrafted.length - limit} for a second run`
+              : ''}
+          </p>
+
+          {/* The syllabus check, on the threshold's own selection.
+              Named rather than silently excluded: a screen that quietly drops
+              things is worse than a longer list, and the admin may well want
+              that road-safety drive for a reason the map cannot see. */}
+          {offSyllabus.length ? (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+              <span>
+                <strong>{offSyllabus.length}</strong> of them match no unit of either syllabus.
+              </span>
+              <button
+                type="button"
+                disabled={running || !onSyllabus.length}
+                onClick={() => onSelect?.(onSyllabus.map((a) => a.id))}
+                className="font-semibold text-brand-700 underline disabled:opacity-40 dark:text-brand-300"
+              >
+                Pick the {onSyllabus.length} that do
+              </button>
+            </p>
+          ) : null}
+        </>
+      )}
 
       {msg ? (
         <p
@@ -796,7 +868,48 @@ function DraftPanel({ editionId, articles, onFinished }) {
   );
 }
 
-function ArticleList({ rows, muted }) {
+// The Group-II syllabus units an article feeds, read off np_article_units.
+//
+// This is the column that answers the question the score cannot: not "how
+// examinable does this look" but "what does it actually feed". An article with
+// nothing here is filler however many AP place names it contains — nineteen
+// articles scoring between 35 and 48 on the two stored editions matched no unit
+// at all, among them a search for missing fishermen, a diesel loco shed
+// inspection and a road-safety drive.
+function UnitChips({ units }) {
+  if (!units?.length) {
+    return (
+      <span
+        className="rounded bg-slate-200 px-1.5 font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+        title="Matches no unit of the Group-I or Group-II syllabus. Usually not worth drafting."
+      >
+        off-syllabus
+      </span>
+    );
+  }
+  return (
+    <>
+      {units.slice(0, 3).map((u) => (
+        <span
+          key={u.unit_code}
+          className={`rounded px-1.5 font-semibold ${
+            u.in_headline
+              ? 'bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200'
+              : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+          }`}
+          title={`${u.label || u.unit_code}${u.matched ? ` — matched on "${u.matched}"` : ''}${
+            u.in_headline ? ' (named in the headline)' : ''
+          }`}
+        >
+          {u.unit_code}
+        </span>
+      ))}
+      {units.length > 3 ? <span>+{units.length - 3}</span> : null}
+    </>
+  );
+}
+
+function ArticleList({ rows, muted, selected = [], onToggle }) {
   if (!rows.length) {
     return <p className="text-sm text-slate-500">None.</p>;
   }
@@ -806,12 +919,27 @@ function ArticleList({ rows, muted }) {
         <li
           key={a.id}
           className={
-            'rounded-md border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-800 ' +
+            'rounded-md border p-2.5 dark:bg-slate-800 ' +
+            (selected.includes(a.id)
+              ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/30 '
+              : 'border-slate-200 bg-white dark:border-slate-700 ') +
             (muted ? 'opacity-70' : '')
           }
         >
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            {onToggle ? (
+              <label className="inline-flex cursor-pointer items-center" title="Draft this article">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(a.id)}
+                  onChange={() => onToggle(a.id)}
+                  className="h-4 w-4 cursor-pointer accent-brand-600"
+                  aria-label={`Select: ${a.headline}`}
+                />
+              </label>
+            ) : null}
             <BandBadge band={a.band} score={a.score} />
+            <UnitChips units={a.units} />
             <span className="font-mono">p{a.page}</span>
             {/* What kind of piece the page says this is. Shown BEFORE drafting,
                 because on the editorial page the difference between a report and

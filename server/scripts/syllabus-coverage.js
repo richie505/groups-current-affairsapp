@@ -1,0 +1,106 @@
+#!/usr/bin/env node
+'use strict';
+
+// How well the syllabus map is covering what the paper actually prints.
+//
+//   node server/scripts/syllabus-coverage.js [--edition 1] [--min-score 45]
+//
+// WHY THIS IS A STANDING REPORT AND NOT A ONE-OFF TUNING JOB
+//
+// The map is a vocabulary, and a vocabulary is never finished. The syllabus is
+// fixed — APPSC publishes it and it does not move — but the words a newspaper
+// uses for it change every week: a new scheme name, a new commission, a project
+// that everybody suddenly calls by its village.
+//
+// So the useful question is not "is the map complete" but "what did it miss
+// TODAY", and the answer is a specific, short list: articles the scorer rated
+// highly and the map matched to nothing. Each one is either
+//
+//   a genuine gap        — "Veligonda Phase-I" is an irrigation project and the
+//                          map had 'irrigation project' but not the name, so add
+//                          the term to server/scripts/g2-syllabus.js; or
+//   the filter working   — "Cultural diversity highlight of gala dinner in
+//                          Vizag" scored 70 on AP place names and instrument
+//                          words and feeds nothing. That is the point.
+//
+// Only a person can tell those apart, which is why this prints them rather than
+// deciding.
+
+const path = require('path');
+const db = require(path.join(__dirname, '..', 'src', 'db'));
+
+const arg = (name, fallback) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i === -1 ? fallback : process.argv[i + 1];
+};
+const minScore = Number(arg('min-score', 45));
+const editionId = arg('edition', null);
+
+const where = ["a.status NOT IN ('duplicate', 'discarded')", 'a.score >= ?'];
+const params = [minScore];
+if (editionId) {
+  where.push('a.edition_id = ?');
+  params.push(Number(editionId));
+}
+
+const rows = db
+  .prepare(
+    `SELECT a.id, a.score, a.headline, a.page, e.date,
+            (SELECT GROUP_CONCAT(u.unit_code, ' ') FROM np_article_units u WHERE u.article_id = a.id) AS units
+       FROM np_articles a JOIN np_editions e ON e.id = a.edition_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY a.score DESC`
+  )
+  .all(...params);
+
+const off = rows.filter((r) => !r.units);
+const on = rows.filter((r) => r.units);
+
+console.log(
+  `${rows.length} article(s) scoring ${minScore} or more` +
+    `${editionId ? ` in edition ${editionId}` : ''}: ` +
+    `${on.length} map to a syllabus unit, ${off.length} map to none.`
+);
+
+// Which units the day actually fed, and — more usefully — which it did not.
+// A unit nothing has ever fed is either genuinely out of season (the Satavahanas
+// do not make the news often) or has a vocabulary that never fires.
+const units = db
+  .prepare(
+    `SELECT r.unit_code, r.label, r.paper,
+            (SELECT COUNT(*) FROM np_article_units u WHERE u.unit_code = r.unit_code) AS n
+       FROM ref_units r
+      WHERE r.exam = 'g2' AND r.broad = 0 AND r.unfeedable = 0
+      ORDER BY n DESC, r.unit_code`
+  )
+  .all();
+
+console.log('\nUNITS BY HOW MUCH THE PAPER FEEDS THEM');
+for (const u of units) {
+  const bar = '█'.repeat(Math.min(24, u.n)) || '·';
+  console.log(`  ${String(u.n).padStart(3)} ${u.unit_code.padEnd(10)} ${bar}  ${u.label.slice(0, 46)}`);
+}
+const cold = units.filter((u) => !u.n);
+if (cold.length) {
+  console.log(
+    `\n${cold.length} unit(s) have never been fed: ${cold.map((u) => u.unit_code).join(', ')}.`
+  );
+  console.log(
+    '  Some of those are seasonal and some are a vocabulary that never fires. The AP history\n' +
+      '  units are genuinely rare in a daily paper; an economy unit at zero is a gap.'
+  );
+}
+
+console.log(`\nSCORED HIGH, MATCHED NOTHING — ${off.length} to judge:`);
+if (!off.length) console.log('  (none)');
+for (const r of off.slice(0, 30)) {
+  console.log(`  ${String(Math.round(r.score)).padStart(3)}  ${r.date} p${r.page}  ${r.headline.slice(0, 66)}`);
+}
+if (off.length > 30) console.log(`  … and ${off.length - 30} more.`);
+
+console.log(
+  '\nFor each: add the missing term to server/scripts/g2-syllabus.js and re-seed, or leave it\n' +
+    'alone because it genuinely feeds nothing. Re-seed and re-score with:\n' +
+    '  node server/scripts/seed-g2-syllabus.js\n' +
+    '  node server/scripts/process-edition.js <editionId>'
+);

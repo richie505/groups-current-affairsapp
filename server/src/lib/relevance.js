@@ -177,6 +177,33 @@ const KEYWORD_STOPLIST = new Set([
   'secretary', 'officer', 'department', 'scheme', 'project', 'meeting',
 ]);
 
+// The Group-II syllabus, as matchable vocabulary.
+//
+// Loaded once per scoring pass and reused across every article, because the
+// alternative is compiling 489 regular expressions 121 times for one edition.
+//
+// `broad` and `unfeedable` units are excluded here rather than filtered later,
+// so nothing downstream can accidentally count them. See scripts/g2-syllabus.js:
+// the 30-mark current-affairs paper matches every newspaper article ever
+// printed, which makes it evidence of nothing at all.
+function loadG2Units(db) {
+  let rows = [];
+  try {
+    rows = db
+      .prepare(
+        `SELECT a.unit_code, a.alias, a.strict, u.label, u.paper
+           FROM ref_unit_aliases a
+           JOIN ref_units u ON u.unit_code = a.unit_code
+          WHERE u.exam = 'g2' AND u.broad = 0 AND u.unfeedable = 0`
+      )
+      .all();
+  } catch {
+    // An older database without the Group-II map still scores, on Group I alone.
+    return [];
+  }
+  return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict) }));
+}
+
 function loadContext(db) {
   const keywords = [];
   const seen = new Set();
@@ -232,7 +259,11 @@ function loadContext(db) {
     db.prepare('SELECT id, tier, ap FROM topics').all().map((r) => [r.id, r])
   );
 
-  return { keywords, pyqCount, topicPapers, topicTier, aliases: T.loadAliases(db) };
+  return {
+    keywords, pyqCount, topicPapers, topicTier,
+    aliases: T.loadAliases(db),
+    g2Units: loadG2Units(db),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +396,96 @@ function score(article, ctx) {
     syllabus = 30;
     notes.push('Tier-1 topic');
   }
+  // ---- A2. the Group-II syllabus ----
+  //
+  // Factor A above asks "does this touch a master topic?", and the master topics
+  // were built from the Group-I map. So an article could serve Group II
+  // perfectly, match no Group-I topic, and score as though it served nobody —
+  // and, worse, an article that served NEITHER exam scored the same as one that
+  // served Group II alone. That is the shape of the filler problem: the scorer
+  // had no way to say "this is on nobody's syllabus".
+  //
+  // The units matched are recorded whatever the score, because the drafter needs
+  // them (it should write to the unit APPSC actually examines) and the admin
+  // needs them (a list of articles with no unit between them is a list to skip).
+  const g2Hits = [];
+  for (const u of ctx.g2Units || []) {
+    const inHead = u.matcher.test(head, T.norm(head));
+    const inBody = inHead || u.matcher.test(body, T.norm(body));
+    if (!inHead && !inBody) continue;
+    const found = g2Hits.find((h) => h.unit_code === u.unit_code);
+    if (found) {
+      found.hits += 1;
+      found.in_headline = found.in_headline || (inHead ? 1 : 0);
+      if (found.matched.length < 4) found.matched.push(u.alias);
+    } else {
+      g2Hits.push({
+        unit_code: u.unit_code, label: u.label, paper: u.paper,
+        hits: 1, in_headline: inHead ? 1 : 0, matched: [u.alias],
+      });
+    }
+  }
+  // Strongest first: a unit named in the headline, then one with more distinct
+  // terms behind it. A single body mention of "hospital" is not a health-policy
+  // article, and the ordering is what lets a caller take the top two and be
+  // right most of the time.
+  g2Hits.sort((a, b) => b.in_headline - a.in_headline || b.matched.length - a.matched.length || b.hits - a.hits);
+
+  // WHAT COUNTS AS EVIDENCE, measured rather than assumed.
+  //
+  // The first version scored any match at all, and on a real edition it raised
+  // "Woman dies in lift accident" from 20 to 30 on the word `hospital`, and a
+  // Ukraine war report from 19 to 30 on `missile`. One passing noun is not a
+  // syllabus connection; it is the same failure as a unit tag that lands on
+  // three quarters of the corpus.
+  //
+  // So a unit must be NAMED IN THE HEADLINE, or reached by two DISTINCT terms in
+  // the body, or reached by one term SPECIFIC enough to stand alone.
+  //
+  // That last clause is the one that took a second pass. Requiring two terms
+  // read "YSRCP disrupts proceedings in Council" as off-syllabus, because the
+  // body says "Legislative Council" once and says it exactly right. The
+  // distinction that matters is not how often a term appears but how much work
+  // it does: every alias that misfired — hospital, women, missile, Gandhi — is a
+  // single common word, and every phrase — "Legislative Council", "Right to
+  // Education", "minimum support price" — names its unit on sight.
+  //
+  // A space is a crude test for that and a good one here: a newspaper does not
+  // write "minimum support price" about anything else.
+  const specific = (h) => h.matched.some((m) => m.includes(' '));
+  const solid = g2Hits.filter((h) => h.in_headline || h.matched.length >= 2 || specific(h));
+
+  // The same foreign-domestic guard factor A already applies. A war report
+  // naming a missile is not Indian defence technology, and letting the Group-II
+  // map in through the side door would undo a fix that is already made above.
+  if (solid.length && !foreignDomestic && syllabus < 18) {
+    const headUnit = solid.some((h) => h.in_headline);
+    // Never above what a Group-I topic match earns. The two syllabi overlap
+    // heavily, and paying twice for one sentence inflates everything equally,
+    // which is the same as paying for nothing.
+    const gained = headUnit ? 18 : 12;
+    if (gained > syllabus) {
+      syllabus = gained;
+      notes.push(
+        `Group-II syllabus: ${solid.slice(0, 2).map((h) => h.unit_code).join(', ')}` +
+          `${headUnit ? ' (in the headline)' : ''}`
+      );
+    }
+  }
+
+  // THE ANSWER THE ADMIN ACTUALLY WANTS.
+  //
+  // Not "how relevant is this" but "is this on anybody's syllabus at all". An
+  // article that names no master topic, no Group-II unit and no past-question
+  // angle is filler however many AP place names it happens to contain — and
+  // until now nothing in the score said so, because every factor measured a
+  // presence and none measured the absence.
+  const offSyllabus = !solid.length && !matched.length;
+  if (offSyllabus) notes.push('touches no unit of either syllabus');
   breakdown.syllabus = { score: syllabus, max: WEIGHTS.syllabus };
+  // Solid matches first, so a reader of the breakdown sees what was counted.
+  breakdown.g2_units = solid.slice(0, 6).map((h) => h.unit_code);
+  breakdown.off_syllabus = offSyllabus ? 1 : 0;
 
   // ---- B. PYQ keyword match (20) ----
   const kwHits = [];
@@ -439,6 +559,9 @@ function score(article, ctx) {
     breakdown,
     keywords: kwHits,
     topics: matched,
+    g2_units: solid,
+    g2_weak: g2Hits.filter((h) => !solid.includes(h)),
+    off_syllabus: offSyllabus,
     vetoed: null,
     why: notes.join('; ') || 'no examinable signal',
   };

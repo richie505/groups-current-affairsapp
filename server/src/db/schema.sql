@@ -56,6 +56,36 @@ CREATE TABLE IF NOT EXISTS ref_units (
   order_index INTEGER NOT NULL DEFAULT 0
 );
 
+-- The words a NEWSPAPER uses for a syllabus unit, as opposed to the words the
+-- syllabus uses for itself. The syllabus says "Distribution of Legislative and
+-- Executive Powers between the Union and the States"; the paper says
+-- "Centre-State", "concurrent list", "Article 246". Matching the syllabus's own
+-- phrasing would match almost nothing.
+--
+-- Same shape as topic_aliases, and matched by the same code — see
+-- server/src/lib/topics.js.
+CREATE TABLE IF NOT EXISTS ref_unit_aliases (
+  unit_code TEXT NOT NULL REFERENCES ref_units(unit_code) ON DELETE CASCADE,
+  alias     TEXT NOT NULL,
+  strict    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (unit_code, alias)
+);
+CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);
+
+-- Which syllabus units an ARTICLE touches, decided before any model is asked.
+-- Derived and rebuilt on every re-score, like np_article_topics: the vocabulary
+-- will improve, and a derived table that cannot be thrown away becomes a
+-- liability the moment it disagrees with the code that produced it.
+CREATE TABLE IF NOT EXISTS np_article_units (
+  article_id  INTEGER NOT NULL REFERENCES np_articles(id) ON DELETE CASCADE,
+  unit_code   TEXT NOT NULL,
+  hits        INTEGER NOT NULL DEFAULT 1,
+  in_headline INTEGER NOT NULL DEFAULT 0,
+  matched     TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (article_id, unit_code)
+);
+CREATE INDEX IF NOT EXISTS idx_np_article_units_code ON np_article_units(unit_code);
+
 -- Facts already found to have gone stale, with the corrected position.
 --
 -- This exists because a verification pass over the user's own blueprint found

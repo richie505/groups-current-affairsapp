@@ -21,6 +21,22 @@ db.exec(schema);
   const columns = (table) => db.pragma(`table_info(${table})`).map((c) => c.name);
 
   const wanted = {
+    // The syllabus map grew a second exam. `ref_units` held Papers I to V — the
+    // Group-I Mains map — and nothing else, so "is this on the syllabus?" was
+    // only ever asked of Group I. `exam` separates the two; `syllabus_text` is
+    // APPSC's own wording, which the drafter is shown so it writes to the unit
+    // rather than to the label. See server/scripts/g2-syllabus.js.
+    ref_units: [
+      ['exam', "TEXT NOT NULL DEFAULT 'g1'"],
+      ['syllabus_text', "TEXT NOT NULL DEFAULT ''"],
+      ['marks', 'INTEGER'],
+      // A unit nothing in a newspaper can feed (mental ability), or one that
+      // matches everything and is therefore evidence of nothing (the 30-mark
+      // current-affairs paper). Both are excluded from scoring, for opposite
+      // reasons, and both are recorded so their absence is a decision.
+      ['unfeedable', 'INTEGER NOT NULL DEFAULT 0'],
+      ['broad', 'INTEGER NOT NULL DEFAULT 0'],
+    ],
     // Paced learning. Off for everyone until they choose otherwise, which is why
     // it is a column with a default rather than a settings table: the feature is
     // a discipline, and a discipline nobody opted into is an obstacle.

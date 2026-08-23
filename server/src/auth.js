@@ -1,6 +1,20 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-me';
+
+// Said out loud, once, at startup.
+//
+// The fallback above is a working secret, so an app running on it behaves
+// exactly like one running on a real one — which is how this app signed every
+// token it ever issued with a string published in its own source. The .env was
+// never loaded (see src/index.js) and nothing anywhere said so.
+if (!process.env.JWT_SECRET) {
+  console.warn(
+    '[auth] JWT_SECRET is not set — falling back to the development secret, which is ' +
+      'in the source. Anyone can mint a token. Set it in the repo-root .env before ' +
+      'this is reachable by anyone but you.'
+  );
+}
 const TOKEN_TTL = '30d';
 
 // exam_track rides in the token because the track lens decides what every

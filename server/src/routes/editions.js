@@ -166,14 +166,53 @@ router.post('/:id/draft', (req, res) => {
   const limit = Number(req.query.limit);
   const redraft = String(req.query.redraft || '') === '1';
 
-  const waiting = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM np_articles
-        WHERE edition_id = ? AND status NOT IN ('duplicate', 'discarded')
-          AND score IS NOT NULL AND score >= ?
-          ${redraft ? '' : 'AND item_id IS NULL'}`
-    )
-    .get(id, Number.isFinite(minScore) ? minScore : 55).n;
+  // AN EXPLICIT LIST OF ARTICLES, chosen by the admin, instead of a threshold.
+  //
+  // The score is a good default and a bad master. It cannot know that today's
+  // 38 is the Bill the whole State is arguing about, or that today's 62 is a
+  // routine review meeting dressed in instrument words. The admin reading the
+  // page can. So the threshold stays exactly as it was, and this sits beside it.
+  //
+  // Validated against THIS edition before anything is spawned: an id from
+  // another edition, or one that does not exist, would otherwise reach the
+  // worker and be silently skipped, which looks identical to drafting nothing.
+  const picked = String(req.query.articles || '')
+    .split(',')
+    .map((n) => Number(n.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (picked.length) {
+    const holes = picked.map(() => '?').join(',');
+    const valid = db
+      .prepare(
+        `SELECT id FROM np_articles
+          WHERE edition_id = ? AND id IN (${holes}) AND status NOT IN ('duplicate', 'discarded')`
+      )
+      .all(id, ...picked)
+      .map((r) => r.id);
+    const missing = picked.filter((n) => !valid.includes(n));
+    if (missing.length) {
+      return res.status(400).json({
+        error: `${missing.length} of the ${picked.length} selected article(s) are not draftable in this edition.`,
+      });
+    }
+    if (valid.length > 60) {
+      return res.status(400).json({ error: 'Select at most 60 articles in one run.' });
+    }
+  }
+
+  // A hand-picked list has already been validated against this edition, so its
+  // own length IS the count. Both branches are a number, so the check below
+  // reads the same either way.
+  const waiting = picked.length
+    ? picked.length
+    : db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM np_articles
+            WHERE edition_id = ? AND status NOT IN ('duplicate', 'discarded')
+              AND score IS NOT NULL AND score >= ?
+              ${redraft ? '' : 'AND item_id IS NULL'}`
+        )
+        .get(id, Number.isFinite(minScore) ? minScore : 55).n;
   if (!waiting) {
     return res.status(409).json({
       error: 'No articles are waiting to be drafted at that score. Lower the threshold, or ' +
@@ -182,7 +221,11 @@ router.post('/:id/draft', (req, res) => {
   }
 
   const argv = [DRAFTER, String(id)];
-  if (Number.isFinite(minScore)) argv.push('--min-score', String(minScore));
+  // A hand-picked list is an instruction, so it overrides the threshold rather
+  // than being filtered by it: choosing an article scored 12 and then having it
+  // silently dropped for scoring 12 would be the worst of both.
+  if (picked.length) argv.push('--article', picked.join(','), '--min-score', '0');
+  else if (Number.isFinite(minScore)) argv.push('--min-score', String(minScore));
   // Only passed when the caller explicitly asked for a cap. Left off, the worker
   // drafts every eligible article, so one press of the button finishes the
   // edition rather than leaving a remainder to notice.
@@ -262,6 +305,32 @@ router.get('/:id', (req, res) => {
         ORDER BY (status = 'duplicate'), score DESC, ap DESC, page`
     )
     .all(ed.id);
+
+  // Which Group-II syllabus units each article feeds. Attached in one query
+  // rather than joined, because an article touches several and a join would
+  // multiply the rows the client then has to collapse again.
+  //
+  // This is the column the admin actually reads before choosing what to draft:
+  // an article with no unit beside it is filler, whatever it scored.
+  if (articles.length) {
+    const byId = new Map(articles.map((a) => [a.id, a]));
+    for (const a of articles) a.units = [];
+    const holes = articles.map(() => '?').join(',');
+    for (const r of db
+      .prepare(
+        `SELECT u.article_id, u.unit_code, u.in_headline, u.matched, r.label, r.paper
+           FROM np_article_units u
+           LEFT JOIN ref_units r ON r.unit_code = u.unit_code
+          WHERE u.article_id IN (${holes})
+          ORDER BY u.in_headline DESC, u.unit_code`
+      )
+      .all(...articles.map((a) => a.id))) {
+      byId.get(r.article_id)?.units.push({
+        unit_code: r.unit_code, label: r.label, paper: r.paper,
+        in_headline: r.in_headline, matched: r.matched,
+      });
+    }
+  }
 
   const { stored_path, ...safe } = ed;
   res.json({

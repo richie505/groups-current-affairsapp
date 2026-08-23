@@ -467,6 +467,13 @@ function scoreEdition(editionId, { log } = {}) {
     `INSERT OR REPLACE INTO np_article_topics
        (article_id, topic_id, hits, in_headline, matched) VALUES (?, ?, ?, ?, ?)`
   );
+  // Which Group-II syllabus units the article touches. Recorded whatever it
+  // scored, because the question the admin asks of a list is "what does this
+  // feed?" and a blank answer is the useful one.
+  const insUnit = db.prepare(
+    `INSERT OR REPLACE INTO np_article_units
+       (article_id, unit_code, hits, in_headline, matched) VALUES (?, ?, ?, ?, ?)`
+  );
 
   const bands = {};
   let scored = 0;
@@ -478,6 +485,7 @@ function scoreEdition(editionId, { log } = {}) {
       db.prepare(`DELETE FROM np_article_entities WHERE article_id IN (${holes})`).run(...ids);
       db.prepare(`DELETE FROM np_article_keywords WHERE article_id IN (${holes})`).run(...ids);
       db.prepare(`DELETE FROM np_article_topics WHERE article_id IN (${holes})`).run(...ids);
+      db.prepare(`DELETE FROM np_article_units WHERE article_id IN (${holes})`).run(...ids);
     }
 
     for (const a of articles) {
@@ -502,6 +510,9 @@ function scoreEdition(editionId, { log } = {}) {
       for (const e of R.extractEntities(a)) insEnt.run(a.id, e.kind, e.name, e.mentions);
       for (const k of r.keywords) insKw.run(a.id, k.term, k.subject || '', k.in_headline || 0, k.pyq || 0);
       for (const t of r.topics) insTop.run(a.id, t.topic_id, t.hits, t.in_headline || 0, t.matched || '');
+      for (const u of r.g2_units || []) {
+        insUnit.run(a.id, u.unit_code, u.hits, u.in_headline || 0, (u.matched || []).join(', '));
+      }
     }
   })();
 
