@@ -621,6 +621,32 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// The byline is the author, not the author plus the place.
+//
+// The Hindu prints both on one line and the segmenter kept the whole string
+// while ALSO extracting the place into `dateline` — 200 of 220 bylines carried
+// the duplicate, and the byline is what a student reads as the author credit on
+// an op-ed.
+// ---------------------------------------------------------------------------
+
+const SEG = require(path.join(__dirname, '..', '..', 'content-pipeline', 'np-daily', 'segment'));
+
+check('the place comes off the end', SEG.withoutDateline('G.P. Shukla TIRUMALA') === 'G.P. Shukla');
+check(
+  'a two-word place comes off too',
+  SEG.withoutDateline('Krishnadas Rajagopal NEW DELHI') === 'Krishnadas Rajagopal'
+);
+check('a byline with no place is untouched', SEG.withoutDateline('Sahab Deen') === 'Sahab Deen');
+check(
+  'initials are not mistaken for a place',
+  SEG.withoutDateline('Sankar Narayanan E.H.') === 'Sankar Narayanan E.H.'
+);
+// A wire story credited only to its dateline has nothing else to keep. Stripping
+// would leave an empty author credit, which is worse than a slightly odd one.
+check('a byline that is ONLY a place keeps it', SEG.withoutDateline('VIJAYAWADA') === 'VIJAYAWADA');
+check('an empty byline stays empty', SEG.withoutDateline('') === '');
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

@@ -625,8 +625,20 @@ function segmentPage(page, profile, opts = {}) {
       source: page.source,
       headline: a.headline,
       standfirst: a.standfirst,
-      byline: a.byline,
-      bylines,
+      // The AUTHOR, with the place taken off the end.
+      //
+      // The Hindu prints both on one line — "G.P. Shukla TIRUMALA" — and the
+      // segmenter was storing that whole string as the byline while ALSO
+      // extracting TIRUMALA into `dateline`. 193 of 220 bylines carried the
+      // duplicate, and it is not an internal detail: the byline becomes
+      // `ca_items.source_author`, which is rendered to a student as the author
+      // credit on an op-ed. "N. Sudarshan BENGALURU" reads as a bug, because it
+      // is one.
+      //
+      // The place is removed only when `datelineFrom` has actually claimed it,
+      // so the two can never disagree about what the byline is.
+      byline: withoutDateline(a.byline),
+      bylines: bylines.map(withoutDateline),
       credits,
       dateline: datelineFrom(a.byline),
       body: text,
@@ -655,11 +667,30 @@ function segmentPage(page, profile, opts = {}) {
 // "The Hindu Bureau VIJAYAWADA" and "G.P. Shukla TIRUMALA" both end in the
 // place, set in capitals. That place is worth keeping: it is the strongest
 // available signal that a story is an Andhra Pradesh story.
+// A place name is whole capitalised WORDS. The dot is what distinguishes them
+// from initials, and admitting it cost four datelines: "Sankar Narayanan E.H."
+// yielded a dateline of "E.H.", and "T. MUMBAI", "M. GUNTUR" and "C. P .
+// CHENNAI" each carried an initial into the place. A dateline is read as
+// evidence that a story is an Andhra Pradesh story, so a corrupted one is not
+// cosmetic — it is a wrong answer to the question the field exists to answer.
 function datelineFrom(byline) {
-  const m = /\b([A-Z][A-Z .]{3,})\s*$/.exec(String(byline || '').trim());
+  const m = /\b([A-Z]{3,}(?:[ -][A-Z]{2,})*)\s*$/.exec(String(byline || '').trim());
   if (!m) return '';
   const place = m[1].trim();
   return place.length >= 4 && place.length <= 40 ? place : '';
+}
+
+// The same byline with that trailing place removed, so the author credit is the
+// author. Falls back to the whole string when there is nothing to strip, and
+// never returns empty: a byline that is ONLY a place ("VIJAYAWADA", a wire
+// story with no named writer) keeps what it had rather than losing its only
+// content to a tidying rule.
+function withoutDateline(byline) {
+  const text = String(byline || '').trim();
+  const place = datelineFrom(text);
+  if (!place) return text;
+  const stripped = text.slice(0, text.length - place.length).trim().replace(/[,;–—-]\s*$/, '');
+  return stripped || text;
 }
 
 // The printed page number, read off the running head: "9 Friday, August 21,
@@ -814,4 +845,9 @@ function segment(ir, opts = {}) {
   };
 }
 
-module.exports = { segment, segmentPage, clean, dehyphenate, bodySize, ownerOf };
+module.exports = {
+  segment, segmentPage, clean, dehyphenate, bodySize, ownerOf,
+  // Exported for the backfill: the same rule has to be applied to rows already
+  // stored, and a second copy of it would drift from this one.
+  datelineFrom, withoutDateline,
+};

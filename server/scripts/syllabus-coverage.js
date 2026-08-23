@@ -146,6 +146,49 @@ for (const q of perUnit.slice(0, 12)) {
   console.log(`  ${String(q.n).padStart(3)} ${q.unit_code}`);
 }
 
+// THE OPPOSITE FAILURE TO A COLD UNIT.
+//
+// A unit nothing feeds is visible and obviously a gap. A unit that everything
+// feeds is invisible and worse: it looks like excellent coverage right up until
+// someone asks "show me the items for this unit" and gets a third of the
+// corpus. That already happened once in this repo — a generic judiciary topic
+// put P3-U7 on 77% of items, and seven unrelated stories ended up with an
+// identical twelve-unit set.
+//
+// The number that catches it is not the count, it is how far the top unit sits
+// above the rest, and how much of it rests on a SINGLE weak term. An article
+// matched on "Supreme Court" alone is a story that happened to be decided in a
+// court; an article matched on "judicial review" is a story about the judiciary.
+// The first is where a runaway unit comes from.
+// Sorted afresh rather than taking units[0]: the listing above is ordered by
+// exam first so that each paper prints as its own block, which means its head
+// is the top unit of whichever exam happens to sort first, not the top unit
+// overall. Reading position for rank there reported 19 as the maximum while a
+// unit sat at 49.
+const top = units.filter((u) => u.n > 0).sort((a, b) => b.n - a.n)[0];
+const median = (() => {
+  const fed = units.filter((u) => u.n > 0).map((u) => u.n).sort((a, b) => a - b);
+  return fed.length ? fed[Math.floor(fed.length / 2)] : 0;
+})();
+if (top && median && top.n >= 3 * median) {
+  const evidence = db
+    .prepare(
+      `SELECT matched FROM np_article_units WHERE unit_code = ?`
+    )
+    .all(top.unit_code);
+  const single = evidence.filter((e) => String(e.matched || '').split(',').length === 1).length;
+  console.log(
+    `\nCONCENTRATION: ${top.unit_code} is fed by ${top.n} article(s), against a median of ` +
+      `${median}.`
+  );
+  console.log(
+    `  ${single} of those rest on a single matched term. A unit that matches a third of the\n` +
+      '  paper cannot answer "which items feed it", which is the only question it exists to\n' +
+      '  answer. If most of the single-term matches are one generic word, that word belongs\n' +
+      '  in server/scripts/g2-syllabus.js as a removal, not as an alias.'
+  );
+}
+
 const cold = units.filter((u) => !u.n);
 if (cold.length) {
   console.log(
