@@ -34,6 +34,10 @@ const db = require('../db');
 const SELECT = require('../lib/select');
 const { requireAuth, requireAdmin } = require('../auth');
 const ingest = require('../lib/ingest');
+// The run-row helpers, shared with the worker rather than reimplemented — the
+// route and the worker must agree on what a run row looks like, because the
+// route now opens it and the worker closes it.
+const L = require(path.join(__dirname, '..', '..', '..', 'content-pipeline', 'ca-daily', 'lib'));
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -179,6 +183,114 @@ const runningDraft = (editionId) => {
   return null;
 };
 
+// ---------------------------------------------------------------------------
+// GET /api/admin/editions/:id/plan
+// ---------------------------------------------------------------------------
+
+// WHAT THE ADAPTIVE SELECTOR WOULD DRAFT, AND WHY — FOR FREE.
+//
+// The admin screen used to ask for a minimum score and then show a count of the
+// rows above it. That is a question the person on the screen cannot answer well:
+// the score is a blend of five factors, so a threshold on it admits articles
+// that feed no syllabus unit and rejects articles that feed four. Measured over
+// 248 articles, `>= 45` drafted 10 that connect to nothing and skipped 54 that
+// connect to something.
+//
+// So the screen stops asking for a number and starts showing the decision. This
+// endpoint runs exactly the selector the worker runs — same module, same
+// defaults — and returns the picked list with the reason each one was picked,
+// plus the articles it turned down that scored well but match no unit, which is
+// the syllabus vocabulary's to-do list.
+//
+// It costs nothing: no model call, one query per edition. That is the whole
+// point of keeping selection deterministic — the admin can look before paying.
+router.get('/:id/plan', (req, res) => {
+  const id = Number(req.params.id);
+  const ed = db.prepare('SELECT id, date, publication FROM np_editions WHERE id = ?').get(id);
+  if (!ed) return res.status(404).json({ error: 'No such edition.' });
+
+  const redraft = String(req.query.redraft || '') === '1';
+  const opts = {};
+  const max = Number(req.query.max);
+  const min = Number(req.query.min);
+  if (Number.isFinite(max) && max > 0) opts.maxItems = max;
+  if (Number.isFinite(min) && min > 0) opts.minItems = min;
+
+  const drafted = new Set(
+    db
+      .prepare('SELECT id FROM np_articles WHERE edition_id = ? AND item_id IS NOT NULL')
+      .all(id)
+      .map((r) => r.id)
+  );
+
+  const rows = SELECT.candidateRows(db, id).filter((r) => redraft || !drafted.has(r.id));
+  const { picked, rejected, config } = SELECT.selectForDrafting(rows, opts);
+
+  // The evidence behind each pick, fetched in two queries rather than two per
+  // article. This is what turns "25 articles" into something a person can audit:
+  // which units, and which blueprint angles the commission has actually used.
+  const ids = picked.map((r) => r.id);
+  const unitsBy = new Map();
+  const kwBy = new Map();
+  if (ids.length) {
+    const holes = ids.map(() => '?').join(',');
+    for (const r of db
+      .prepare(
+        `SELECT au.article_id, au.unit_code, au.in_headline, u.label, u.exam
+           FROM np_article_units au JOIN ref_units u ON u.unit_code = au.unit_code
+          WHERE au.article_id IN (${holes}) AND u.broad = 0 AND u.unfeedable = 0
+          ORDER BY au.in_headline DESC, au.hits DESC`
+      )
+      .all(...ids)) {
+      if (!unitsBy.has(r.article_id)) unitsBy.set(r.article_id, []);
+      unitsBy.get(r.article_id).push({
+        unit_code: r.unit_code, label: r.label, exam: r.exam, in_headline: r.in_headline,
+      });
+    }
+    for (const r of db
+      .prepare(
+        `SELECT article_id, keyword, pyq_count, in_headline
+           FROM np_article_keywords WHERE article_id IN (${holes})
+          ORDER BY in_headline DESC, pyq_count DESC, keyword`
+      )
+      .all(...ids)) {
+      if (!kwBy.has(r.article_id)) kwBy.set(r.article_id, []);
+      kwBy.get(r.article_id).push({ keyword: r.keyword, pyq_count: r.pyq_count });
+    }
+  }
+
+  res.json({
+    edition: { id: ed.id, date: ed.date, publication: ed.publication },
+    config,
+    // Everything the selector considered, so the screen can say what was left.
+    considered: rows.length,
+    alreadyDrafted: drafted.size,
+    picked: picked.map((r) => ({
+      id: r.id,
+      headline: r.headline,
+      page: r.page,
+      score: r.score,
+      band: r.band,
+      leverage: r.leverage,
+      rank: r.rank,
+      units: unitsBy.get(r.id) || [],
+      keywords: (kwBy.get(r.id) || []).slice(0, 6),
+      // How many of this article's angles the commission has asked before. The
+      // blueprint half of "why this one".
+      pyqBacked: (kwBy.get(r.id) || []).filter((k) => k.pyq_count > 0).length,
+    })),
+    // Scored well, connects to nothing. Not an error list — a vocabulary to-do
+    // list, and the reason the rule can afford to be strict about the rest.
+    unmatched: rejected
+      .filter((r) => !r.units && r.score >= 45)
+      .sort((a, b) => b.score - a.score)
+      .map((r) => ({ id: r.id, headline: r.headline, page: r.page, score: r.score })),
+    // Turned down for a reason other than having no unit: too weak overall, or
+    // below the rank the band admits.
+    belowBar: rejected.filter((r) => r.units).length,
+  });
+});
+
 router.post('/:id/draft', (req, res) => {
   const id = Number(req.params.id);
   const ed = db.prepare('SELECT id, status, date FROM np_editions WHERE id = ?').get(id);
@@ -197,6 +309,14 @@ router.post('/:id/draft', (req, res) => {
   const minScore = Number(req.query.min_score);
   const limit = Number(req.query.limit);
   const redraft = String(req.query.redraft || '') === '1';
+  // The ADAPTIVE band. This is the knob the admin screen now offers instead of a
+  // score threshold: how many items a day should yield, with the selector
+  // deciding which. Absent, the defaults in lib/select.js apply.
+  const maxItems = Number(req.query.max);
+  const minItems = Number(req.query.min);
+  const bandOpts = {};
+  if (Number.isFinite(maxItems) && maxItems > 0) bandOpts.maxItems = maxItems;
+  if (Number.isFinite(minItems) && minItems > 0) bandOpts.minItems = minItems;
 
   // AN EXPLICIT LIST OF ARTICLES, chosen by the admin, instead of a threshold.
   //
@@ -257,7 +377,8 @@ router.post('/:id/draft', (req, res) => {
             (r) =>
               redraft ||
               !db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(r.id).item_id
-          )
+          ),
+          bandOpts
         ).picked.length;
   if (!waiting) {
     return res.status(409).json({
@@ -273,6 +394,13 @@ router.post('/:id/draft', (req, res) => {
   // silently dropped for scoring 12 would be the worst of both.
   if (picked.length) argv.push('--article', picked.join(','), '--min-score', '0');
   else if (Number.isFinite(minScore)) argv.push('--min-score', String(minScore));
+  else {
+    // The band, passed only when the caller set it. Omitted, the worker uses the
+    // same defaults the plan endpoint showed — so what the screen previewed is
+    // what the worker drafts.
+    if (bandOpts.maxItems) argv.push('--max', String(bandOpts.maxItems));
+    if (bandOpts.minItems) argv.push('--min', String(bandOpts.minItems));
+  }
   // Only passed when the caller explicitly asked for a cap. Left off, the worker
   // drafts every eligible article, so one press of the button finishes the
   // edition rather than leaving a remainder to notice.
@@ -280,20 +408,53 @@ router.post('/:id/draft', (req, res) => {
   if (req.query.model) argv.push('--model', String(req.query.model));
   if (redraft) argv.push('--redraft');
 
+  // THE LOCK IS TAKEN HERE, NOT BY THE WORKER.
+  //
+  // It used to be the worker's job: this route checked for a running row, span
+  // the child, and the child inserted the row several seconds later once Node
+  // had booted and opened the database. Every request arriving inside that
+  // window passed the check, because no row existed yet — so a double-click
+  // started two runs against the same edition, and a blank-page fault that made
+  // the admin click repeatedly started seven in three minutes.
+  //
+  // Claiming it before the spawn closes the window, and the unique index on
+  // ca_runs(mode) WHERE status='running' closes what is left: if two requests
+  // reach this line together, one insert wins and the other gets a constraint
+  // error, which is a refusal rather than a second run.
+  let runId;
+  try {
+    runId = L.startRun(db, {
+      windowStart: ed.date,
+      windowEnd: ed.date,
+      mode: `edition-${id}`,
+      model: String(req.query.model || process.env.OPENAI_MODEL || ''),
+    });
+  } catch (e) {
+    if (/UNIQUE constraint failed/i.test(e.message)) {
+      return res.status(409).json({ error: 'A drafting run is already in progress.' });
+    }
+    throw e;
+  }
+  argv.push('--run-id', String(runId));
+
   const child = spawn(process.execPath, argv, {
     detached: true,
     stdio: 'ignore',
     cwd: path.join(__dirname, '..', '..', '..'),
   });
   child.on('error', (e) => {
-    // The worker opens its own run row, so a failure to start it leaves nothing
-    // behind to mark failed — which is why this is only logged. The client sees
-    // no run appear and can try again.
+    // The row now exists before the child does, so a failure to start it must
+    // release the lock. Left running, it would refuse every later attempt on
+    // this edition until the two-hour stale sweep — for a worker that never ran.
+    db.prepare(
+      `UPDATE ca_runs SET status = 'failed', finished_at = datetime('now'), log = ?
+        WHERE id = ? AND status = 'running'`
+    ).run(`The drafter could not be started: ${e.message}`, runId);
     console.error(`Could not start the drafter for edition ${id}: ${e.message}`);
   });
   child.unref();
 
-  res.status(202).json({ started: true, id, waiting });
+  res.status(202).json({ started: true, id, waiting, runId });
 });
 
 // Poll target while a run is in flight, and the record of the last one after it

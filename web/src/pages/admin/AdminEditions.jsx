@@ -44,10 +44,10 @@ export default function AdminEditions() {
 
 function StatusPill({ status }) {
   const tone = {
-    uploaded: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
-    processing: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-    processed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
-    failed: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+    uploaded: 'bg-slate-100 text-slate-700',
+    processing: 'bg-amber-100 text-amber-800',
+    processed: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
   }[status];
   return (
     <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold uppercase ${tone}`}>
@@ -61,10 +61,10 @@ function StatusPill({ status }) {
 function BandBadge({ band, score }) {
   if (!band) return null;
   const tone = {
-    critical: 'bg-red-600 text-white',
+    critical: 'bg-red-600 text-slate-50',
     high: 'bg-orange-500 text-white',
-    medium: 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100',
-    low: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
+    medium: 'bg-amber-200 text-amber-900',
+    low: 'bg-slate-100 text-slate-500',
   }[band];
   return (
     <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold uppercase ${tone}`}>
@@ -83,8 +83,8 @@ const GENRE_CHIP = {
   editorial: ['Editorial', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
   interview: ['Interview', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
   column: ['Column', 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'],
-  letters: ['Letters', 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'],
-  archive: ['Archive', 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'],
+  letters: ['Letters', 'bg-slate-200 text-slate-600'],
+  archive: ['Archive', 'bg-slate-200 text-slate-600'],
 };
 
 function GenreChip({ genre, section, why }) {
@@ -119,20 +119,20 @@ function Breakdown({ raw }) {
   ].filter(([, v]) => v);
   return (
     <details className="mt-1">
-      <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+      <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-700">
         why this score
       </summary>
-      <div className="mt-1 rounded bg-slate-50 p-2 dark:bg-slate-900">
+      <div className="mt-1 rounded bg-slate-50 p-2">
         {b.vetoed ? (
-          <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+          <p className="text-[11px] font-semibold text-slate-600">
             Excluded: {b.vetoed}
           </p>
         ) : (
-          <ul className="space-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+          <ul className="space-y-0.5 text-[11px] text-slate-600">
             {rows.map(([label, v]) => (
               <li key={label} className="flex items-center gap-2">
                 <span className="w-32">{label}</span>
-                <span className="h-1.5 w-24 overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
+                <span className="h-1.5 w-24 overflow-hidden rounded bg-slate-200">
                   <span
                     className="block h-full bg-brand-500"
                     style={{ width: `${v.max ? (v.score / v.max) * 100 : 0}%` }}
@@ -264,25 +264,25 @@ function EditionList() {
   return (
     <div>
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Newspaper import</h1>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-bold text-slate-900">Newspaper import</h1>
+        <p className="mt-1 text-sm text-slate-600">
           Upload an edition, and it becomes articles. Everything downstream starts here.
         </p>
       </header>
 
       <form
         onSubmit={upload}
-        className="mb-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"
+        className="mb-6 rounded-lg border border-slate-200 bg-surface p-4"
       >
         <div className="mb-3 grid gap-3 sm:grid-cols-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">
               Publication
             </span>
             <select
               value={form.publication}
               onChange={(e) => setForm((f) => ({ ...f, publication: e.target.value }))}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             >
               {PUBLICATIONS.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -292,7 +292,7 @@ function EditionList() {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">
               Edition
             </span>
             <input
@@ -300,18 +300,18 @@ function EditionList() {
               value={form.edition}
               onChange={(e) => setForm((f) => ({ ...f, edition: e.target.value }))}
               placeholder="Vijayawada"
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">
               Edition date
             </span>
             <input
               type="date"
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
           </label>
         </div>
@@ -321,7 +321,7 @@ function EditionList() {
             ref={fileRef}
             type="file"
             accept="application/pdf,.pdf"
-            className="text-sm text-slate-700 dark:text-slate-300"
+            className="text-sm text-slate-700"
           />
           <button
             type="submit"
@@ -332,7 +332,7 @@ function EditionList() {
           </button>
         </div>
 
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-2 text-xs text-slate-500">
           The same file uploaded twice for the same date is recognised rather than duplicated.
           Telugu editions are accepted but cannot be read until Tesseract has{' '}
           <code>tel.traineddata</code> installed.
@@ -343,10 +343,10 @@ function EditionList() {
             className={
               'mt-3 rounded-md px-3 py-2 text-sm ' +
               (msg.kind === 'error'
-                ? 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-200'
+                ? 'bg-red-50 text-red-800'
                 : msg.kind === 'ok'
-                  ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-200'
-                  : 'bg-slate-50 text-slate-700 dark:bg-slate-900 dark:text-slate-300')
+                  ? 'bg-green-50 text-green-800'
+                  : 'bg-slate-50 text-slate-700')
             }
           >
             {msg.text}
@@ -368,13 +368,13 @@ function EditionList() {
           {data.editions.map((e) => (
             <li
               key={e.id}
-              className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"
+              className="rounded-lg border border-slate-200 bg-surface p-3"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={e.status} />
                 <Link
                   to={`/admin/editions/${e.id}`}
-                  className="font-semibold text-slate-900 hover:underline dark:text-slate-100"
+                  className="font-semibold text-slate-900 hover:underline"
                 >
                   {e.publication}
                   {e.edition ? ` — ${e.edition}` : ''} · {e.date}
@@ -382,18 +382,18 @@ function EditionList() {
                 <span className="text-xs text-slate-500">{mb(e.bytes)}</span>
               </div>
 
-              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
                 {e.status === 'processed' ? (
                   <>
                     <span>{e.pages} pages</span>
                     <span>{e.pages_ocr} OCR'd</span>
                     <span>{e.pages_skipped} skipped as ads</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    <span className="font-semibold text-slate-800">
                       {e.distinct_articles} articles
                     </span>
                     <span>{e.ap_articles} AP</span>
                     {e.critical ? (
-                      <span className="font-semibold text-red-700 dark:text-red-400">
+                      <span className="font-semibold text-red-700">
                         {e.critical} critical
                       </span>
                     ) : null}
@@ -409,7 +409,7 @@ function EditionList() {
                 ) : null}
                 {e.status === 'processing' ? <span>Working — this takes about 30 seconds…</span> : null}
                 {e.status === 'failed' ? (
-                  <span className="text-red-700 dark:text-red-400">{e.error}</span>
+                  <span className="text-red-700">{e.error}</span>
                 ) : null}
               </div>
 
@@ -418,14 +418,14 @@ function EditionList() {
                   <button
                     type="button"
                     onClick={() => process(e.id)}
-                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50"
                   >
                     {e.status === 'processed' ? 'Re-process' : 'Process'}
                   </button>
                 ) : null}
                 <Link
                   to={`/admin/editions/${e.id}`}
-                  className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                  className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50"
                 >
                   Articles
                 </Link>
@@ -455,6 +455,11 @@ function OneEdition({ id }) {
   const { data, error, loading, reload } = useResource(`/admin/editions/${id}`);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const navigate = useNavigate();
+  // Above the early returns below, not beside the code that uses it. A hook
+  // called after `if (loading) return` runs on the loaded render and not on the
+  // loading one, so React counts more hooks than last time and unmounts the
+  // whole tree — a blank page, with the real cause only in the console.
+  const { confirm, dialog } = useConfirm();
 
   const processing = data?.edition?.status === 'processing';
   useEffect(() => {
@@ -467,7 +472,6 @@ function OneEdition({ id }) {
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
   const e = data.edition;
-  const { confirm, dialog } = useConfirm();
   const live = data.articles.filter((a) => a.status !== 'duplicate');
   const dups = data.articles.filter((a) => a.status === 'duplicate');
 
@@ -488,7 +492,7 @@ function OneEdition({ id }) {
       {dialog}
       <Link
         to="/admin/editions"
-        className="mb-3 inline-block text-sm text-brand-700 hover:underline dark:text-brand-400"
+        className="mb-3 inline-block text-sm text-brand-700 hover:underline"
       >
         ← All editions
       </Link>
@@ -496,12 +500,12 @@ function OneEdition({ id }) {
       <header className="mb-4">
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <StatusPill status={e.status} />
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-xl font-bold text-slate-900">
             {e.publication}
             {e.edition ? ` — ${e.edition}` : ''} · {e.date}
           </h1>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-slate-500">
           {e.source_file} · {mb(e.bytes)} · profile {e.profile || '—'} ·{' '}
           {data.file_present ? 'file on disk' : 'file missing — cannot re-process'}
         </p>
@@ -520,9 +524,9 @@ function OneEdition({ id }) {
           ].map(([label, value]) => (
             <div
               key={label}
-              className="rounded-lg border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-800"
+              className="rounded-lg border border-slate-200 bg-surface p-2.5"
             >
-              <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{value}</div>
+              <div className="text-lg font-bold text-slate-900">{value}</div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
             </div>
           ))}
@@ -530,17 +534,17 @@ function OneEdition({ id }) {
       ) : null}
 
       {e.error ? (
-        <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
           {e.error}
         </p>
       ) : null}
 
       {e.log ? (
-        <details className="mb-4 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <details className="mb-4 rounded-md border border-slate-200 bg-surface p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">
             Extraction log
           </summary>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-slate-600 dark:text-slate-400">
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-slate-600">
             {e.log}
           </pre>
         </details>
@@ -557,7 +561,7 @@ function OneEdition({ id }) {
         />
       ) : null}
 
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
         Articles ({live.length})
       </h2>
       <ArticleList rows={live} selected={selected} onToggle={toggleSelected} />
@@ -567,7 +571,7 @@ function OneEdition({ id }) {
           <button
             type="button"
             onClick={() => setShowDuplicates((v) => !v)}
-            className="mb-2 text-sm font-semibold text-brand-700 hover:underline dark:text-brand-400"
+            className="mb-2 text-sm font-semibold text-brand-700 hover:underline"
           >
             {showDuplicates ? 'Hide' : 'Show'} {dups.length} article(s) merged as the same event
           </button>
@@ -579,7 +583,7 @@ function OneEdition({ id }) {
         <button
           type="button"
           onClick={remove}
-          className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300"
+          className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50"
         >
           Delete edition
         </button>
@@ -604,16 +608,32 @@ function OneEdition({ id }) {
 // articles each choice would send, so the decision is made with the number in
 // view rather than after the bill.
 function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelection, onFinished }) {
-  // 45 rather than 55 — see the worker for the measurement. Above 55 an edition
-  // yields a handful of items and the model discards none of them; the band from
-  // 45 to 54 is where the examinable AP material sits.
+  // THE SCREEN SHOWS THE DECISION INSTEAD OF ASKING FOR A NUMBER.
+  //
+  // This panel used to open with a"minimum score" slider defaulted to 45, and
+  // report how many articles sat above it. That asked the admin a question the
+  // score cannot answer: it is a blend of five factors, so a threshold on it
+  // admits articles that feed no syllabus unit and rejects articles that feed
+  // four. Measured over 248 articles, `>= 45` drafted 10 that connect to nothing
+  // and skipped 54 that connect to something.
+  //
+  // So the default is now the adaptive selector — the same module the worker
+  // runs — and the screen's job is to show what it chose and why, before any
+  // money is spent. The flat threshold is still reachable, under Advanced,
+  // because a person overriding a rule deliberately is different from a person
+  // being handed the rule as a default.
+  const [plan, setPlan] = useState(null);
+  const [planErr, setPlanErr] = useState('');
+  // The band is the knob that IS adaptive: how many items a day should yield,
+  // with the selector deciding which. Null means"the defaults the worker uses",
+  // so an untouched screen previews exactly what an untouched run will draft.
+  const [band, setBand] = useState(null);
+  const [advanced, setAdvanced] = useState(false);
   const [minScore, setMinScore] = useState(45);
-  // No cap by default: one press should finish the edition.
-  const [capped, setCapped] = useState(false);
-  const [limit, setLimit] = useState(20);
   const [run, setRun] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showPicks, setShowPicks] = useState(false);
 
   const running = run?.status === 'running';
 
@@ -629,9 +649,22 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
     }
   }, [editionId]);
 
+  const loadPlan = useCallback(async () => {
+    try {
+      const qs = band ? `?max=${band.max}&min=${band.min}` : '';
+      setPlan(await api.get(`/admin/editions/${editionId}/plan${qs}`));
+      setPlanErr('');
+    } catch (e) {
+      setPlanErr(e.message);
+    }
+  }, [editionId, band]);
+
   useEffect(() => {
     loadRun();
   }, [loadRun]);
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
 
   // The worker is a separate process, so the only way this screen learns the run
   // finished is to ask. Same pattern as the extraction poll above.
@@ -639,30 +672,39 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
     if (!running) return undefined;
     const t = setInterval(async () => {
       const stillRunning = await loadRun();
-      if (!stillRunning) onFinished?.();
+      if (!stillRunning) {
+        onFinished?.();
+        loadPlan();
+      }
     }, 4000);
     return () => clearInterval(t);
-  }, [running, loadRun, onFinished]);
+  }, [running, loadRun, loadPlan, onFinished]);
 
-  const eligible = articles.filter((a) => a.score != null && a.score >= minScore);
-  const undrafted = eligible.filter((a) => !a.item_id);
-  const alreadyDrafted = articles.filter((a) => a.item_id).length;
-
-  // A hand-picked list replaces the threshold rather than narrowing it. The
-  // score is a good default and a bad master: it cannot know that today's 38 is
-  // the Bill the State is arguing about, and the admin reading the page can.
   const picking = selected.length > 0;
-  const todo = picking ? selected.length : capped ? Math.min(undrafted.length, limit) : undrafted.length;
+  const cfg = plan?.config;
+  const picks = plan?.picked || [];
+  const unmatched = plan?.unmatched || [];
 
-  // What the threshold would take that touches no syllabus unit at all — the
-  // filler, named rather than merely present. Offered as a one-click correction
-  // instead of a silent exclusion, because "the app quietly skipped things" is
-  // a worse property for this screen than a longer list.
-  const offSyllabus = undrafted.filter((a) => !a.units?.length);
-  const onSyllabus = undrafted.filter((a) => a.units?.length);
+  // The flat-threshold path, kept for Advanced. Counted from the rows this
+  // screen already has rather than from the plan, because the plan deliberately
+  // does not model a threshold.
+  const flatEligible = articles.filter((a) => a.score != null && a.score >= minScore && !a.item_id);
+
+  const todo = picking ? selected.length : advanced ? flatEligible.length : picks.length;
   // ~33s per article, measured across every run so far: one model call for the
   // note and one for the questions.
   const eta = Math.max(1, Math.round((todo * 33) / 60));
+
+  // How the leverage was earned, as a distribution. One article feeding four
+  // units and one feeding one are both"selected", and the difference is the
+  // whole basis of the ranking — so it is shown rather than averaged away.
+  const byUnits = picks.reduce((acc, p) => {
+    const n = p.units.length >= 4 ? '4+' : String(p.units.length || 0);
+    acc[n] = (acc[n] || 0) + 1;
+    return acc;
+  }, {});
+  const pyqBacked = picks.filter((p) => p.pyqBacked > 0).length;
+  const headlineAnchored = picks.filter((p) => p.units.some((u) => u.in_headline)).length;
 
   async function start() {
     setBusy(true);
@@ -670,8 +712,12 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
     try {
       const qs = picking
         ? `articles=${selected.join(',')}`
-        : `min_score=${minScore}` + (capped ? `&limit=${limit}` : '');
-      await api.post(`/admin/editions/${editionId}/draft?${qs}`, {});
+        : advanced
+          ? `min_score=${minScore}`
+          : band
+            ? `max=${band.max}&min=${band.min}`
+            : '';
+      await api.post(`/admin/editions/${editionId}/draft${qs ? `?${qs}` : ''}`, {});
       const now = new Date();
       const done = new Date(now.getTime() + todo * 33 * 1000);
       const hhmm = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -689,54 +735,149 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
     }
   }
 
+  const chip = 'rounded bg-surface px-1.5 py-0.5 font-semibold text-slate-700';
+
   return (
-    <section className="mb-5 rounded-lg border border-brand-200 bg-brand-50/50 p-3 dark:border-brand-900 dark:bg-brand-900/10">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-brand-800 dark:text-brand-300">
+    <section className="mb-5 rounded-lg border border-brand-200 bg-brand-50/50 p-3">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-brand-800">
         Draft knowledge items
       </h2>
-      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+      <p className="mt-0.5 text-xs text-slate-600">
         Turns scored articles into drafted items in the review queue. Nothing reaches students
         until you approve it there.
       </p>
 
-      <div className="mt-3 flex flex-wrap items-end gap-4">
-        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-          Minimum score
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={minScore}
-            disabled={running}
-            onChange={(ev) => setMinScore(Number(ev.target.value))}
-            className="mt-1 block w-44"
-          />
-          <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-            {minScore}
+      {picking ? (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-brand-800">
+          <strong>{selected.length} article(s) picked by hand.</strong>
+          <span className="text-slate-600">
+            The selector is ignored for this run — what you ticked is what gets drafted.
           </span>
-        </label>
+          <button
+            type="button"
+            onClick={onClearSelection}
+            className="font-semibold text-brand-700 underline"
+          >
+            Clear the selection
+          </button>
+        </p>
+      ) : advanced ? (
+        <div className="mt-3">
+          <label className="text-xs font-semibold text-slate-700">
+            Minimum score (flat threshold)
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={minScore}
+              disabled={running}
+              onChange={(ev) => setMinScore(Number(ev.target.value))}
+              className="mt-1 block w-44"
+            />
+            <span className="font-mono text-sm font-bold text-slate-900">
+              {minScore}
+            </span>
+          </label>
+          <p className="mt-1 text-xs text-amber-700">
+            {flatEligible.length} article(s) at or above {minScore}. A flat threshold ignores the
+            syllabus: it will draft articles that feed no unit and skip articles that feed several.
+          </p>
+        </div>
+      ) : !plan ? (
+        <p className="mt-3 text-xs text-slate-500">
+          {planErr ? `Could not work out the selection: ${planErr}` : 'Working out the selection…'}
+        </p>
+      ) : (
+        <>
+          {/* THE HEADLINE CLAIM, and the one number that matters: every article
+              selected connects to a published syllabus unit. */}
+          <p className="mt-3 text-sm font-semibold text-slate-900">
+            {picks.length} article{picks.length === 1 ? '' : 's'} selected
+            {picks.length ? ' — all of them feed a syllabus unit' : ''}
+            {plan.alreadyDrafted ? (
+              <span className="font-normal text-slate-500"> · {plan.alreadyDrafted} already drafted</span>
+            ) : null}
+          </p>
 
-        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={capped}
-            disabled={running}
-            onChange={(ev) => setCapped(ev.target.checked)}
-            className="h-4 w-4"
-          />
-          Stop after
-          <input
-            type="number"
-            min="1"
-            max="200"
-            value={limit}
-            disabled={running || !capped}
-            onChange={(ev) => setLimit(Number(ev.target.value) || 1)}
-            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800"
-          />
-        </label>
+          <p className="mt-1 text-xs text-slate-600">
+            Ranked by <strong>55% syllabus leverage + 45% relevance score</strong>. Leverage counts
+            the distinct syllabus units an article feeds, with a bonus when a unit is named in the
+            headline. Nothing that connects to no unit is drafted automatically.
+          </p>
 
+          {picks.length ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+              <span className="font-semibold uppercase tracking-wide text-slate-500">Syllabus</span>
+              {['4+', '3', '2', '1'].map((k) =>
+                byUnits[k] ? (
+                  <span key={k} className={chip}>
+                    {byUnits[k]} feed {k} unit{k === '1' ? '' : 's'}
+                  </span>
+                ) : null
+              )}
+              {headlineAnchored ? (
+                <span className={chip}>{headlineAnchored} named in the headline</span>
+              ) : null}
+              <span className="mx-1 text-slate-400">|</span>
+              <span className="font-semibold uppercase tracking-wide text-slate-500">Blueprint</span>
+              <span className={chip}>
+                {pyqBacked} of {picks.length} carry an angle APPSC has asked before
+              </span>
+            </div>
+          ) : null}
+
+          {/* THE BAND — the knob that is genuinely adaptive. Not"which
+              articles", which the selector decides, but"how big a digest should
+              a day yield". */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-slate-700">Digest size</span>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              disabled={running}
+              value={band ? band.min : cfg?.minItems ?? 12}
+              onChange={(ev) =>
+                setBand({
+                  min: Math.max(1, Number(ev.target.value) || 1),
+                  max: band ? band.max : cfg?.maxItems ?? 35,
+                })
+              }
+              className="w-16 rounded-md border border-slate-300 px-2 py-1"
+            />
+            <span className="text-slate-500">to</span>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              disabled={running}
+              value={band ? band.max : cfg?.maxItems ?? 35}
+              onChange={(ev) =>
+                setBand({
+                  min: band ? band.min : cfg?.minItems ?? 12,
+                  max: Math.max(1, Number(ev.target.value) || 1),
+                })
+              }
+              className="w-16 rounded-md border border-slate-300 px-2 py-1"
+            />
+            <span className="text-slate-500">
+              items. A thin paper reaches further down the ranking; a rich one stops at the cap.
+            </span>
+            {band ? (
+              <button
+                type="button"
+                onClick={() => setBand(null)}
+                className="font-semibold text-brand-700 underline"
+              >
+                reset
+              </button>
+            ) : null}
+          </div>
+        </>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={start}
@@ -749,64 +890,115 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
               ? `Draft the ${todo} you picked · about ${eta} min`
               : `Draft ${todo} article(s) · about ${eta} min`}
         </button>
-      </div>
 
-      {/* The honest count. `eligible` is what the threshold selects; `undrafted`
-          is what would actually be sent, and the gap between them is the work
-          already done rather than work being skipped. */}
-      {picking ? (
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-brand-800 dark:text-brand-200">
-          <strong>{selected.length} article(s) picked by hand.</strong>
-          <span className="text-slate-600 dark:text-slate-400">
-            The score threshold is ignored for this run — what you ticked is what gets drafted.
-          </span>
+        {!picking ? (
           <button
             type="button"
-            onClick={onClearSelection}
-            className="font-semibold text-brand-700 underline dark:text-brand-300"
+            onClick={() => setAdvanced((v) => !v)}
+            className="text-xs font-semibold text-slate-500 underline hover:text-slate-700"
           >
-            Clear the selection
+            {advanced ? 'Use the adaptive selection' : 'Advanced: use a flat score threshold'}
           </button>
-        </p>
-      ) : (
-        <>
-          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-            {eligible.length} article(s) at or above {minScore}
-            {alreadyDrafted ? ` · ${alreadyDrafted} already drafted` : ''}
-            {capped && undrafted.length > limit
-              ? ` · the cap holds this run to ${limit}, leaving ${undrafted.length - limit} for a second run`
-              : ''}
-          </p>
+        ) : null}
+      </div>
 
-          {/* The syllabus check, on the threshold's own selection.
-              Named rather than silently excluded: a screen that quietly drops
-              things is worse than a longer list, and the admin may well want
-              that road-safety drive for a reason the map cannot see. */}
-          {offSyllabus.length ? (
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-              <span>
-                <strong>{offSyllabus.length}</strong> of them match no unit of either syllabus.
-              </span>
-              <button
-                type="button"
-                disabled={running || !onSyllabus.length}
-                onClick={() => onSelect?.(onSyllabus.map((a) => a.id))}
-                className="font-semibold text-brand-700 underline disabled:opacity-40 dark:text-brand-300"
-              >
-                Pick the {onSyllabus.length} that do
-              </button>
+      {/* WHAT IT PICKED, on demand. Collapsed by default because the summary
+          above is the decision; this is the audit trail behind it. */}
+      {!picking && !advanced && picks.length ? (
+        <details className="mt-3" open={showPicks} onToggle={(e) => setShowPicks(e.target.open)}>
+          <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+            What it picked, and why ({picks.length})
+          </summary>
+          <div className="mt-1.5 overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Rank</th>
+                  <th className="py-1 pr-2 font-semibold">Score</th>
+                  <th className="py-1 pr-2 font-semibold">Headline</th>
+                  <th className="py-1 font-semibold">Syllabus units it feeds</th>
+                </tr>
+              </thead>
+              <tbody>
+                {picks.map((p) => (
+                  <tr key={p.id} className="border-t border-slate-200 align-top">
+                    <td className="py-1 pr-2 font-mono font-bold text-brand-800">
+                      {p.rank}
+                    </td>
+                    <td className="py-1 pr-2 font-mono text-slate-500">{Math.round(p.score)}</td>
+                    <td className="py-1 pr-2 text-slate-800">
+                      <span className="text-slate-400">p{p.page} </span>
+                      {(p.headline || '').slice(0, 70)}
+                    </td>
+                    <td className="py-1">
+                      <span className="flex flex-wrap gap-1">
+                        {p.units.map((u) => (
+                          <span
+                            key={u.unit_code}
+                            title={u.label}
+                            className={
+                              'rounded px-1 py-px font-mono ' +
+                              (u.exam === 'g2'
+                                ? 'bg-brand-100 text-brand-800'
+                                : 'bg-green-100 text-green-800')
+                            }
+                          >
+                            {u.unit_code}
+                            {u.in_headline ? '★' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[10px] text-slate-500">
+              ★ = the unit is named in the headline, which is what the story is about rather than
+              something it mentions. Blue = Group II, green = Group I Prelims.
             </p>
-          ) : null}
-        </>
-      )}
+          </div>
+        </details>
+      ) : null}
+
+      {/* THE VOCABULARY TO-DO LIST. Named rather than silently excluded: these
+          are articles the scorer liked and the syllabus map could not place, and
+          that is usually a missing alias rather than a worthless article. */}
+      {!picking && !advanced && unmatched.length ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-semibold text-amber-800">
+            Turned down — scored 45+ but match no syllabus unit ({unmatched.length})
+          </summary>
+          <p className="mt-1 text-[11px] text-slate-600">
+            Each is either a gap in the syllabus vocabulary or a genuinely unexaminable story. The
+            score cannot tell them apart, which is why they are shown rather than guessed at.
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {unmatched.map((u) => (
+              <li key={u.id} className="text-[11px] text-slate-700">
+                <span className="font-mono text-slate-500">{Math.round(u.score)}</span>{' '}
+                <span className="text-slate-400">p{u.page}</span> {(u.headline || '').slice(0, 78)}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => onSelect?.(unmatched.map((u) => u.id))}
+            className="mt-1 text-[11px] font-semibold text-brand-700 underline disabled:opacity-40"
+          >
+            Draft these anyway, by hand
+          </button>
+        </details>
+      ) : null}
 
       {msg ? (
         <p
           className={
             'mt-2 text-xs ' +
             (msg.kind === 'error'
-              ? 'text-red-700 dark:text-red-300'
-              : 'text-green-700 dark:text-green-400')
+              ? 'text-red-700'
+              : 'text-green-700')
           }
         >
           {msg.text}
@@ -814,28 +1006,26 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
       ) : null}
 
       {run ? (
-        <div className="mt-3 rounded-md border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800">
+        <div className="mt-3 rounded-md border border-slate-200 bg-surface p-2.5 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={
                 'rounded px-1.5 py-0.5 font-bold uppercase ' +
                 (run.status === 'running'
-                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                  ? 'bg-amber-100 text-amber-800'
                   : run.status === 'failed'
-                    ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
-                    : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200')
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-green-100 text-green-800')
               }
             >
               {run.status}
             </span>
-            <span className="text-slate-600 dark:text-slate-400">
+            <span className="text-slate-600">
               {run.candidates} considered · {run.drafted} drafted · {run.discarded} discarded ·{' '}
               {run.model}
             </span>
           </div>
 
-          {/* When it started, when it stopped, how long it took. A run that takes
-              minutes should say so afterwards, not only while it is going. */}
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
             <span>Started {clockOf(run.created_at)}</span>
             {run.finished_at ? <span>Finished {clockOf(run.finished_at)}</span> : null}
@@ -844,7 +1034,7 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
             ) : null}
           </div>
           {run.status === 'done' ? (
-            <p className="mt-2 rounded bg-green-50 px-2 py-1.5 text-xs font-semibold text-green-800 dark:bg-green-900/20 dark:text-green-300">
+            <p className="mt-2 rounded bg-green-50 px-2 py-1.5 text-xs font-semibold text-green-800">
               {run.drafted > 0
                 ? `Done — ${run.drafted} item${run.drafted === 1 ? '' : 's'} inserted into the review queue` +
                   (run.discarded ? `, ${run.discarded} discarded` : '') +
@@ -863,10 +1053,10 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
 
           {run.log ? (
             <details className="mt-2">
-              <summary className="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">
+              <summary className="cursor-pointer font-semibold text-slate-700">
                 Run log
               </summary>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-slate-600 dark:text-slate-400">
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-slate-600">
                 {run.log}
               </pre>
             </details>
@@ -879,8 +1069,8 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
 
 // The Group-II syllabus units an article feeds, read off np_article_units.
 //
-// This is the column that answers the question the score cannot: not "how
-// examinable does this look" but "what does it actually feed". An article with
+// This is the column that answers the question the score cannot: not"how
+// examinable does this look" but"what does it actually feed". An article with
 // nothing here is filler however many AP place names it contains — nineteen
 // articles scoring between 35 and 48 on the two stored editions matched no unit
 // at all, among them a search for missing fishermen, a diesel loco shed
@@ -889,7 +1079,7 @@ function UnitChips({ units }) {
   if (!units?.length) {
     return (
       <span
-        className="rounded bg-slate-200 px-1.5 font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+        className="rounded bg-slate-200 px-1.5 font-semibold text-slate-600"
         title="Matches no unit of the Group-I or Group-II syllabus. Usually not worth drafting."
       >
         off-syllabus
@@ -903,10 +1093,10 @@ function UnitChips({ units }) {
           key={u.unit_code}
           className={`rounded px-1.5 font-semibold ${
             u.in_headline
-              ? 'bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200'
-              : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+              ? 'bg-green-200 text-green-900'
+              : 'bg-green-100 text-green-800'
           }`}
-          title={`${u.label || u.unit_code}${u.matched ? ` — matched on "${u.matched}"` : ''}${
+          title={`${u.label || u.unit_code}${u.matched ? ` — matched on"${u.matched}"` : ''}${
             u.in_headline ? ' (named in the headline)' : ''
           }`}
         >
@@ -928,10 +1118,10 @@ function ArticleList({ rows, muted, selected = [], onToggle }) {
         <li
           key={a.id}
           className={
-            'rounded-md border p-2.5 dark:bg-slate-800 ' +
+            'rounded-md border p-2.5 ' +
             (selected.includes(a.id)
-              ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/30 '
-              : 'border-slate-200 bg-white dark:border-slate-700 ') +
+              ? 'border-brand-400 bg-brand-50 '
+              : 'border-slate-200 bg-surface ') +
             (muted ? 'opacity-70' : '')
           }
         >
@@ -958,26 +1148,26 @@ function ArticleList({ rows, muted, selected = [], onToggle }) {
             <GenreChip genre={a.genre} section={a.section} why={a.genre_why} />
             {a.prominence ? <span>{a.prominence}×</span> : null}
             {a.ap ? (
-              <span className="rounded bg-brand-100 px-1.5 font-bold text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">
+              <span className="rounded bg-brand-100 px-1.5 font-bold text-brand-800">
                 AP
               </span>
             ) : null}
             {a.dateline ? <span className="uppercase">{a.dateline}</span> : null}
             {a.extraction === 'ocr' ? (
-              <span className="rounded bg-amber-100 px-1.5 font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+              <span className="rounded bg-amber-100 px-1.5 font-semibold text-amber-800">
                 OCR{a.ocr_confidence ? ` ${Math.round(a.ocr_confidence)}%` : ''}
               </span>
             ) : null}
             <span>{a.chars} chars</span>
             {a.item_id ? (
-              <Link to={`/item/${a.item_id}`} className="text-green-700 hover:underline dark:text-green-400">
+              <Link to={`/item/${a.item_id}`} className="text-green-700 hover:underline">
                 drafted →
               </Link>
             ) : null}
           </div>
-          <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">{a.headline}</p>
+          <p className="mt-0.5 font-medium text-slate-900">{a.headline}</p>
           {a.standfirst ? (
-            <p className="text-xs text-slate-600 dark:text-slate-400">{a.standfirst}</p>
+            <p className="text-xs text-slate-600">{a.standfirst}</p>
           ) : null}
           {a.bucket ? (
             <p className="mt-0.5 text-[11px] text-slate-500">
