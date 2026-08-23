@@ -42,6 +42,23 @@ const L = require(path.join(ROOT, 'content-pipeline', 'ca-daily', 'lib'));
 L.loadEnv();
 const db = require(path.join(__dirname, '..', 'src', 'db'));
 
+// HEADINGS THAT MEAN THE MODEL WROTE AN ESSAY.
+//
+// Not a style preference. Every paper this app serves is answered by ticking a
+// box, and 'Significance', 'Way forward' and 'Challenges' are the section
+// headings of a paper that no longer exists here. Under them the model writes
+// the prose that goes with them — 'party mobilisation can improve
+// coordination, but excessive party competition may weaken local
+// deliberation' — which is an argument, cannot become a question, and cannot
+// be the thing a question tests.
+//
+// Three of a hundred and twenty came back with one of these. That is a low
+// enough rate to be invisible in a spot check and high enough to be certain on
+// a nine-month corpus, which is exactly the profile of a fault that needs a
+// guard rather than an eye.
+const ESSAY_HEADING =
+  /^#{1,6}\s.*\b(significance|challeng|way forward|critical|evaluation|conclusion|implication|prospects|assessment)/im;
+
 const args = {
   date: null,
   dryRun: process.argv.includes('--dry-run'),
@@ -132,6 +149,7 @@ async function main() {
   );
   let done = 0;
   let empty = 0;
+  let retried = 0;
 
   for (const [i, r] of rows.entries()) {
     const user = [
@@ -161,6 +179,37 @@ async function main() {
     try {
       const raw = await L.complete({ system: SYSTEM, user, model: args.model });
       notes = String(L.parseJson(raw).static_notes || '').trim();
+
+      // ONE RETRY, WITH THE VIOLATION NAMED.
+      //
+      // Told what it did rather than told the rule again: the rule was already
+      // in the brief and was already read. Quoting the offending heading back
+      // is the difference between a reminder and a correction.
+      //
+      // One retry and no more. If the second attempt fails too, the block is
+      // kept and reported by heading — a loop that keeps paying for the same
+      // refusal is worse than a line of output a person can act on.
+      const bad = ESSAY_HEADING.exec(notes);
+      if (bad) {
+        retried += 1;
+        const raw2 = await L.complete({
+          system: SYSTEM,
+          user:
+            `${user}\n\nYOUR PREVIOUS ATTEMPT CONTAINED THIS HEADING:\n${bad[0].trim()}\n\n` +
+            'That is an argument section, and there is no written paper here. ' +
+            'Rewrite using ONLY the five headings the brief names. Any fact ' +
+            'underneath it that is recallable belongs in "Key facts" or in ' +
+            '"The provisions that get asked"; the rest is not wanted.',
+          model: args.model,
+        });
+        const retryNotes = String(L.parseJson(raw2).static_notes || '').trim();
+        if (retryNotes && !ESSAY_HEADING.test(retryNotes)) {
+          notes = retryNotes;
+        } else {
+          console.log(`[${i + 1}/${rows.length}] #${r.id} STILL essay-shaped — kept: ${bad[0].trim()}`);
+          if (retryNotes) notes = retryNotes;
+        }
+      }
     } catch (e) {
       console.log(`[${i + 1}/${rows.length}] FAILED #${r.id} — ${e.message}`);
       continue;
@@ -176,7 +225,10 @@ async function main() {
     console.log(`[${i + 1}/${rows.length}] #${r.id} ${notes.length} chars — ${r.headline.slice(0, 50)}`);
   }
 
-  console.log(`\nFilled ${done}, left blank ${empty}, of ${rows.length}.`);
+  console.log(
+    `\nFilled ${done}, left blank ${empty}, of ${rows.length}.` +
+      (retried ? ` ${retried} retried for an argument-shaped heading.` : '')
+  );
 }
 
 main().catch((e) => {
