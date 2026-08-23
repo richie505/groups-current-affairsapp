@@ -141,11 +141,42 @@ router.post('/:id/process', (req, res) => {
 
 const DRAFTER = path.join(__dirname, '..', '..', 'scripts', 'draft-articles.js');
 
-const runningDraft = (editionId) =>
-  db
+// A LOCK THAT CAN BE HELD BY A PROCESS THAT NO LONGER EXISTS.
+//
+// The worker closes its run row on the way out however it dies, but it cannot
+// close it if it is killed outright — a machine that sleeps, a terminal that is
+// closed, a timeout that sends SIGKILL. The row then sits at 'running' forever
+// and every later attempt on that edition is refused with "already in progress"
+// and no way to say otherwise from the admin screen. There is a two-day-old
+// 'daily' run in this database in exactly that state.
+//
+// Two hours is far past any real run: the longest observed is 72 articles at
+// about 33 seconds each, which is forty minutes. Past that the process is gone
+// and the lock is a fossil, so it is stepped over rather than obeyed — and the
+// stale row is closed as failed on the way past, so it stops being reported as
+// in-flight on the runs screen too.
+const STALE_RUN_HOURS = 2;
+
+const runningDraft = (editionId) => {
+  const row = db
     .prepare(`SELECT * FROM ca_runs WHERE mode = ? AND status = 'running'
                ORDER BY id DESC LIMIT 1`)
     .get(`edition-${editionId}`);
+  if (!row) return null;
+  const stale = db
+    .prepare(`SELECT (julianday('now') - julianday(?)) * 24 > ? AS stale`)
+    .get(row.created_at, STALE_RUN_HOURS).stale;
+  if (!stale) return row;
+  db.prepare(
+    `UPDATE ca_runs SET status = 'failed', finished_at = datetime('now'),
+       log = log || ? WHERE id = ? AND status = 'running'`
+  ).run(
+    `\n\nClosed automatically: still marked running after ${STALE_RUN_HOURS} hours, ` +
+      'so the worker process is gone. Anything it drafted before it died was written as it went.',
+    row.id
+  );
+  return null;
+};
 
 router.post('/:id/draft', (req, res) => {
   const id = Number(req.params.id);
