@@ -10,6 +10,7 @@ import TagPicker from '../../components/admin/TagPicker';
 import { Chip } from '../../components/Badges';
 import { BUCKETS, BANKS, longDate } from '../../lib/caFormat';
 import { IconPlus, IconTrash, IconCheck } from '../../components/Icon';
+import useConfirm from '../../components/useConfirm';
 
 const THEMES = [
   'governance',
@@ -125,11 +126,17 @@ export default function AdminItemEditor() {
 
 function ItemRow({ item, meta, onEdit, onChanged, anchorId }) {
   const [showMcqs, setShowMcqs] = useState(false);
+  const [error, setError] = useState('');
+  const { confirm, dialog } = useConfirm();
 
   async function remove() {
-    if (!window.confirm(`Delete “${item.headline}” and all its questions? This cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete this item and all its questions?',
+      body: [item.headline, 'This cannot be undone.'],
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/admin/items/${item.id}`);
     onChanged();
   }
@@ -139,12 +146,13 @@ function ItemRow({ item, meta, onEdit, onChanged, anchorId }) {
       await api.post(`/admin/items/${item.id}/publish`, {});
       onChanged();
     } catch (e) {
-      window.alert(e.message);
+      setError(e.message);
     }
   }
 
   return (
     <article id={anchorId} className="scroll-mt-20 rounded-lg border border-slate-200 bg-surface p-4">
+      {dialog}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <Chip
           className={

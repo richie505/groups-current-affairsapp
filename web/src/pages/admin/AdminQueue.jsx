@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState';
 import Markdown from '../../components/Markdown';
 import RichText from '../../components/RichText';
 import QuestionReview from '../../components/admin/QuestionReview';
+import useConfirm from '../../components/useConfirm';
 import {
   BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, GenreBadge, Chip,
 } from '../../components/Badges';
@@ -29,6 +30,7 @@ export default function AdminQueue() {
   // a queue that shows only headlines makes them click every card to do the one
   // job the screen exists for. The toggle stays for when the day is long.
   const [expandAll, setExpandAll] = useState(true);
+  const { confirm, prompt, dialog } = useConfirm();
 
   if (loading) return <Loading label="Loading the queue…" />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -42,17 +44,16 @@ export default function AdminQueue() {
   async function publishItem(id, supersedes) {
     let retire = false;
     if (supersedes) {
-      const answer = window.confirm(
-        [
-          `This is a redraft of published item #${supersedes.id}, which is still live:`,
-          '',
+      retire = await confirm({
+        title: `This redrafts published item #${supersedes.id}, which is still live`,
+        body: [
           `“${supersedes.headline}”`,
-          '',
-          'OK — publish this and retire the old one.',
-          'Cancel — publish this and leave both live.',
-        ].join('\n')
-      );
-      retire = answer;
+          'Retire it and this replaces it. Keep it and both stay live — a student would ' +
+            'see the same story twice.',
+        ],
+        confirmLabel: 'Publish and retire the old one',
+        cancelLabel: 'Publish, keep both',
+      });
     }
     setBusy(id);
     setActionError('');
@@ -68,9 +69,13 @@ export default function AdminQueue() {
   }
 
   async function discardItem(id) {
-    const reason = window.prompt(
-      'Why is this being discarded? The reason is kept — it is the record of the judgement.'
-    );
+    const reason = await prompt({
+      title: 'Why is this being discarded?',
+      body: 'The reason is kept — it is the record of the judgement, not a formality.',
+      placeholder: 'e.g. routine sports result, no examinable fact',
+      confirmLabel: 'Discard',
+      danger: true,
+    });
     if (!reason) return;
     setBusy(id);
     setActionError('');
@@ -139,6 +144,7 @@ export default function AdminQueue() {
 
   return (
     <div>
+      {dialog}
       <h1 className="mb-1 text-2xl font-bold text-slate-900">Review queue</h1>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <p className="text-sm text-slate-600">

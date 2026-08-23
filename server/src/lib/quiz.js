@@ -103,10 +103,26 @@ function buildQuiz(db, opts) {
 
   const rows = db
     .prepare(
+      // The unit's LABEL, not just its code.
+      //
+      // Tagging every question to a syllabus unit is worth nothing to a student
+      // if the tag stops at the database — "which part of the syllabus did I
+      // just practise" is the question the whole map exists to answer. And
+      // "G2-P1-U7" does not answer it. The code is an internal key; the label
+      // is what APPSC calls the topic, and it is the half a candidate can act
+      // on: "Union and State government — legislature, executive, judiciary"
+      // tells them what to go and read.
+      //
+      // LEFT JOIN, so a question tagged to a code that has since been removed
+      // from ref_units still comes back — with a code and no label, rather than
+      // vanishing from the paper.
       `SELECT m.id, m.question, m.option_a, m.option_b, m.option_c, m.option_d,
               m.correct_option, m.explanation, m.format, m.keyword, m.difficulty,
-              m.fact_as_of, i.id AS item_id, i.headline, i.bucket, d.date AS day_date
+              m.unit_code, u.label AS unit_label, u.exam AS unit_exam,
+              m.fact_as_of, i.id AS item_id, i.headline, i.bucket,
+              d.date AS day_date
          ${FROM}
+         LEFT JOIN ref_units u ON u.unit_code = m.unit_code
         WHERE ${servableWhere.join(' AND ')}
         ORDER BY RANDOM()`
     )

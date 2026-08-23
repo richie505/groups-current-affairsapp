@@ -95,6 +95,21 @@ export default function McqCard({ mcq, index, onAnswered }) {
           }`}
         >
           <p className="font-medium">{result.is_correct ? 'Correct!' : 'Not quite.'}</p>
+          {/* WHICH PART OF THE SYLLABUS THAT WAS.
+              Shown after the answer, not before — on the question it would be a
+              hint, narrowing four options to the one that fits the unit. After
+              the answer it is the thing worth knowing: a wrong answer that
+              names its unit tells a student what to go and read, and a right
+              one tells them what they can now count as covered. */}
+          {mcq.unit_code && (
+            <p className="mt-1 text-xs opacity-80">
+              Syllabus topic:{' '}
+              <span className="font-semibold">{mcq.unit_label || mcq.unit_code}</span>
+              {mcq.unit_label ? (
+                <span className="ml-1 font-mono text-[10px] opacity-60">({mcq.unit_code})</span>
+              ) : null}
+            </p>
+          )}
           {result.explanation && (
             <div className="prose-mcq mt-1 text-slate-600">
               <Markdown remarkPlugins={MCQ_REMARK_PLUGINS}>{autoFormatMcqText(result.explanation)}</Markdown>

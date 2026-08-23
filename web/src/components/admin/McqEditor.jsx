@@ -4,6 +4,7 @@ import Markdown from '../Markdown';
 import { autoFormatMcqText } from '../../lib/mcqFormat';
 import { FormatBadge, Chip } from '../Badges';
 import { FORMATS } from '../../lib/caFormat';
+import useConfirm from '../useConfirm';
 import { IconPlus, IconTrash, IconPencil } from '../Icon';
 
 const LETTERS = ['a', 'b', 'c', 'd'];
@@ -31,15 +32,23 @@ const BLANK = {
 // list-matching.
 export default function McqEditor({ itemId, mcqs, meta, onChanged }) {
   const [editing, setEditing] = useState(null);
+  const { confirm, dialog } = useConfirm();
 
   async function remove(id) {
-    if (!window.confirm('Delete this question?')) return;
+    const ok = await confirm({
+      title: 'Delete this question?',
+      body: 'Any attempts a student has already made on it go with it.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/admin/mcqs/${id}`);
     onChanged();
   }
 
   return (
     <div>
+      {dialog}
       <div className="mb-3 flex items-center gap-2">
         <h4 className="text-sm font-bold uppercase tracking-wide text-slate-600">Questions</h4>
         {!editing ? (

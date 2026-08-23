@@ -393,9 +393,16 @@ router.get('/items/:id', (req, res) => {
   item.mcqs = item.marked_read
     ? db
         .prepare(
-          `SELECT id, question, option_a, option_b, option_c, option_d, correct_option,
-                  explanation, format, keyword, difficulty, fact_as_of, unit_code
-             FROM ca_mcqs m WHERE item_id = ? AND ${MCQ_VISIBLE} ORDER BY id`
+          // The unit LABEL travels with the question, not just its code.
+          // "G2-P1-U7" is an internal key; "Union and State government —
+          // legislature, executive, judiciary" is the thing a candidate can act
+          // on. LEFT JOIN so a question tagged to a retired code still appears.
+          `SELECT m.id, m.question, m.option_a, m.option_b, m.option_c, m.option_d,
+                  m.correct_option, m.explanation, m.format, m.keyword, m.difficulty,
+                  m.fact_as_of, m.unit_code, u.label AS unit_label, u.exam AS unit_exam
+             FROM ca_mcqs m
+             LEFT JOIN ref_units u ON u.unit_code = m.unit_code
+            WHERE m.item_id = ? AND ${MCQ_VISIBLE} ORDER BY m.id`
         )
         .all(item.id)
     : [];
@@ -685,9 +692,11 @@ router.get('/revision/due', (req, res) => {
     .prepare(
       `SELECT m.id, m.question, m.option_a, m.option_b, m.option_c, m.option_d,
               m.correct_option, m.explanation, m.format, m.keyword, m.fact_as_of,
+              m.unit_code, u.label AS unit_label,
               i.id AS item_id, i.headline, d.date AS day_date, r.box, r.due_date
          FROM ca_revision r
          JOIN ca_mcqs m ON m.id = r.item_id
+         LEFT JOIN ref_units u ON u.unit_code = m.unit_code
          JOIN ca_items i ON i.id = m.item_id
          JOIN ca_days d ON d.id = i.day_id
         WHERE r.user_id = ? AND r.item_type = 'mcq' AND r.due_date <= ? AND ${VISIBLE}
@@ -736,11 +745,13 @@ router.get('/mistakes', (req, res) => {
        )
        SELECT m.id, m.question, m.option_a, m.option_b, m.option_c, m.option_d,
               m.correct_option, m.explanation, m.format, m.keyword, m.fact_as_of,
+              m.unit_code, u.label AS unit_label,
               a.selected_option, a.attempted_at,
               i.id AS item_id, i.headline, i.bucket, d.date AS day_date
          FROM latest l
          JOIN ca_attempts a ON a.id = l.attempt_id
          JOIN ca_mcqs m ON m.id = l.mcq_id
+         LEFT JOIN ref_units u ON u.unit_code = m.unit_code
          JOIN ca_items i ON i.id = m.item_id
          JOIN ca_days d ON d.id = i.day_id
         WHERE a.is_correct = 0 AND ${VISIBLE} AND ${MCQ_VISIBLE}

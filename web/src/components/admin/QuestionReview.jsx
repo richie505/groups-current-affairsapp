@@ -5,6 +5,7 @@ import RichText from '../RichText';
 import { Chip, UnitBadge } from '../Badges';
 import { formatLabel } from '../../lib/caFormat';
 import { IconCheck, IconTrash } from '../Icon';
+import useConfirm from '../useConfirm';
 
 // QUESTIONS WAITING ON REVIEW — a second queue, for a case the first one cannot
 // see.
@@ -26,6 +27,7 @@ import { IconCheck, IconTrash } from '../Icon';
 export default function QuestionReview({ items, onChanged }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
+  const { confirm, dialog } = useConfirm();
 
   if (!items || !items.length) return null;
 
@@ -38,14 +40,14 @@ export default function QuestionReview({ items, onChanged }) {
   const starved = items.filter((it) => !it.live);
 
   async function actAll() {
-    const ok = window.confirm(
-      [
-        `Approve all ${totalPending} questions across ${items.length} items?`,
-        '',
+    const ok = await confirm({
+      title: `Approve all ${totalPending} questions across ${items.length} items?`,
+      body: [
         'Each item’s old questions are replaced by its new ones in the same step.',
         'Questions a student has already answered are kept.',
-      ].join('\n')
-    );
+      ],
+      confirmLabel: `Approve ${totalPending}`,
+    });
     if (!ok) return;
     setBusy('all');
     setError('');
@@ -61,10 +63,12 @@ export default function QuestionReview({ items, onChanged }) {
 
   async function act(itemId, verb) {
     if (verb === 'discard') {
-      const ok = window.confirm(
-        'Discard these questions? They are deleted, not hidden — the item keeps the ' +
-          'questions it already had.'
-      );
+      const ok = await confirm({
+        title: 'Discard these questions?',
+        body: 'They are deleted, not hidden — the item keeps the questions it already had.',
+        confirmLabel: 'Discard',
+        danger: true,
+      });
       if (!ok) return;
     }
     setBusy(itemId);
@@ -81,6 +85,7 @@ export default function QuestionReview({ items, onChanged }) {
 
   return (
     <section className="mb-8 rounded-lg border border-amber-300 bg-amber-50/60 p-4">
+      {dialog}
       <h2 className="font-bold text-slate-900">Questions waiting on review</h2>
       <p className="mt-1 text-sm text-slate-700">
         {totalPending} question{totalPending === 1 ? '' : 's'} on {items.length} already-published
@@ -177,7 +182,10 @@ export default function QuestionReview({ items, onChanged }) {
                         came back without one is shown as missing rather than
                         left blank — a blank reads as "not applicable". */}
                     {m.unit_code ? (
-                      <UnitBadge unit={m.unit_code} />
+                      // The object form, so the badge shows the topic and not
+                      // just the key — a reviewer should not have to decode
+                      // "G2-P1-U7" to know what the question is testing.
+                      <UnitBadge unit={{ unit_code: m.unit_code, label: m.unit_label }} />
                     ) : (
                       <Chip className="border-amber-300 bg-amber-100 text-amber-800">
                         no syllabus unit

@@ -264,7 +264,13 @@ router.get('/queue', (req, res) => {
     .all();
   for (const it of questionReview) {
     it.mcqs = db
-      .prepare(`SELECT * FROM ca_mcqs WHERE item_id = ? AND status <> 'published' ORDER BY id`)
+      .prepare(
+        // With the unit's label, so the reviewer reads the topic rather than
+        // decoding a key. Same reason the student sees it.
+        `SELECT m.*, u.label AS unit_label, u.exam AS unit_exam
+           FROM ca_mcqs m LEFT JOIN ref_units u ON u.unit_code = m.unit_code
+          WHERE m.item_id = ? AND m.status <> 'published' ORDER BY m.id`
+      )
       .all(it.id);
   }
 

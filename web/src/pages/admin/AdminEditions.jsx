@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, getToken } from '../../api/client';
 import useResource from '../../hooks/useResource';
 import RichText from '../../components/RichText';
+import useConfirm from '../../components/useConfirm';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
@@ -466,17 +467,25 @@ function OneEdition({ id }) {
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
   const e = data.edition;
+  const { confirm, dialog } = useConfirm();
   const live = data.articles.filter((a) => a.status !== 'duplicate');
   const dups = data.articles.filter((a) => a.status === 'duplicate');
 
   async function remove() {
-    if (!window.confirm('Delete this edition and its extracted articles? Published knowledge items are kept.')) return;
+    const ok = await confirm({
+      title: 'Delete this edition?',
+      body: 'Its extracted articles go with it. Knowledge items already published are kept.',
+      confirmLabel: 'Delete edition',
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/admin/editions/${id}`);
     navigate('/admin/editions');
   }
 
   return (
     <div>
+      {dialog}
       <Link
         to="/admin/editions"
         className="mb-3 inline-block text-sm text-brand-700 hover:underline dark:text-brand-400"

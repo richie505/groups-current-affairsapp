@@ -102,6 +102,21 @@ export default function QuizResults({ result, onRetake, label }) {
               })}
             </div>
 
+            {/* WHICH TOPIC THIS QUESTION CAME FROM.
+                On a results page this is the most useful line of the three: a
+                student reviewing a paper wants to know which parts of the
+                syllabus their wrong answers cluster in, and "G2-P1-U7" cannot
+                answer that while "Union and State government" can. */}
+            {r.unit_code && (
+              <p className="mt-2 text-xs text-slate-600">
+                Syllabus topic:{' '}
+                <span className="font-semibold">{r.unit_label || r.unit_code}</span>
+                {r.unit_label ? (
+                  <span className="ml-1 font-mono text-[10px] text-slate-400">({r.unit_code})</span>
+                ) : null}
+              </p>
+            )}
+
             {r.explanation && (
               <div className="prose-mcq mt-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 <Markdown remarkPlugins={PLUGINS}>{autoFormatMcqText(r.explanation)}</Markdown>
