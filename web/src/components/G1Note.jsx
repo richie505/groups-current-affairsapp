@@ -218,9 +218,15 @@ export default function G1Note({ item }) {
         ) : null}
         <div className="flex flex-wrap gap-1">
           {item.g1_bank ? <BankBadge bank={item.g1_bank} /> : null}
-          {item.units?.map((u) => (
-            <UnitBadge key={u.unit_code} unit={u} />
-          ))}
+          {/* The DESCRIPTIVE paper units only. Group-I Mains is the written
+              paper, and the objective units now on the same item belong to the
+              Group-II lane — showing both here would route an essay note to a
+              tick-a-box syllabus. */}
+          {(item.units || [])
+            .filter((u) => u.format !== 'objective')
+            .map((u) => (
+              <UnitBadge key={u.unit_code} unit={u} />
+            ))}
           {item.themes?.map((t) => (
             <Chip key={t} className="border-slate-300 bg-surface capitalize text-slate-600">
               {t}

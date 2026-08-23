@@ -777,6 +777,39 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         if (code) insUnit.run(itemId, code);
         else if (String(u || '').trim()) droppedUnits.push(String(u).trim().slice(0, 70));
       }
+
+      // THE OBJECTIVE UNITS, TAKEN FROM THE SCORER RATHER THAN FROM THE MODEL.
+      //
+      // The loop above writes the units the MODEL chose, and the vocabulary it
+      // is offered is all of ref_units — so in practice it returns Group-I Mains
+      // paper units and the item ends up routed for the written paper only. Item
+      // 84 carried P2-U12, P4-U7, P4-U8, P4-U11, P4-U12 and P5-U7, and nothing
+      // at all for Group II, while the scorer had already established that it
+      // feeds G2-P2-U5.
+      //
+      // That is the wrong way round. Three of the four APPSC papers are
+      // objective, and for those the syllabus unit is not a judgement call the
+      // model should be making: Section 2 matched the article's own text against
+      // APPSC's published syllabus vocabulary, deterministically and
+      // reproducibly. Asking a model to re-derive it invites a second,
+      // disagreeing answer to a question already settled — the same principle
+      // this file already applies to the bucket and the keyword angles.
+      //
+      // So they are copied across. The model's units stay for the descriptive
+      // lane, where the routing genuinely is a judgement.
+      if (r._articleId) {
+        for (const u of db
+          .prepare(
+            `SELECT au.unit_code FROM np_article_units au
+               JOIN ref_units ru ON ru.unit_code = au.unit_code
+              WHERE au.article_id = ? AND ru.format = 'objective'
+                    AND ru.broad = 0 AND ru.unfeedable = 0
+              ORDER BY au.in_headline DESC, au.hits DESC`
+          )
+          .all(r._articleId)) {
+          insUnit.run(itemId, u.unit_code);
+        }
+      }
       for (const t of r.themes || []) insTheme.run(itemId, String(t).toLowerCase());
       for (const s of r.sources || []) {
         if (!s || (!s.url && !s.publisher)) continue;

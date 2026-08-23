@@ -190,7 +190,9 @@ router.get('/queue', (req, res) => {
           WHERE u.item_id IN (${holes}) ORDER BY u.unit_code`
       )
       .all(...ids))
-      byId.get(r.item_id)?.units.push({ unit_code: r.unit_code, label: r.label, paper: r.paper });
+      byId.get(r.item_id)?.units.push({
+        unit_code: r.unit_code, label: r.label, paper: r.paper, exam: r.exam, format: r.format,
+      });
     for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids))
       byId.get(r.item_id)?.themes.push(r.theme);
     for (const r of db

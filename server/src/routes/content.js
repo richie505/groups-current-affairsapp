@@ -107,12 +107,19 @@ function attachTags(items, { full = true } = {}) {
   }
   for (const r of db
     .prepare(
-      `SELECT u.item_id, u.unit_code, r.label, r.paper
+      // exam and format come along because the two lanes need DIFFERENT units.
+      // Group-I Mains is written and takes the descriptive paper units; Group-II
+      // and Group-I Prelims are answered by ticking a box and take the objective
+      // syllabus units. Rendering one list in both places would show a Group-II
+      // student the essay-paper routing and call it their syllabus.
+      `SELECT u.item_id, u.unit_code, r.label, r.paper, r.exam, r.format
          FROM ca_item_units u LEFT JOIN ref_units r ON r.unit_code = u.unit_code
         WHERE u.item_id IN (${holes}) ORDER BY u.unit_code`
     )
     .all(...ids)) {
-    byId.get(r.item_id)?.units.push({ unit_code: r.unit_code, label: r.label, paper: r.paper });
+    byId.get(r.item_id)?.units.push({
+      unit_code: r.unit_code, label: r.label, paper: r.paper, exam: r.exam, format: r.format,
+    });
   }
   for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids)) {
     byId.get(r.item_id)?.themes.push(r.theme);

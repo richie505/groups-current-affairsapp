@@ -4,7 +4,8 @@ import useResource from '../hooks/useResource';
 import Loading from '../components/Loading';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconAlert, IconLayers, IconTarget } from '../components/Icon';
+import { IconAlert, IconBook, IconLayers, IconTarget } from '../components/Icon';
+import SyllabusMap from '../components/SyllabusMap';
 
 // The topic map.
 //
@@ -25,13 +26,17 @@ import { IconAlert, IconLayers, IconTarget } from '../components/Icon';
 // and it is completely invisible without a topic table to notice the absence.
 
 const TABS = [
+  // Syllabus first. The other three index by a vocabulary this project curated;
+  // this one indexes by the document the candidate is actually examined on, and
+  // it is the only tab that covers Group-II at all.
+  { id: 'syllabus', label: 'Syllabus', icon: IconBook },
   { id: 'map', label: 'Map', icon: IconLayers },
   { id: 'reuse', label: 'Reuse map', icon: IconTarget },
   { id: 'gaps', label: 'Gaps', icon: IconAlert },
 ];
 
 export default function Topics() {
-  const [tab, setTab] = useState('map');
+  const [tab, setTab] = useState('syllabus');
 
   return (
     <div>
@@ -39,7 +44,7 @@ export default function Topics() {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Topics</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           The same knowledge, indexed by what the exam actually asks about rather than by the day
-          it appeared.
+          it appeared — by the published syllabus, or by the topics the commission returns to.
         </p>
       </header>
 
@@ -62,6 +67,7 @@ export default function Topics() {
         ))}
       </nav>
 
+      {tab === 'syllabus' ? <SyllabusMap /> : null}
       {tab === 'map' ? <Map /> : null}
       {tab === 'reuse' ? <Reuse /> : null}
       {tab === 'gaps' ? <Gaps /> : null}

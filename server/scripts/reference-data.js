@@ -152,23 +152,53 @@ const KEYWORDS = {
 // catch-all P1 entry rather than numbered units.
 
 const UNITS = [
+  // THE TWO LANGUAGE PAPERS, RECORDED AND MARKED UNFEEDABLE.
+  //
+  // 300 marks of the Group-I Mains total, and they were absent from this list
+  // entirely — so the syllabus this app showed a candidate was missing two
+  // whole papers and gave no sign of it.
+  //
+  // A newspaper cannot feed them: they test precis, translation, grammar and
+  // letter writing, which are skills rather than content. That makes them
+  // exactly like G2-S4 mental ability — excluded from scoring, and recorded so
+  // the exclusion is a decision on the page rather than an omission.
+  ['LANG-EN', 'LANG', 'English — essay, letter, press release, report, precis, grammar, translation'],
+  ['LANG-TE', 'LANG', 'Telugu — essay, poetic elaboration, precis, debate, dialogue, grammar, translation'],
+
   ['P1', 'P1', 'Essay — general essay, AP-focused essay, statement-based essay'],
 
-  ['P2-U1', 'P2', 'AP history — pre/proto-history and early historic'],
-  ['P2-U2', 'P2', 'AP history — Satavahanas and Ikshvakus'],
-  ['P2-U3', 'P2', 'AP history — Vishnukundins, Eastern Chalukyas, Cholas'],
-  ['P2-U4', 'P2', 'AP history — Kakatiyas and successors'],
-  ['P2-U5', 'P2', 'AP history — Vijayanagara and Qutb Shahis'],
-  ['P2-U6', 'P2', 'AP history — colonial administration and society'],
-  ['P2-U7', 'P2', 'AP history — social and religious reform movements'],
-  ['P2-U8', 'P2', 'AP history — nationalist movement in Andhra'],
-  ['P2-U9', 'P2', 'AP history — Andhra statehood and Visalandhra'],
-  ['P2-U10', 'P2', 'Bifurcation, Amaravati, APRA 2014, river water disputes'],
-  ['P2-U11', 'P2', 'AP geography — physiography, climate, cyclones, coast'],
-  ['P2-U12', 'P2', 'AP resources — agriculture, irrigation, industry, infrastructure'],
-  ['P2-U13', 'P2', 'Population, census, demography, migration, urbanisation'],
-  ['P2-U14', 'P2', 'AP biodiversity, wildlife, sanctuaries, conservation'],
-  ['P2-U15', 'P2', 'Environment and disaster management in AP'],
+  // PAPER II, CORRECTED AGAINST THE COMMISSION'S OWN SYLLABUS COPY.
+  //
+  // The previous numbering was wrong in a way that mattered. It ran units 1–9
+  // as ANDHRA PRADESH history; the published syllabus runs 1–5 as the history
+  // and culture of INDIA and only 6–10 as Andhra Pradesh, with 11–15 as
+  // geography of India AND Andhra Pradesh rather than of AP alone.
+  //
+  // That is not a cosmetic difference. A unit code is the one thing a candidate
+  // can carry between this app and the syllabus in front of them, and a
+  // "P2-U3" that means Vishnukundins here and Mughals to the commission is
+  // worse than no code at all — it is a confident wrong answer to "where does
+  // this sit". Only two stored tags used the affected range; both were remapped
+  // (see server/scripts/fix-g1-units.js).
+  //
+  // A. History and Culture of India
+  ['P2-U1', 'P2', 'Pre-history to the Guptas — Indus Valley, Vedic, Mauryas, Satavahanas, Sangam'],
+  ['P2-U2', 'P2', 'Pallavas to Vijayanagara — Cholas, Delhi Sultanate, Bhakti and Sufi, Kakatiyas'],
+  ['P2-U3', 'P2', 'Mughals, Marathas, advent of Europeans and the East India Company'],
+  ['P2-U4', 'P2', 'British rule 1757–1856, land revenue, 1857, socio-religious reform, nationalism'],
+  ['P2-U5', 'P2', 'Freedom struggle 1885–1947, Partition, integration, linguistic reorganisation'],
+  // B. History and Culture of Andhra Pradesh
+  ['P2-U6', 'P2', 'Ancient AP — Satavahanas, Ikshvakus, Salankayanas, Vishnukundins, Eastern Chalukyas'],
+  ['P2-U7', 'P2', 'Medieval AP 1000–1565 — Kakatiyas, Reddis, Gajapatis, Vijayanagara, Qutub Shahis'],
+  ['P2-U8', 'P2', 'Modern AP — Company rule, missionaries, zamindari, reformers, library movement'],
+  ['P2-U9', 'P2', 'Nationalist movement in Andhra — Andhra Mahasabhas, Potti Sreeramulu, statehood'],
+  ['P2-U10', 'P2', 'Bifurcation of AP and its impact — APRA 2014, capital, river water sharing'],
+  // C. Geography of India and Andhra Pradesh
+  ['P2-U11', 'P2', 'Physical features and resources — landforms, climate, soils, rivers, minerals'],
+  ['P2-U12', 'P2', 'Economic geography — agriculture, fisheries, mining, industry, trade, transport'],
+  ['P2-U13', 'P2', 'Social geography — population, density, migration, urbanisation, caste and language'],
+  ['P2-U14', 'P2', 'Fauna and floral geography — wildlife, birds, forests, trees and plants'],
+  ['P2-U15', 'P2', 'Environmental geography — sustainable development, hazards, disaster management'],
 
   ['P3-U1', 'P3', 'Constitution — features, Preamble, rights, duties, emergency'],
   ['P3-U2', 'P3', 'Federalism, Governor, Centre–State relations, legislative powers'],
@@ -180,9 +210,14 @@ const UNITS = [
   ['P3-U8', 'P3', 'Civil society, NGOs, RTI activism, social movements'],
   ['P3-U9', 'P3', 'Regulators, tribunals, commissions (NCW, NHRC), civil services'],
   ['P3-U10', 'P3', 'e-governance, Digital India, DPI, transparency, social audit'],
-  ['P3-U11', 'P3', 'Ethics in public life, integrity, accountability'],
-  ['P3-U14', 'P3', 'Corruption, whistleblowers, Lokpal, vigilance'],
-  ['P3-U15', 'P3', 'New Acts — criminal, cyber, labour, tax law'],
+  ['P3-U11', 'P3', 'Ethics and human interface — determinants, dimensions, public vs private'],
+  // U12 and U13 were simply missing: the list jumped from 11 to 14, so two of
+  // the five ethics units in the published syllabus had no code at all and
+  // nothing could ever be routed to them.
+  ['P3-U12', 'P3', 'Human values — harmony, gender equity, family, society, lives of reformers'],
+  ['P3-U13', 'P3', 'Attitude and emotional intelligence — moral and political attitudes, persuasion'],
+  ['P3-U14', 'P3', 'Public service ethics — codes of conduct, corruption, Lokpal, Lokayukta'],
+  ['P3-U15', 'P3', 'Basic knowledge of law — civil, criminal, labour, cyber and tax law'],
 
   ['P4-U1', 'P4', 'Indian economy — GDP, inflation, unemployment, growth, CAD'],
   ['P4-U2', 'P4', 'Taxes, GST, borrowing, public debt, disinvestment'],

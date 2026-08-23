@@ -26,6 +26,20 @@ import { IconCheck, IconBookmark } from './Icon';
 export default function ItemCard({ item, showDate = false }) {
   const { showG1, showG2, isBoth } = useLens();
 
+  // THE TWO LANES TAKE DIFFERENT UNITS, so the one list is split rather than
+  // repeated. Group-I Mains is written and routes to the descriptive paper
+  // units (P1–P5); Group-II and Group-I Prelims are answered by ticking a box
+  // and route to the objective syllabus units (G2-*, G1P-*). Showing all of
+  // them in both places would tell a Group-II candidate that their syllabus
+  // includes the essay paper.
+  //
+  // `format` is null for a code no longer in ref_units — an old tag whose unit
+  // was renamed. Those fall to the descriptive lane, which is where they came
+  // from, rather than disappearing.
+  const units = item.units || [];
+  const objectiveUnits = units.filter((u) => u.format === 'objective');
+  const descriptiveUnits = units.filter((u) => u.format !== 'objective');
+
   return (
     <article className="rounded-lg border border-slate-200 bg-surface p-4">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -73,10 +87,20 @@ export default function ItemCard({ item, showDate = false }) {
               <RichText>{item.prelims_facts}</RichText>
             </p>
           ) : null}
-          {item.keywords?.length ? (
+          {item.keywords?.length || objectiveUnits.length ? (
             <div className="flex flex-wrap gap-1">
-              {item.keywords.map((k) => (
+              {item.keywords?.map((k) => (
                 <KeywordBadge key={k} keyword={k} />
+              ))}
+              {/* THE SYLLABUS TOPIC, beside the keyword angle rather than
+                  instead of it. The two answer different questions and a
+                  candidate needs both: the keyword is the SHAPE the question
+                  takes ("Appointed", "GI tag"), the unit is WHERE ON THE
+                  SYLLABUS it sits. This lane used to carry only the first, so
+                  an item read as "Association, Export, Exports, Visited" with
+                  no indication that it feeds AP industry and services. */}
+              {objectiveUnits.map((u) => (
+                <UnitBadge key={u.unit_code} unit={u} />
               ))}
             </div>
           ) : null}
@@ -135,7 +159,7 @@ export default function ItemCard({ item, showDate = false }) {
                 AP angle
               </Chip>
             ) : null}
-            {item.units?.map((u) => (
+            {descriptiveUnits.map((u) => (
               <UnitBadge key={u.unit_code || u} unit={u} />
             ))}
           </div>

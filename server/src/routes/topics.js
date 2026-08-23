@@ -161,6 +161,100 @@ router.get('/gaps', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/topics/syllabus
+// ---------------------------------------------------------------------------
+//
+// THE SYLLABUS ITSELF, WITH WHAT HAS FED EACH UNIT.
+//
+// The three tabs above are all indexed by TOPIC, which is a vocabulary this
+// project curated. Useful, and not the thing a candidate actually revises
+// against: they revise against the syllabus APPSC published, unit by unit, and
+// the question they arrive with is "how much have I got for this unit, and
+// which units have I got nothing for".
+//
+// The topic layer could not answer that for Group-II at all. Its 248
+// topic→unit mappings are every one of them Group-I Mains paper units, so a
+// Group-II candidate opening Topics saw a map of somebody else's exam.
+//
+// This is built from `ca_item_units` instead, which is populated from Section
+// 2's deterministic match against the syllabus vocabulary — so it covers every
+// exam the map knows about, and a unit at zero is a real gap rather than a
+// vocabulary that was never curated.
+//
+// The broad and unfeedable units are included but flagged. The 30-mark
+// Current-Affairs paper matches everything and mental ability matches nothing;
+// both are excluded from SCORING for opposite reasons, and hiding them here
+// would make the syllabus look incomplete to someone reading it as a syllabus.
+router.get('/syllabus', (req, res) => {
+  const units = db
+    .prepare(
+      `SELECT r.unit_code, r.label, r.paper, r.exam, r.format, r.marks,
+              r.broad, r.unfeedable, r.syllabus_text,
+              (SELECT COUNT(DISTINCT i.id)
+                 FROM ca_item_units u
+                 JOIN ca_items i ON i.id = u.item_id
+                 JOIN ca_days  d ON d.id = i.day_id
+                WHERE u.unit_code = r.unit_code AND ${VISIBLE}) AS items,
+              (SELECT COUNT(*)
+                 FROM ca_mcqs m
+                 JOIN ca_items i ON i.id = m.item_id
+                 JOIN ca_days  d ON d.id = i.day_id
+                WHERE m.unit_code = r.unit_code AND m.status = 'published'
+                      AND ${VISIBLE}) AS questions
+         FROM ref_units r
+        ORDER BY r.exam, r.paper, r.unit_code`
+    )
+    .all();
+
+  // Grouped server-side because the grouping IS the answer — a flat list of 102
+  // units sorted by code is the same data and none of the meaning.
+  const EXAMS = [
+    { id: 'g2', name: 'Group-II', note: 'Screening and Mains — both answered by ticking a box' },
+    { id: 'g1p', name: 'Group-I Prelims', note: 'Objective, 120 questions' },
+    { id: 'g1', name: 'Group-I Mains', note: 'Written — the only descriptive paper' },
+  ];
+
+  const exams = EXAMS.map((e) => {
+    const mine = units.filter((u) => (u.exam || 'g1') === e.id);
+    return {
+      ...e,
+      units: mine,
+      total: mine.length,
+      // "Covered" counts only units that CAN be fed. Counting the broad and
+      // unfeedable ones would flatter the number with units that are either
+      // matched by everything or by nothing.
+      feedable: mine.filter((u) => !u.broad && !u.unfeedable).length,
+      covered: mine.filter((u) => !u.broad && !u.unfeedable && u.items > 0).length,
+      items: mine.reduce((n, u) => n + u.items, 0),
+      questions: mine.reduce((n, u) => n + u.questions, 0),
+    };
+  }).filter((e) => e.units.length);
+
+  res.json({ exams });
+});
+
+// The published items feeding one syllabus unit.
+router.get('/syllabus/:code', (req, res) => {
+  const unit = db.prepare('SELECT * FROM ref_units WHERE unit_code = ?').get(req.params.code);
+  if (!unit) return res.status(404).json({ error: 'No such syllabus unit.' });
+
+  const items = db
+    .prepare(
+      `SELECT i.id, i.headline, i.bucket, i.importance, i.event_date, d.date AS day_date,
+              (SELECT COUNT(*) FROM ca_mcqs m
+                WHERE m.item_id = i.id AND m.status = 'published') AS mcq_count
+         FROM ca_item_units u
+         JOIN ca_items i ON i.id = u.item_id
+         JOIN ca_days  d ON d.id = i.day_id
+        WHERE u.unit_code = ? AND ${VISIBLE}
+        ORDER BY d.date DESC, i.order_index`
+    )
+    .all(unit.unit_code);
+
+  res.json({ unit, items });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/topics/:slug
 // ---------------------------------------------------------------------------
 

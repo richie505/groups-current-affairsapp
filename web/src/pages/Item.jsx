@@ -49,6 +49,11 @@ export default function Item() {
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
   const item = data.item;
+  // The objective syllabus units — the three APPSC papers answered by ticking a
+  // box. Kept apart from the descriptive paper units, which the Group-I note
+  // renders, because the two lanes are examined differently and a candidate
+  // revising for one should not be handed the other's routing.
+  const objectiveUnits = (item.units || []).filter((u) => u.format === 'objective');
 
   async function toggleRead() {
     setBusy('read');
@@ -238,6 +243,24 @@ export default function Item() {
               <div className="flex flex-wrap gap-1">
                 {item.keywords.map((k) => (
                   <KeywordBadge key={k} keyword={k} />
+                ))}
+              </div>
+            </>
+          ) : null}
+          {/* WHERE THIS SITS ON THE SYLLABUS.
+              Given its own heading rather than mixed in with the angles above,
+              because it answers a different question. The angle is the SHAPE the
+              examiner uses; the unit is the part of the syllabus being examined,
+              and it is the one a candidate revises by. Objective units only —
+              these are the three papers answered by ticking a box. */}
+          {objectiveUnits.length ? (
+            <>
+              <p className="mb-1 mt-3 text-xs font-medium text-slate-600">
+                Syllabus topics this feeds
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {objectiveUnits.map((u) => (
+                  <UnitBadge key={u.unit_code} unit={u} />
                 ))}
               </div>
             </>
