@@ -1,0 +1,1724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APPSC Intelligent Newspaper-to-Exam Preparation System — Full Documentation</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 22mm 18mm; }
+
+  :root{
+    --ink:#16181d;
+    --soft:#4a5160;
+    --faint:#7b8394;
+    --rule:#d9dde5;
+    --accent:#1f3a68;
+    --accent-soft:#eef2f8;
+    --warn:#8a4b12;
+    --warn-soft:#fdf3e7;
+    --good:#1d5c3f;
+    --good-soft:#eaf4ee;
+    --code-bg:#f5f6f8;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    font-family:"Georgia","Cambria","Times New Roman",serif;
+    font-size:10.2pt; line-height:1.5; color:var(--ink);
+    margin:0;
+  }
+
+  h1,h2,h3,h4,.label,.cover-meta,table,code,pre,.badge{
+    font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  }
+
+  /* ---------- cover ---------- */
+  .cover{ height:247mm; display:flex; flex-direction:column; justify-content:space-between; page-break-after:always; }
+  .cover-top{ padding-top:26mm; }
+  .cover .kicker{ font-family:"Segoe UI",Arial,sans-serif; font-size:9pt; letter-spacing:.22em; text-transform:uppercase; color:var(--faint); }
+  .cover h1{ font-size:30pt; line-height:1.12; margin:10mm 0 0; color:var(--accent); font-weight:600; letter-spacing:-.01em; }
+  .cover .sub{ font-size:13pt; color:var(--soft); margin-top:6mm; line-height:1.45; max-width:135mm; }
+  .cover .rule{ height:3px; background:var(--accent); width:38mm; margin:9mm 0; }
+  .cover-meta{ font-size:9pt; color:var(--soft); border-top:1px solid var(--rule); padding-top:5mm; }
+  .cover-meta div{ margin-bottom:1.6mm; }
+  .cover-meta b{ color:var(--ink); font-weight:600; display:inline-block; min-width:36mm; }
+
+  /* ---------- structure ---------- */
+  .part{ page-break-before:always; padding-top:8mm; }
+  .part .part-no{ font-family:"Segoe UI",Arial,sans-serif; font-size:9pt; letter-spacing:.2em; text-transform:uppercase; color:var(--faint); }
+  .part h1{ font-size:22pt; color:var(--accent); margin:2mm 0 3mm; font-weight:600; border-bottom:2px solid var(--accent); padding-bottom:3mm; }
+  .part .part-blurb{ color:var(--soft); font-size:10.5pt; max-width:150mm; }
+
+  h2{ font-size:14pt; color:var(--accent); margin:9mm 0 2mm; font-weight:600; page-break-after:avoid; }
+  h3{ font-size:11pt; margin:6mm 0 1.5mm; font-weight:600; color:var(--ink); page-break-after:avoid; }
+  h4{ font-size:9.5pt; margin:5mm 0 1mm; font-weight:600; color:var(--soft); text-transform:uppercase; letter-spacing:.06em; page-break-after:avoid; }
+  p{ margin:0 0 3mm; }
+  ul,ol{ margin:0 0 3mm; padding-left:6mm; }
+  li{ margin-bottom:1.4mm; }
+  strong{ font-weight:600; }
+  em{ font-style:italic; }
+
+  /* ---------- toc ---------- */
+  .toc{ page-break-after:always; }
+  .toc h1{ font-size:18pt; color:var(--accent); border-bottom:1px solid var(--rule); padding-bottom:3mm; margin-bottom:5mm; }
+  .toc-part{ font-family:"Segoe UI",Arial,sans-serif; font-size:8.5pt; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin:5mm 0 2mm; }
+  .toc-row{ display:flex; gap:4mm; font-family:"Segoe UI",Arial,sans-serif; font-size:9.5pt; margin-bottom:1.4mm; }
+  .toc-row .n{ color:var(--accent); font-weight:600; min-width:9mm; }
+  .toc-row .t{ color:var(--ink); }
+  .toc-row .d{ color:var(--faint); }
+
+  /* ---------- tables ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:8.6pt; margin:3mm 0 5mm; page-break-inside:avoid; }
+  th{ text-align:left; background:var(--accent-soft); color:var(--accent); font-weight:600; padding:2mm 2.4mm; border-bottom:1.5px solid var(--accent); font-size:8.2pt; letter-spacing:.02em; }
+  td{ padding:2mm 2.4mm; border-bottom:1px solid var(--rule); vertical-align:top; }
+  td.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  table.tight td, table.tight th{ padding:1.4mm 2mm; }
+  table.wide{ page-break-inside:auto; }
+  table.wide tr{ page-break-inside:avoid; }
+
+  /* ---------- callouts ---------- */
+  .box{ border-left:3px solid var(--accent); background:var(--accent-soft); padding:3.5mm 4mm; margin:4mm 0; page-break-inside:avoid; font-size:9.4pt; }
+  .box .label{ display:block; font-size:7.6pt; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:1.6mm; font-weight:700; }
+  .box p:last-child{ margin-bottom:0; }
+  .box.warn{ border-left-color:#c07a2a; background:var(--warn-soft); }
+  .box.warn .label{ color:var(--warn); }
+  .box.good{ border-left-color:#2f7d57; background:var(--good-soft); }
+  .box.good .label{ color:var(--good); }
+
+  /* ---------- code ---------- */
+  pre{ background:var(--code-bg); border:1px solid var(--rule); border-left:3px solid var(--faint); padding:3mm 3.5mm; font-size:8.2pt; line-height:1.45; white-space:pre-wrap; margin:3mm 0 4mm; page-break-inside:avoid; }
+  code{ background:var(--code-bg); padding:0 1mm; font-size:8.6pt; border-radius:2px; }
+  pre code{ background:none; padding:0; font-size:8.2pt; }
+
+  /* ---------- misc ---------- */
+  .lead{ font-size:11pt; color:var(--soft); line-height:1.55; margin-bottom:5mm; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin:4mm 0 5mm; }
+  .stat{ border:1px solid var(--rule); border-top:2.5px solid var(--accent); padding:3mm; text-align:center; page-break-inside:avoid; }
+  .stat .v{ font-family:"Segoe UI",Arial,sans-serif; font-size:16pt; font-weight:600; color:var(--accent); line-height:1.1; }
+  .stat .k{ font-family:"Segoe UI",Arial,sans-serif; font-size:7.4pt; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); margin-top:1.4mm; }
+  .badge{ display:inline-block; font-size:7.4pt; font-weight:600; padding:.6mm 2mm; border-radius:2px; letter-spacing:.04em; text-transform:uppercase; }
+  .b-built{ background:var(--good-soft); color:var(--good); }
+  .b-partial{ background:var(--warn-soft); color:var(--warn); }
+  .b-none{ background:#f1f1f3; color:var(--faint); }
+  .b-gone{ background:#f6e9e9; color:#8a2b2b; }
+  .avoid{ page-break-inside:avoid; }
+  hr{ border:0; border-top:1px solid var(--rule); margin:6mm 0; }
+  .footnote{ font-size:8.4pt; color:var(--faint); font-style:italic; }
+  .flow{ font-family:"Segoe UI",Arial,sans-serif; font-size:8.6pt; line-height:1.7; background:var(--accent-soft); border:1px solid var(--rule); padding:4mm; margin:4mm 0; page-break-inside:avoid; }
+  del{ color:var(--faint); }
+</style>
+</head>
+<body>
+
+<!-- ==================== COVER ==================== -->
+<section class="cover">
+  <div class="cover-top">
+    <div class="kicker">System Documentation &middot; Version 2.0 &middot; Objective-only</div>
+    <h1>APPSC Intelligent<br>Newspaper-to-Exam<br>Preparation System</h1>
+    <div class="rule"></div>
+    <div class="sub">
+      How one uploaded newspaper becomes exam-shaped notes and questions for the
+      three APPSC papers that are answered by ticking a box — the complete
+      process, architecture, data model, constraints and current state.
+    </div>
+  </div>
+  <div class="cover-meta">
+    <div><b>Codebase</b> appsc-current-affairs-app</div>
+    <div><b>Compiled</b> 23 August 2026, from the source and the live database</div>
+    <div><b>Serves</b> Group&#8209;II Screening &middot; Group&#8209;II Mains &middot; Group&#8209;I Prelims</div>
+    <div><b>Verified by</b> 146/146 tests &middot; 3 static gates &middot; preflight 8 pass / 2 warn / 0 fail</div>
+    <div><b>Content state</b> 4 editions &middot; 411 articles &middot; 119 published items &middot; 874 questions</div>
+    <div><b>Supersedes</b> Version 1.0, written before the Group&#8209;I Mains layer was removed</div>
+  </div>
+</section>
+
+<!-- ==================== CONTENTS ==================== -->
+<section class="toc">
+  <h1>Contents</h1>
+
+  <div class="toc-part">Part I &mdash; What this system is</div>
+  <div class="toc-row"><span class="n">1</span><span class="t">The problem it solves &mdash; <span class="d">why a newspaper is the wrong shape for an exam</span></span></div>
+  <div class="toc-row"><span class="n">2</span><span class="t">The exam being served &mdash; <span class="d">three papers, all of them ticked</span></span></div>
+  <div class="toc-row"><span class="n">3</span><span class="t">The core principle &mdash; <span class="d">one source, one intelligence process, many outputs</span></span></div>
+  <div class="toc-row"><span class="n">4</span><span class="t">Dual routing &mdash; <span class="d">one reading, two published syllabi</span></span></div>
+
+  <div class="toc-part">Part II &mdash; The process, end to end</div>
+  <div class="toc-row"><span class="n">5</span><span class="t">The journey of one PDF &mdash; <span class="d">eight stages, and which ones cost money</span></span></div>
+  <div class="toc-row"><span class="n">6</span><span class="t">Stages 1&ndash;2 &mdash; <span class="d">extraction and segmentation</span></span></div>
+  <div class="toc-row"><span class="n">7</span><span class="t">Stage 3 &mdash; <span class="d">the relevance score</span></span></div>
+  <div class="toc-row"><span class="n">8</span><span class="t">Stage 4 &mdash; <span class="d">adaptive selection by syllabus leverage</span></span></div>
+  <div class="toc-row"><span class="n">9</span><span class="t">Stage 5 &mdash; <span class="d">drafting the master knowledge object</span></span></div>
+  <div class="toc-row"><span class="n">10</span><span class="t">Stage 6 &mdash; <span class="d">questions written to the syllabus unit</span></span></div>
+  <div class="toc-row"><span class="n">11</span><span class="t">Stages 7&ndash;8 &mdash; <span class="d">review and publication</span></span></div>
+
+  <div class="toc-part">Part III &mdash; Architecture</div>
+  <div class="toc-row"><span class="n">12</span><span class="t">Stack, processes and the request path</span></div>
+  <div class="toc-row"><span class="n">13</span><span class="t">Repository map</span></div>
+  <div class="toc-row"><span class="n">14</span><span class="t">The data model &mdash; <span class="d">thirty-five tables, by layer</span></span></div>
+  <div class="toc-row"><span class="n">15</span><span class="t">The API surface</span></div>
+
+  <div class="toc-part">Part IV &mdash; The intelligence layers</div>
+  <div class="toc-row"><span class="n">16</span><span class="t">The ten layers, and what is actually built</span></div>
+  <div class="toc-row"><span class="n">17</span><span class="t">The syllabus map and its aliases</span></div>
+  <div class="toc-row"><span class="n">18</span><span class="t">The PYQ engine &mdash; <span class="d">what APPSC has really asked</span></span></div>
+  <div class="toc-row"><span class="n">19</span><span class="t">The topic knowledge graph</span></div>
+
+  <div class="toc-part">Part V &mdash; The product</div>
+  <div class="toc-row"><span class="n">20</span><span class="t">Student screens</span></div>
+  <div class="toc-row"><span class="n">21</span><span class="t">Admin screens</span></div>
+  <div class="toc-row"><span class="n">22</span><span class="t">The gates &mdash; <span class="d">everything that must pass before a student sees a word</span></span></div>
+
+  <div class="toc-part">Part VI &mdash; Operations</div>
+  <div class="toc-row"><span class="n">23</span><span class="t">Setup, running, and the daily commands</span></div>
+  <div class="toc-row"><span class="n">24</span><span class="t">Configuration</span></div>
+  <div class="toc-row"><span class="n">25</span><span class="t">Preflight, backup, deploy, restore</span></div>
+  <div class="toc-row"><span class="n">26</span><span class="t">Tests and static gates</span></div>
+
+  <div class="toc-part">Part VII &mdash; Constraints, limits and state</div>
+  <div class="toc-row"><span class="n">27</span><span class="t">Standing decisions</span></div>
+  <div class="toc-row"><span class="n">28</span><span class="t">Invariants the code enforces</span></div>
+  <div class="toc-row"><span class="n">29</span><span class="t">Known limitations</span></div>
+  <div class="toc-row"><span class="n">30</span><span class="t">Open backlog</span></div>
+  <div class="toc-row"><span class="n">31</span><span class="t">Current content state &mdash; <span class="d">live figures</span></span></div>
+  <div class="toc-row"><span class="n">32</span><span class="t">Decision log &mdash; <span class="d">failures that shaped the design</span></span></div>
+  <div class="toc-row"><span class="n">33</span><span class="t">What the Group-I Mains removal took out</span></div>
+  <div class="toc-row"><span class="n">34</span><span class="t">Glossary</span></div>
+</section>
+
+<!-- ==================== PART I ==================== -->
+<section class="part">
+  <div class="part-no">Part I</div>
+  <h1>What this system is</h1>
+  <div class="part-blurb">Before any code: the problem, the exam, the one principle everything
+  else follows from, and the single design idea that makes the app different from a notes app
+  with a newspaper attached.</div>
+</section>
+
+<h2>1. The problem it solves</h2>
+
+<p class="lead">A newspaper is organised by the day. An exam is organised by the syllabus.
+Every hour a candidate spends converting the first into the second is an hour not spent
+learning, and it is the hour almost nobody sustains for nine months.</p>
+
+<p>The daily current-affairs habit fails in a specific, predictable way. A candidate reads
+the paper, underlines things, and produces a pile of dated notes. Eight months later the pile
+is unusable: it is filed by date, and the question paper does not ask about 21 August. It asks
+about the Finance Commission — and the four separate days on which the Finance Commission
+appeared are four separate pages in four separate notebooks, with no thread between them.</p>
+
+<p>Worse, the same candidate is usually preparing for <strong>two exams</strong> with two
+different published syllabi. The same event belongs to different units in each, and reading
+the paper twice — once per syllabus — is the advice everyone gives and nobody follows.</p>
+
+<p>This system takes the conversion work off the candidate. The admin uploads the day's
+paper as a PDF; the system extracts every article, scores each one against the actual APPSC
+syllabus, drafts the survivors into exam-shaped notes, writes questions in the formats APPSC
+actually uses, and files everything against syllabus units and persistent topics — so that
+the fourth Finance Commission story attaches to the first three instead of starting a new page.</p>
+
+<div class="box">
+  <span class="label">The claim, stated plainly</span>
+  <p>The competitive advantage is <strong>not</strong> OCR and <strong>not</strong> AI note
+  generation. Both are commodities. The advantage is the chain:</p>
+  <p><em>Current Event → APPSC Relevance → Syllabus Topic → Blueprint Keyword → PYQ Pattern →
+  Cross-Paper Connection → AP-Specific Link → Correct Exam Output.</em></p>
+</div>
+
+<h2>2. The exam being served</h2>
+
+<p>Andhra Pradesh Public Service Commission runs four papers a candidate at this level might
+sit. <strong>This app serves the three that are answered by ticking a box.</strong></p>
+
+<table class="wide">
+  <tr><th style="width:22%">Paper</th><th style="width:16%">Answer shape</th><th>What it rewards</th><th style="width:18%">Units mapped here</th></tr>
+  <tr><td><strong>Group&#8209;II Screening</strong></td><td>Objective</td><td>Fact recall, heavy on current affairs</td><td class="num">25 units, shared</td></tr>
+  <tr><td><strong>Group&#8209;II Mains</strong></td><td>Objective</td><td>The same, deeper, across three papers</td><td class="num">with Screening</td></tr>
+  <tr><td><strong>Group&#8209;I Prelims</strong></td><td>Objective</td><td>Precise recall across a wide syllabus, 120 questions</td><td class="num">27 units</td></tr>
+  <tr style="opacity:.55"><td><del><strong>Group&#8209;I Mains</strong></del></td><td><del>Descriptive</del></td><td><del>An argument, structured, with an AP example in it</del> — <strong>out of scope since 23 Aug 2026</strong></td><td><span class="badge b-gone">removed</span></td></tr>
+</table>
+
+<div class="box warn">
+  <span class="label">The decision that shapes this whole document</span>
+  <p>Serving the written paper as well meant carrying a <strong>second output shape through
+  every layer</strong>: an eight-section note per item, four capture banks, essay questions, a
+  seven-dimension tagging scheme, 54 descriptive syllabus units and a 252-question descriptive
+  past-paper corpus — none of which a ticked paper uses.</p>
+  <p>All of it was removed on 23 August 2026. What remains is one intelligence process feeding
+  two objective syllabi. <strong>Section 33 records exactly what went</strong>, so the decision
+  can be re-read rather than re-derived.</p>
+  <p>This removes Group&#8209;I <em>Mains</em>. It does not remove Group&#8209;I: Prelims is
+  served, and its 27 units are more than half the syllabus map.</p>
+</div>
+
+<h3>Why question generation is the main output, not a bolt-on</h3>
+
+<p>Every paper is objective, so the memorise-this block and the questions written from it are
+not a lane — they are the product. The number of questions an item gets follows
+<strong>how many distinct syllabus units the article feeds</strong>, from a base of 4 up to a
+cap of 10, rather than a flat four per item.</p>
+
+<h3>Why Andhra Pradesh is a separate axis, not a subject</h3>
+
+<p>AP content runs through every paper rather than sitting in one unit. So the system treats
+AP as a dimension that cuts across everything: articles carry an <code>ap</code> flag, the
+relevance score gives AP its own 20 of 100, and the four content buckets include
+<code>ap</code> as a peer of <code>national</code>. Of the 119 items currently published,
+<strong>45 are AP</strong> — 38%.</p>
+
+<p>The strongest single signal that a story is an AP story turns out not to be its text but
+its <strong>dateline</strong>. A report filed from AMALAPURAM is an AP story even when the body
+never names the State, which is why <code>np_articles.dateline</code> is a first-class column
+and why a bug that once wiped it was treated as a data-loss incident rather than a cosmetic one.</p>
+
+<h2>3. The core principle</h2>
+
+<div class="flow">
+<strong>ONE SOURCE &rarr; ONE INTELLIGENCE PROCESS &rarr; MANY EXAM OUTPUTS</strong><br><br>
+NEWSPAPER<br>
+&nbsp;&nbsp;&rarr; ARTICLE EXTRACTION<br>
+&nbsp;&nbsp;&rarr; FACT + EVENT UNDERSTANDING<br>
+&nbsp;&nbsp;&rarr; MASTER APPSC KNOWLEDGE OBJECT<br>
+&nbsp;&nbsp;&rarr; SYLLABUS / PYQ / KEYWORD MAPPING<br>
+&nbsp;&nbsp;&rarr; MULTIPLE EXAM-SPECIFIC OUTPUTS
+</div>
+
+<p>The newspaper is processed <strong>once</strong>. The same processed knowledge then serves
+both syllabi. There is deliberately no "Newspaper → Group&nbsp;I" pipeline sitting beside a
+"Newspaper → Group&nbsp;II" pipeline, because that duplicates the expensive part and
+guarantees the two will disagree.</p>
+
+<p>This principle has a concrete architectural consequence that recurs throughout the
+codebase: <strong>shared libraries, not parallel implementations</strong>. The PDF path used
+by the admin upload screen and the path used by the command line are the same function
+(<code>lib/ingest.js</code>). The drafting insert used by the newspaper lane and by the older
+web lane is the same function (<code>insertDrafted</code> in <code>lib/draft.js</code>). Where
+a second copy was tempting, the reasoning written into the source is always the same: two
+copies drift, and the drift is silent.</p>
+
+<h2>4. Dual routing — one reading, two published syllabi</h2>
+
+<p>The atomic object is <strong>one item, routed to both syllabi at once</strong>. A student
+reads a day's items through a <em>lens</em> they switch in the header. Read once, file twice.</p>
+
+<div class="box">
+  <span class="label">What the lens means now</span>
+  <p>It used to switch between a <em>written</em> paper and a <em>ticked</em> one — two answer
+  shapes. Both exams are ticked now, so it switches between <strong>two syllabi</strong>. The
+  facts are the same; what differs is where on each published syllabus the item sits.</p>
+  <p>Worked example, item 100, under the "both" lens:</p>
+  <p><code>GROUP II</code> &nbsp;→&nbsp; <code>G2-S2</code> Geography — physical, economic and human, India and AP<br>
+     <code>GROUP I PRELIMS</code> &nbsp;→&nbsp; <code>G1P-D1</code> General geography — earth, atmosphere, oceans, climate change, hazards</p>
+</div>
+
+<table class="wide">
+  <tr><th style="width:22%"></th><th style="width:39%">Group&#8209;II lane</th><th>Group&#8209;I Prelims lane</th></tr>
+  <tr><td><strong>Atomic output</strong></td><td colspan="2" style="text-align:center">An MCQ in one of 8 official formats — shared</td></tr>
+  <tr><td><strong>Recall block</strong></td><td colspan="2" style="text-align:center"><code>prelims_facts</code> — shared</td></tr>
+  <tr><td><strong>Keyword angles</strong></td><td colspan="2" style="text-align:center">Blueprint angles — <code>Appointed</code>, <code>GI tag</code>, <code>Index</code> — shared</td></tr>
+  <tr><td><strong>Syllabus units</strong></td><td><code>G2-*</code> — 25 units across 5 papers</td><td><code>G1P-*</code> — 27 units across 6 subject papers</td></tr>
+  <tr><td><strong>Grouping</strong></td><td colspan="2" style="text-align:center">4 buckets: International / National / <strong>AP</strong> / dynamic</td></tr>
+</table>
+
+<h3>What every item carries</h3>
+
+<pre>SHARED     headline · event date · bucket · importance tier ·
+           notes_markdown · static_linkage · static_notes · sources
+
+RECALL     prelims_facts        the memorise-this block, and the whole output
+           keywords[]           blueprint question angles
+           units[]              every syllabus unit it feeds, in both exams
+           mcqs[]               8 formats, each tagged format + keyword + unit</pre>
+
+<div class="box good">
+  <span class="label">Three rules the code actually enforces</span>
+  <p><strong>1. No facts, no item.</strong> An item with no memorise-this block is an item no
+  question can be written from, and every paper here is answered by ticking a box. The drafter
+  turns it away before spending anything more on it, and the review queue flags it in red.
+  <em>(This replaced the old "no angle, no Group-I lane" rule, which guarded the written paper.)</em></p>
+  <p><strong>2. Discard is a first-class outcome.</strong> Most news should be discarded.
+  Discards are kept as rows with their reason, and the admin dashboard shows the count as a
+  <em>positive</em> signal. Currently 36 of 155 drafted items and 64 of 411 articles are
+  discarded rows, not deletions.</p>
+  <p><strong>3. Facts go stale, so say when they were true.</strong> Every question carries
+  <code>fact_as_of</code>, every explanation is required, and a seeded
+  <code>ref_corrections</code> register is both injected into the drafting prompt <em>and</em>
+  checked against every draft. A wrong current-affairs fact cannot be caught against a
+  textbook, which is why this gets three layers rather than one.</p>
+</div>
+
+<!-- ==================== PART II ==================== -->
+<section class="part">
+  <div class="part-no">Part II</div>
+  <h1>The process, end to end</h1>
+  <div class="part-blurb">Follow one uploaded PDF all the way to a student's screen. Eight
+  stages, five of which involve no model at all, and two of which cost money. This is the part
+  to understand first — everything in Parts III and IV is machinery in service of it.</div>
+</section>
+
+<h2>5. The journey of one PDF</h2>
+
+<div class="flow">
+<strong>ADMIN UPLOADS THE HINDU (VIJAYAWADA), 21 AUG 2026, 28 PAGES, ~120 MB</strong><br><br>
+1 &nbsp;EXTRACT &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>no model</em> &nbsp;&rarr; text with bounding boxes; OCR only where there is no text layer<br>
+2 &nbsp;SEGMENT &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>no model</em> &nbsp;&rarr; blocks become articles; genre read from the paper's own running head<br>
+3 &nbsp;SCORE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>no model</em> &nbsp;&rarr; 0&ndash;100 on five weighted factors, with the breakdown stored<br>
+4 &nbsp;SELECT &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>no model</em> &nbsp;&rarr; rank by syllabus leverage; decide what is worth drafting<br>
+5 &nbsp;DRAFT &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>model</strong> &nbsp;&nbsp;&nbsp;&rarr; the master knowledge object: notes, static notes, the facts block<br>
+6 &nbsp;QUESTIONS &nbsp;&nbsp;&nbsp;<strong>model</strong> &nbsp;&nbsp;&nbsp;&rarr; MCQs in the formats APPSC has actually used for that angle<br>
+7 &nbsp;REVIEW &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>a person</em> &nbsp;&rarr; the review queue; sources, tags and correction hits shown inline<br>
+8 &nbsp;PUBLISH &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>a person</em> &nbsp;&rarr; the day goes live; students see it<br><br>
+<strong>Nothing between stage 1 and stage 8 reaches a student. Publishing is always manual.</strong>
+</div>
+
+<h3>Where the money goes, and where it does not</h3>
+
+<p>Five of the eight stages are deterministic code. That is a deliberate cost and trust
+decision, not an accident of implementation:</p>
+
+<ul>
+  <li><strong>Free stages are repeatable.</strong> Re-scoring an edition after improving the
+  vocabulary costs nothing, so the vocabulary can be improved often.</li>
+  <li><strong>Free stages are explainable.</strong> "Why did this article drop out of today's
+  list?" has an answer — the stored breakdown — rather than a shrug.</li>
+  <li><strong>Free stages are stable.</strong> A model asked to score relevance gives a
+  different answer to the same article on Tuesday.</li>
+  <li><strong>Paid stages do what only a model can</strong> — write the note prose and the
+  standing material underneath it.</li>
+</ul>
+
+<p>The practical consequence: you can inspect the entire selection for an edition, for free,
+in under a second, before spending anything:</p>
+
+<pre><code>node server/scripts/draft-articles.js 4 --plan</code></pre>
+
+<p><code>--plan</code> prints what would be drafted and stops. It is distinct from
+<code>--dry-run</code>, which drafts everything and declines to save it — same money, same
+twenty minutes.</p>
+
+<h2>6. Stages 1&ndash;2 — extraction and segmentation</h2>
+
+<h3>Extraction</h3>
+
+<p>A Python helper (<code>content-pipeline/np-daily/layout.py</code>) reads the PDF and
+returns text <em>with bounding boxes</em>. Position is the whole point: a newspaper page is a
+layout problem, not a text problem, and a plain text dump interleaves columns into nonsense.
+Pages that already carry a text layer are read directly; only pages without one are rasterised
+and OCR'd, which keeps a 28-page edition affordable in time. The counts of OCR'd and skipped
+pages are stored on the edition row, because a run that silently OCR'd everything looks
+identical to one that did not.</p>
+
+<p>The upload itself is <strong>idempotent</strong>: an edition is identified by publication +
+date + a SHA-256 of the file bytes, so uploading the same PDF twice returns the existing
+edition rather than creating a second one. Processing is the expensive part; a double-clicked
+upload button should not cost two OCR passes.</p>
+
+<h3>Segmentation — one rule, and no column grid</h3>
+
+<div class="box">
+  <span class="label">The segmentation rule</span>
+  <p>A body block belongs to <strong>the nearest headline above it whose horizontal span
+  covers the block's centre.</strong></p>
+</div>
+
+<p>That works because of how pages are designed rather than by luck. A headline placed in a
+column is exactly the mark that the story above it ended there. A six-column headline owns six
+columns of text; a one-column headline owns one. The rule was checked by hand against all
+twelve ambiguous blocks on a real page that sets its upper half and its lower strip on
+different column pitches — the case where a naive column grid fails.</p>
+
+<h3>Genre comes from the paper, not from a classifier</h3>
+
+<p>The Hindu names its own pages in the running head, so "Editorial", "Opinion" and the
+<code>PARLEY</code> and <code>NOTEBOOK</code> kickers are read directly off the page. This
+matters because <strong>the same sentence is a fact in a report and a claim in an op-ed</strong>.
+An item drafted from signed opinion gets a different prompt, a forced <code>needs_verify</code>
+flag, and the author's name carried onto the page.</p>
+
+<h3>Same-event merging</h3>
+
+<p>Two reports of one event become one enriched item. A duplicate is not deleted — it points
+at the article it duplicates via <code>merged_into</code>, so a wrong merge can be inspected
+and undone. Jump continuations ("continued on page 12") are folded into the story they
+continue. Currently 14 of 411 articles are marked <code>duplicate</code>.</p>
+
+<h2>7. Stage 3 — the relevance score</h2>
+
+<p>Every article gets a 0&ndash;100 score with the breakdown stored alongside it. Five weighted
+factors:</p>
+
+<table>
+  <tr><th style="width:8%">Factor</th><th style="width:26%">Measures</th><th class="num" style="width:10%">Weight</th><th>How it is earned</th></tr>
+  <tr><td><strong>A</strong></td><td>Syllabus relevance</td><td class="num">30</td><td>Connects to a known master topic, or to recognisable subject territory, or to a syllabus unit. A Tier&#8209;1 topic tops the factor out.</td></tr>
+  <tr><td><strong>B</strong></td><td>PYQ keyword match</td><td class="num">20</td><td>Matches a blueprint angle the commission has <em>actually asked before</em> — the count comes from the PYQ corpus, not from a hunch.</td></tr>
+  <tr><td><strong>C</strong></td><td>Andhra Pradesh</td><td class="num">20</td><td>Full marks for an AP story (the dateline counts); half marks where a topic is AP-specific but the article reads as national.</td></tr>
+  <tr><td><strong>D</strong></td><td>Current importance</td><td class="num">15</td><td>Does it name a findable official act? The difference between a decision that can be cited and a meeting that was held.</td></tr>
+  <tr><td><strong>E</strong></td><td>Cross-paper reuse</td><td class="num">15</td><td>How many distinct <em>objective</em> papers the matched topics serve — study once, tick it off in three places. <strong>Re-based 23 Aug 2026; see below.</strong></td></tr>
+</table>
+
+<p><strong>Bands:</strong> 80&ndash;100 CRITICAL &middot; 60&ndash;79 HIGH &middot; 40&ndash;59
+MEDIUM &middot; below 40 LOW.</p>
+
+<h3>Why every score carries its breakdown</h3>
+
+<p>Because a number nobody can decompose is a number nobody trusts. The first question anyone
+asks about "62 / HIGH" is which part came from where, and if that cannot be answered the score
+gets ignored and the list goes back to being read top to bottom. So <code>score()</code>
+returns the five components <em>and the reason each one fired</em>, and the caller stores them
+in <code>np_articles.breakdown</code>. It also makes the weights testable: 30 for syllabus
+against 20 for AP is an opinion about this exam, and an opinion that can be re-run over past
+articles can be corrected.</p>
+
+<div class="box warn">
+  <span class="label">Factor E was load-bearing, and nearly went silently</span>
+  <p>It read <code>topic_evidence</code> — 149 rows holding one person's reading of the
+  Group&#8209;I <strong>Mains</strong> papers, and <em>nothing else</em>. Removing the Mains
+  layer would have taken <strong>15 of the 100 points off every article</strong>, shifting the
+  whole ranking, with no line anywhere saying why.</p>
+  <p>It is now measured from this app's own evidence: <code>topic_units</code> joined to
+  <code>ref_units</code>, counting the distinct <em>objective</em> papers a topic's units belong
+  to. It answers the same question the blueprint was being asked — "does studying this pay in
+  more than one place?" — from data that can be rebuilt rather than from a document.</p>
+  <p><strong>It now reaches further than the blueprint did: 26 articles earned Factor E before,
+  75 do now.</strong></p>
+  <p>The thresholds were rescaled with it. Five Mains papers became <strong>ten</strong>
+  objective ones, so leaving <code>4+ → 15</code> would have quietly redefined full marks from
+  80% breadth to 40%. Now <code>6+ → 15</code>, <code>4&ndash;5 → 12</code>, <code>3 → 8</code>,
+  <code>2 → 4</code>. Measured effect is small and worth stating plainly: mean score 31.7 →
+  31.3 across 411 articles, three articles leaving the 70+ band. It was done anyway, because a
+  threshold that no longer means what its comment says is how a score stops being trusted.</p>
+</div>
+
+<h3>The veto comes first</h3>
+
+<div class="box">
+  <span class="label">Why some articles are excluded before scoring, not penalised during it</span>
+  <p>A robbery in Nandyal mentions an AP district, names a police officer, and matches the
+  <code>Arrested</code> angle: it would score in the forties on the factors alone. So
+  categories that are never examinable are excluded <em>before</em> any scoring happens, rather
+  than being outvoted by it.</p>
+</div>
+
+<p>The veto list covers letters to the editor, the archive columns ("A HUNDRED YEARS AGO",
+"FROM THE ARCHIVES" — reprints of copy a century old that read as perfectly plausible business
+reporting), crime reports, and sport. Sport is tested separately because the rule is narrower:
+a match report is not examinable, but doping, sports governance, a major tournament or a sports
+policy question is. Omitting that check once let a CBSE archery tournament reach 62/HIGH.</p>
+
+<h3>Guards learned from real misfires</h3>
+
+<table class="wide">
+  <tr><th style="width:34%">The misfire</th><th>The guard now in place</th></tr>
+  <tr><td>"Collectors empowered to grant citizenship under CAA" filed as <em>international</em>, because a CAA story naturally mentions Pakistan and Bangladesh</td><td>International requires India-as-party framing, not merely a country name; and it must <em>out-signal</em> the domestic reading rather than merely appear in it. A tie goes to national — this is a State exam.</td></tr>
+  <tr><td>"Imran Khan shifted back to jail" matched the Tier&#8209;1 topic "Supreme Court and judicial review" on the words <em>Supreme Court</em></td><td>A foreign-affairs guard: a topic match inside another country's internal affairs is naming the wrong country's institution, so topic-derived tiers are withheld.</td></tr>
+  <tr><td>"Woman dies in lift accident" rose from 20 to 30 on the word <em>hospital</em>; a Ukraine war report on <em>missile</em></td><td>A unit must be <strong>named in the headline</strong>, or reached by <strong>two distinct terms</strong> in the body, or reached by <strong>one multi-word phrase</strong> specific enough to stand alone.</td></tr>
+  <tr><td>Requiring two terms then read "YSRCP disrupts proceedings in Council" as off-syllabus, though the body says <em>Legislative Council</em> once and says it exactly right</td><td>The single-phrase escape above. Every alias that misfired was a single common word; every phrase that worked — "Legislative Council", "minimum support price" — names its unit on sight.</td></tr>
+</table>
+
+<h3>Measured distribution</h3>
+
+<p>Across the 411 articles currently scored:</p>
+
+<table class="tight" style="width:70%">
+  <tr><th>Band</th><th class="num">Articles</th><th class="num">Share</th></tr>
+  <tr><td>70 and above</td><td class="num">30</td><td class="num">7%</td></tr>
+  <tr><td>55&ndash;69</td><td class="num">40</td><td class="num">10%</td></tr>
+  <tr><td>45&ndash;54</td><td class="num">43</td><td class="num">10%</td></tr>
+  <tr><td>32&ndash;44</td><td class="num">88</td><td class="num">21%</td></tr>
+  <tr><td>below 32</td><td class="num">210</td><td class="num">51%</td></tr>
+</table>
+
+<p>Half the newspaper scores under 32. That is the system working: most of a newspaper is not
+examinable, and a pipeline that finds otherwise has stopped filtering.</p>
+
+<h2>8. Stage 4 — adaptive selection by syllabus leverage</h2>
+
+<p>This stage decides which scored articles are worth paying to draft.</p>
+
+<h3>What was wrong with a flat threshold</h3>
+
+<p>The original rule was <code>score &gt;= 45</code>. Because the score is a <em>blend</em> of
+five factors, an article can clear the bar on AP place-names and importance alone while feeding
+no syllabus unit at all — and an article that plainly belongs to a unit can miss the bar because
+nothing else about it scored. Measured across 248 scored articles at the time:</p>
+
+<table class="tight" style="width:82%">
+  <tr><th>Under the flat rule</th><th class="num">Articles</th><th>Outcome</th></tr>
+  <tr><td>Scored 45+ and feed <strong>no</strong> syllabus unit</td><td class="num">10</td><td>Drafted anyway — paid for, and unfileable</td></tr>
+  <tr><td>Scored under 45 and <strong>do</strong> feed a unit</td><td class="num">54</td><td>Never drafted — the expensive miss</td></tr>
+</table>
+
+<p>Wrong in both directions, and the second number is the costly one. "Centre notifies key
+scheme to manufacture mobile phones" scored 43 and feeds four units. "Ethanol blending policy
+is behind rise in sugar prices" scored 39 and feeds six.</p>
+
+<h3>The lever</h3>
+
+<p>The number of <strong>distinct syllabus units</strong> an article feeds is the signal the
+composite buries. In the 35&ndash;44 band, 9 of the 20 articles that match at all match three
+or more units. An article examinable in three places is examinable, whatever its composite
+came to.</p>
+
+<pre><code>leverage  = 40 (1 unit) | 62 (2) | 76 (3) | 85 (4+)
+            + 15 if a unit is named in the HEADLINE
+            capped at 100
+
+rank      = 0.55 × leverage  +  0.45 × composite score</code></pre>
+
+<p>Two details carry judgement. <strong>Leverage flattens after four units</strong>, because
+the difference between four and seven is not "nearly twice as examinable" — past a point, a
+long unit list is a story touching many things lightly, which is the shape of a default block
+rather than a strong match. And <strong>headline placement beats a fourth unit</strong>,
+because a unit named in the headline is what the story is <em>about</em>, not something it
+mentions.</p>
+
+<h3>The guards, each from something the data actually did</h3>
+
+<table class="wide">
+  <tr><th style="width:20%">Guard</th><th style="width:12%">Value</th><th>Why</th></tr>
+  <tr><td><code>minRank</code></td><td class="num">45</td><td>The rank an article must reach to be drafted at all.</td></tr>
+  <tr><td><code>minScore</code></td><td class="num">32</td><td>A floor on the composite whatever the leverage says. "Karnataka govt. bans sale of non-dairy paneer" scored 22, touched three units, and ranked 52. Three loose matches on a weak story is not a story about three units. Set to 32 rather than 36 because 36 also removed the J&amp;K census enumerators, SEBI on bond-platform advertising and the Great Nicobar clearance.</td></tr>
+  <tr><td><code>unmatchedMinScore</code></td><td><code>null</code></td><td><strong>An article connecting to no syllabus unit is never drafted automatically.</strong> See below.</td></tr>
+  <tr><td><code>minItems</code></td><td class="num">12</td><td>A thin paper should still yield a digest; the selector reaches further down the ranked list — but never into unmatched articles.</td></tr>
+  <tr><td><code>maxItems</code></td><td class="num">35</td><td>A rich paper should not yield ninety items. An explicit <code>--max</code> overrides <code>minItems</code> rather than being silently raised by it.</td></tr>
+</table>
+
+<h3>The judgement call: no syllabus connection, no draft</h3>
+
+<div class="box warn">
+  <span class="label">Why a score threshold for unmatched articles cannot work</span>
+  <p>The rule started as "draft an unmatched article if it scores well enough". It was
+  abandoned, because the score is precisely what cannot separate these two:</p>
+  <p><code>70</code> &nbsp;Cultural diversity highlight of gala dinner in Vizag<br>
+     <code>55</code> &nbsp;&#8377;7,470 cr. cleared for infra works in ULBs under HAM</p>
+  <p>The first is filler. The second is real AP infrastructure. Both score highly for the same
+  reasons — AP place names, money, officialdom — and neither connects to the syllabus.
+  <strong>Any cut-off that admits the second admits the first.</strong></p>
+</div>
+
+<p>So the rule stops guessing. The valuable ones are not lost: they are unmatched because the
+syllabus <em>vocabulary</em> has a gap, and every run prints them as a to-do list —
+<strong>17 such articles exist right now</strong>. Add the missing alias, re-seed, re-score,
+and they come back through the front door. Hand-picking with <code>--article ID,ID</code>
+remains available for genuine exceptions, where the gate is a person rather than a rule.</p>
+
+<h2>9. Stage 5 — drafting the master knowledge object</h2>
+
+<p>This is the first stage that calls a model, and the design question is not "what prompt"
+but <strong>what the model is and is not asked</strong>.</p>
+
+<div class="box">
+  <span class="label">The rule that shapes the whole prompt</span>
+  <p>The model is <strong>not</strong> asked to re-derive the bucket, the keyword angles, the
+  topics, or the syllabus units. Stages 2&ndash;4 already computed those deterministically and
+  reproducibly. They are supplied to it as <strong>findings</strong>, not questions. Asking a
+  model a question already settled gets you a second, disagreeing answer.</p>
+  <p>It is asked for exactly what a scoring function cannot produce: the note prose, the
+  standing material underneath it, and the memorise-this block of facts that questions are
+  later written from.</p>
+</div>
+
+<h3>The prompt got a third smaller when the Mains layer went</h3>
+
+<div class="box good">
+  <span class="label">The 6,250-token block that is simply gone</span>
+  <p>The model used to be handed the whole descriptive unit vocabulary to choose from — the
+  largest single block in every paid call. It is no longer asked for units at all, because the
+  objective ones were already matched from the newspaper's own words.</p>
+  <p>That also removes a contradiction which produced the worst tagging in the corpus. Told
+  nothing, the model returned fourteen units for one story, half of them objective codes copied
+  back from the findings; told not to copy them, it returned three objective codes and no
+  descriptive ones. A prompt saying one thing in its instructions and the opposite in its
+  vocabulary — and the vocabulary wins. There is no vocabulary to contradict now.</p>
+</div>
+
+<h3>What is assembled into the call</h3>
+
+<table class="wide">
+  <tr><th style="width:26%">Block</th><th>Contents</th></tr>
+  <tr><td>The base prompt</td><td>The objective-only brief: the required fields, the compact fact-dense style, the discard rule.</td></tr>
+  <tr><td>Print addendum</td><td>Rules specific to newspaper sourcing — no invented URLs, citation built from the edition row, <code>needs_verify</code> forced on.</td></tr>
+  <tr><td>Syllabus addendum</td><td>The actual APPSC syllabus text for the units this article feeds, so the note is written <em>to the unit the commission examines</em> rather than to the topic in general.</td></tr>
+  <tr><td>Vocabulary</td><td>The 737 blueprint keyword angles and the corrections register. <strong>No unit listing.</strong></td></tr>
+  <tr><td>Opinion addendum</td><td>Added only for signed opinion pieces: treat assertions as claims, attribute them, flag for verification.</td></tr>
+  <tr><td>Findings</td><td>Matched keywords with their PYQ counts, matched topics with tier and AP flag, past-paper evidence for the angle.</td></tr>
+  <tr><td>The article</td><td>Headline, standfirst, byline, dateline, body, page, genre.</td></tr>
+</table>
+
+<p>The static blocks are assembled <em>before</em> the per-article content deliberately:
+providers cache by prefix, so a stable prefix across a 30-article run is a large cost
+reduction. The opinion block sits last, behind everything identical, so an op-ed does not fork
+the cached prefix for every call after it.</p>
+
+<h3>The fields the model returns</h3>
+
+<table class="tight">
+  <tr><th style="width:24%">Field</th><th>What it is for</th></tr>
+  <tr><td><code>headline</code>, <code>event_date</code></td><td>What happened, and when — as distinct from which digest it lands in</td></tr>
+  <tr><td><code>bucket</code>, <code>subject_tag</code></td><td>International / national / AP / dynamic, and the home subject for a dynamic item</td></tr>
+  <tr><td><code>notes_markdown</code></td><td>The exam-oriented note, 120&ndash;250 words, with a table wherever there is a natural pairing — those pairings become list-matching questions</td></tr>
+  <tr><td><code>static_linkage</code></td><td>Which standing syllabus topic this news updates</td></tr>
+  <tr><td><code>static_notes</code></td><td>The standing material itself, 150&ndash;300 words, so the student need not go elsewhere</td></tr>
+  <tr><td><strong><code>prelims_facts</code></strong></td><td><strong>The most important field.</strong> Bare facts, one per line, "Label — value". Scanned at revision time, not read. Every line is a question that can be written later</td></tr>
+  <tr><td><code>keywords</code></td><td>Blueprint question angles</td></tr>
+  <tr><td><code>importance</code>, <code>needs_verify</code>, <code>verify_note</code></td><td>Tier 1&ndash;3, and an acknowledged gap where a figure could not be confirmed</td></tr>
+</table>
+
+<h3>Provenance for print items</h3>
+
+<p>Print items carry <strong>no invented URL</strong>. The citation is written from the edition
+row — publication, edition, date, page — and anything the model returns in <code>sources</code>
+is dropped. <code>is_primary</code> is 0, because a newspaper is a secondary source. Every
+bridged item is <code>needs_verify = 1</code>: one print report is not the cross-check the
+research discipline requires.</p>
+
+<h3>Robustness the drafter had to learn</h3>
+
+<table class="wide">
+  <tr><th style="width:32%">Failure</th><th>Fix now in place</th></tr>
+  <tr><td>29 articles lost in one run to <code>fetch failed</code>, scoring 61, 58, 57, 54…</td><td>A transient-error classifier walking the whole <code>cause</code> chain, exponential backoff with jitter, a request timeout, and a second-pass queue for failures at the end of the run.</td></tr>
+  <tr><td>A killed run lost 13 drafts that had already been paid for</td><td>Drafts are written <strong>incrementally, per record</strong>, not held in memory until the end.</td></tr>
+  <tr><td>A truncated JSON array discarded every question for a 61-scoring item</td><td><code>salvageObjects()</code> recovers the complete objects from a truncated array rather than failing the whole parse.</td></tr>
+  <tr><td>A unit tag echoed back as <code>"G2-P1-U7 — Union and State government…"</code> matched nothing and vanished silently</td><td><code>canonicalUnit()</code> normalises it back to the code, boundary-matched so U10 is never confused with U1. A unit code nothing can match is not a wrong tag — it is an invisible one.</td></tr>
+</table>
+
+<h2>10. Stage 6 — questions written to the syllabus unit</h2>
+
+<p>Question generation runs in the same worker, sharing the corrections guard, the validators
+and a corpus-wide duplicate hash.</p>
+
+<h3>The eight formats</h3>
+
+<table class="tight">
+  <tr><th>Format</th><th class="num">In the bank</th><th>Format</th><th class="num">In the bank</th></tr>
+  <tr><td><code>direct_recall</code></td><td class="num">257</td><td><code>negative_statement</code></td><td class="num">82</td></tr>
+  <tr><td><code>list_matching</code></td><td class="num">152</td><td><code>count_based</code></td><td class="num">74</td></tr>
+  <tr><td><code>multi_statement</code></td><td class="num">149</td><td><code>statement_based</code></td><td class="num">73</td></tr>
+  <tr><td><code>assertion_reason</code></td><td class="num">87</td><td><code>chronological</code></td><td class="num">0</td></tr>
+</table>
+
+<h3>The format mix is driven by evidence, not a rotation</h3>
+
+<p>APPSC does not test every topic the same way. A Committee is asked as direct recall and
+list-matching; a constitutional Article as assertion-reason; a chronology as sequencing. The
+only way to know which is to count what the commission has actually done.
+<code>plannedFormatsFor()</code> asks: <em>given this blueprint keyword, which formats has
+APPSC really used, and how often?</em> Generation follows the observed distribution; the fixed
+rotation is only a fallback where there is no evidence.</p>
+
+<div class="box warn">
+  <span class="label">The bug worth remembering</span>
+  <p>This engine was <strong>inert for weeks and nothing looked wrong</strong>.
+  <code>plannedFormatsFor</code> sat at module scope and called a logging helper defined inside
+  <code>main()</code>. So whenever the PYQ layer <em>did</em> have evidence, the log line threw
+  a <code>ReferenceError</code> into its own <code>catch</code>, and the catch returned the
+  rotation. The fallback is a legitimate answer, so every run looked healthy.</p>
+  <p>Measured on the live database: the keyword <code>Scheme</code> has <strong>52 questions
+  of usable evidence</strong> asking for <code>[direct_recall × 3, negative_statement]</code>.
+  Every item ever generated had silently received the generic rotation instead.</p>
+</div>
+
+<h3>How many questions an item gets</h3>
+
+<p>Not a flat four. The count follows <strong>the number of distinct syllabus units the
+article feeds</strong>, from a base of 4 up to a cap of 10. An article examinable in six places
+deserves more questions than one examinable in one, and that is a fact the system already knows
+by this stage.</p>
+
+<h3>Distractor discipline and staleness</h3>
+
+<ul>
+  <li>Distractors must be <strong>real-but-wrong</strong> — last year's host, the previous
+  scheme name, the adjacent minister. A distractor that is obviously absurd teaches nothing.</li>
+  <li>Every question carries <code>fact_as_of</code>, so a stale key is <em>identifiable</em>
+  rather than just quietly wrong at revision time.</li>
+  <li>An explanation is mandatory.</li>
+  <li>Questions are deduped on a normalised hash <strong>against the whole corpus</strong>.</li>
+  <li>A unit code returned with a question is canonicalised against <code>ref_units</code>, and
+  an unresolvable one is reported rather than stored as a tag nothing can query. This is now
+  the only path by which a model-supplied unit code enters the database.</li>
+</ul>
+
+<h2>11. Stages 7&ndash;8 — review and publication</h2>
+
+<p>Everything above produces <em>drafts</em>. The transition to student-visible content is
+always a human act.</p>
+
+<h3>The review queue</h3>
+
+<p>Every drafted item lands in Admin → Review queue with its sources, its tags and its
+correction hits shown <strong>inline</strong>. That inline placement is a deliberate product
+decision: a review that requires clicking away to check a URL is a review that quietly stops
+happening. An item with no <code>prelims_facts</code> is flagged in red, because nothing can be
+asked about it.</p>
+
+<h3>Publishing a day checks first, then publishes</h3>
+
+<p>Publishing a whole day validates every draft in it and reports exactly what blocks it,
+rather than publishing eight of ten and failing silently on two.</p>
+
+<h3>Two gates, not one</h3>
+
+<div class="box good">
+  <span class="label">Why questions have their own status</span>
+  <p>An item is held by its own <code>status</code>. But questions can be <em>regenerated onto
+  an item that is already live</em> — so the item's status alone no longer answers "may a
+  student see this". <code>ca_mcqs.status</code> is the second gate, and regenerated questions
+  wait under <strong>Admin → Review queue → Questions waiting on review</strong> until
+  approved. Every student-facing read applies both.</p>
+</div>
+
+<h3>Superseding rather than overwriting</h3>
+
+<p>When a redraft replaces an item that was already published, the new item records
+<code>supersedes</code> pointing at the old one. The history is kept; the student sees the
+current position. A published item is never withdrawn by a redraft.</p>
+
+<!-- ==================== PART III ==================== -->
+<section class="part">
+  <div class="part-no">Part III</div>
+  <h1>Architecture</h1>
+  <div class="part-blurb">The stack, what runs as what, where every file lives, all thirty-five
+  tables grouped by the layer they belong to, and the complete HTTP surface.</div>
+</section>
+
+<h2>12. Stack, processes and the request path</h2>
+
+<table class="wide">
+  <tr><th style="width:20%">Layer</th><th>Choice</th></tr>
+  <tr><td>Runtime</td><td>Node 20</td></tr>
+  <tr><td>Server</td><td>Express 4, <code>better-sqlite3</code> (WAL mode), <code>jsonwebtoken</code>, <code>bcryptjs</code></td></tr>
+  <tr><td>Database</td><td>One SQLite file — <code>server/data/ca.db</code>. No coupling to any other app's database.</td></tr>
+  <tr><td>Web</td><td>React 18, Vite 5, Tailwind 3, <code>react-markdown</code> with <code>remark-gfm</code> and <code>remark-breaks</code>, <code>react-router-dom</code> 7</td></tr>
+  <tr><td>PDF handling</td><td>Python (PyMuPDF) for layout extraction; Tesseract for OCR where a page has no text layer</td></tr>
+  <tr><td>Pipeline</td><td>Plain Node scripts, run from the command line or spawned by the API</td></tr>
+</table>
+
+<h3>Processes</h3>
+
+<p>One process serves both the API and the built frontend. There is no horizontal-scaling
+story and none is needed: the load is a few hundred students reading a page a day.</p>
+
+<p>The two long pipeline stages — processing an edition and drafting from it — are spawned
+<strong>out of process, detached</strong>. A <code>ca_runs</code> row acts as the drafting
+lock, and a run still marked running after two hours is closed automatically on the way past.</p>
+
+<div class="box warn">
+  <span class="label">A race worth knowing about</span>
+  <p>The route checks the lock and then spawns the worker; <strong>the worker opens its own
+  run row a few seconds later</strong>. Every click inside that window passes the check,
+  because no row exists yet. Seven phantom runs were created this way in three minutes when a
+  UI fault made the page go blank and the admin clicked repeatedly. They drafted nothing and
+  cost nothing, but they held the per-edition lock until the two-hour sweep.</p>
+</div>
+
+<h3>The request path</h3>
+
+<pre>nginx (TLS)
+  → Express
+      security headers, hand-written           (CSP with per-script hashes,
+                                                HSTS, nosniff, X-Frame-Options DENY,
+                                                Referrer-Policy)
+      request log                              (no IP, no query string, no email)
+      /api/admin/editions   → multipart upload, mounted BEFORE express.json
+      express.json({ limit: '10mb' })
+      /api/health           → item count + uptime, 503 if the DB is unreachable
+      /api/auth             → register (throttled), login (throttled), reset, me
+      /api                  → student content
+      /api/topics           → topic graph + syllabus map
+      /api/admin            → admin CRUD, queue, publishing
+      express.static(web/dist)
+      SPA fallback → index.html
+      error handler         → 413 oversize upload, 400 unreadable body,
+                              500 with no stack in production</pre>
+
+<p>The edition-upload router is mounted <em>before</em> <code>express.json</code> deliberately
+— a 120 MB multipart PDF must not pass through a JSON body parser. nginx needs
+<code>client_max_body_size 130M</code> to match.</p>
+
+<h2>13. Repository map</h2>
+
+<pre>appsc-current-affairs-app/
+├── README.md                      what shipped
+├── SPEC.md                        the product vision, and the standing decisions
+├── PLAN.md                        the architecture record of the first build
+├── docs/                          this document, and the HTML it is built from
+├── ops/RUNBOOK.md                 deploy, systemd, nginx, backup, restore, symptoms
+├── scripts/
+│   ├── check-rich-text.js         gate: model-written fields must be rendered
+│   ├── check-routes.js            gate: every internal link matches a route
+│   └── check-hooks.js             gate: no React hook after an early return
+├── server/
+│   ├── src/
+│   │   ├── index.js               the one process: headers, routing, static, shutdown
+│   │   ├── auth.js                JWT issue/verify, requireAuth, requireAdmin
+│   │   ├── db/
+│   │   │   ├── schema.sql         the schema
+│   │   │   └── index.js           connection, WAL, migrations
+│   │   ├── lib/
+│   │   │   ├── ingest.js          SECTION 1 — extract, segment, merge, persist
+│   │   │   ├── relevance.js       SECTION 2 — the 0-100 score and its breakdown
+│   │   │   ├── select.js          STAGE 4  — leverage, rank, adaptive selection
+│   │   │   ├── draft.js           SECTION 3 — article → master knowledge object
+│   │   │   ├── topics.js          alias matching, shared by topics and units
+│   │   │   ├── pyq.js             format mix and recurrence from real papers
+│   │   │   ├── quiz.js            paper builder — windows and the 8-format mix
+│   │   │   ├── revision.js        Leitner boxes 1-5, 1/3/7/14/30 days
+│   │   │   ├── pacing.js          the opt-in reading clock
+│   │   │   ├── corrections.js     the known-corrections guard
+│   │   │   ├── rateLimit.js       login and signup throttles
+│   │   │   ├── passwordReset.js   single-use reset tokens
+│   │   │   └── appTime.js         LOCAL date handling, not UTC
+│   │   └── routes/
+│   │       ├── content.js         student API
+│   │       ├── admin.js           admin API + the validators the pipeline reuses
+│   │       ├── editions.js        upload, process, draft, inspect
+│   │       ├── topics.js          topic graph + syllabus map
+│   │       └── auth.js            register, login, reset, me
+│   └── scripts/
+│       ├── seed.js                admin + reference vocabularies
+│       ├── reference-data.js      keywords, units, corrections
+│       ├── g2-syllabus.js         Group-II unit definitions and aliases
+│       ├── g1-prelims-syllabus.js Group-I Prelims unit definitions and aliases
+│       ├── process-edition.js     extract → segment → score  (no model)
+│       ├── draft-articles.js      select → draft → questions (the paid worker)
+│       ├── drop-g1-mains.js       the record of the objective-only migration
+│       ├── syllabus-coverage.js   what the map fed, missed, and over-matched
+│       ├── requestion-items.js    rewrite an item's questions, priced first
+│       ├── preflight.js           what must be true before anyone else can reach it
+│       ├── backup.js              online backup, safe while running
+│       └── test-bridge.js         the test suite
+├── web/
+│   ├── src/context/LensContext.jsx   the G1-Prelims/G2/both lens every screen reads
+│   ├── src/components/              ItemCard, RichText, McqCard, QuizRunner,
+│   │                                SyllabusMap, useConfirm, admin/QuestionReview
+│   ├── src/pages/                   the student screens
+│   ├── src/pages/admin/             the admin screens
+│   └── public/sw.js                 the PWA service worker
+└── content-pipeline/
+    ├── np-daily/                  the NEWSPAPER lane (primary)
+    │   ├── layout.py              PDF → text with bounding boxes, OCR fallback
+    │   ├── segment.js             blocks → articles, by the column-ownership rule
+    │   ├── genre.js               the paper's own running head → genre
+    │   ├── gate-rules.js          the veto lists
+    │   ├── profiles.js            per-masthead layout profiles
+    │   └── merge.js               same-event merging
+    ├── ca-daily/                  the WEB lane (predates it, still covers PIB)
+    │   ├── lib.js                 the ONE model-call implementation
+    │   ├── run.js                 candidates → triage → draft → MCQs → queue
+    │   ├── prompt-draft.txt       the objective-only drafting prompt
+    │   └── prompt-mcq.txt         the 8 formats and the distractor rules
+    └── pyq/                       past-paper extraction</pre>
+
+<h2>14. The data model</h2>
+
+<p>Thirty-five tables, in six groups. The group tells you the rules that apply — in particular
+whether a table is <strong>curated</strong> (hand-maintained, precious) or <strong>derived</strong>
+(rebuildable from scratch, and deliberately disposable).</p>
+
+<div class="box">
+  <span class="label">The curated / derived distinction</span>
+  <p>Derived tables — <code>topic_items</code>, <code>topic_units</code>,
+  <code>np_article_units</code>, <code>np_article_topics</code>,
+  <code>pyq_question_topics</code> — are rebuilt on every re-score. This is deliberate: the
+  matchers <em>will</em> improve, and a derived table that cannot be thrown away becomes a
+  liability the moment it disagrees with the code that produced it.</p>
+</div>
+
+<h3>A. Reference vocabularies — seeded, never hardcoded in app logic</h3>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th class="num" style="width:10%">Rows</th><th>What it holds</th></tr>
+  <tr><td><code>ref_keywords</code></td><td class="num">737</td><td>Blueprint keyword <em>angles</em> — not facts, but recurring question angles APPSC reuses across years: <code>Appointed</code>, <code>GI tag</code>, <code>Index</code>, <code>Summit</code>. Nine subject lists.</td></tr>
+  <tr><td><code>ref_units</code></td><td class="num">52</td><td>Every syllabus unit with its code, label, paper, exam, marks and the <em>actual syllabus text</em>. 27 Group&#8209;I Prelims, 25 Group&#8209;II. Flags: <code>broad</code> and <code>unfeedable</code>.</td></tr>
+  <tr><td><code>ref_unit_aliases</code></td><td class="num">934</td><td>The words a <em>newspaper</em> uses for a unit, as opposed to the words the syllabus uses for itself. See §17 — this table is why matching works at all.</td></tr>
+  <tr><td><code>ref_corrections</code></td><td class="num">4</td><td>Facts already found to have gone stale, with the corrected position. Injected into the prompt <em>and</em> checked against every draft.</td></tr>
+</table>
+
+<h3>B. Content — the student-visible material</h3>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th class="num" style="width:10%">Rows</th><th>What it holds</th></tr>
+  <tr><td><code>ca_days</code></td><td class="num">3</td><td>One row per calendar day = the daily digest. A day exists even when thin — "the pipeline found little on 14 Aug" is information a student should see, not something to paper over with filler.</td></tr>
+  <tr><td><code>ca_items</code></td><td class="num">155</td><td>The master knowledge object: the shared body, the static material, and the memorise-this block. 119 published, 36 discarded.</td></tr>
+  <tr><td><code>ca_item_keywords</code></td><td class="num">599</td><td>Which question angles this item can be tested through.</td></tr>
+  <tr><td><code>ca_item_units</code></td><td class="num">409</td><td>Every syllabus unit the item feeds, across 46 distinct codes, in both exams.</td></tr>
+  <tr><td><code>ca_item_sources</code></td><td class="num">155</td><td>Provenance. <code>is_primary</code> flagged so the queue shows which items rest only on secondary reporting.</td></tr>
+  <tr><td><code>ca_mcqs</code></td><td class="num">874</td><td>The question bank. Carries <code>format</code>, <code>keyword</code>, <code>unit_code</code>, <code>difficulty</code>, <code>fact_as_of</code> and its own <code>status</code>.</td></tr>
+</table>
+
+<h3>C. Student state</h3>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th>What it holds</th></tr>
+  <tr><td><code>ca_progress</code></td><td>Marked-read state, and <code>reading_started_at</code> for the pacing clock. Marking read is what unlocks the questions.</td></tr>
+  <tr><td><code>ca_attempts</code></td><td>Every answer given, with the session it belonged to.</td></tr>
+  <tr><td><code>ca_sessions</code></td><td>Practice papers: scope, label, totals, timing.</td></tr>
+  <tr><td><code>ca_revision</code></td><td>Leitner scheduling over both items and MCQs. Polymorphic <code>item_type</code>, so due-queries always INNER JOIN back to the real table and an orphaned row stops appearing rather than erroring.</td></tr>
+  <tr><td><code>ca_bookmarks</code></td><td>Saved items.</td></tr>
+  <tr><td><code>ca_mcq_flags</code></td><td>Student-reported bad questions. Most of the bank is generated, so the people best placed to catch a wrong key are the students hitting it.</td></tr>
+  <tr><td><code>users</code>, <code>password_resets</code></td><td>Accounts and single-use reset tokens. <code>exam_track</code> is <code>g1</code> / <code>g2</code> / <code>both</code>.</td></tr>
+</table>
+
+<h3>D. Section 1 — source intelligence</h3>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th class="num" style="width:10%">Rows</th><th>What it holds</th></tr>
+  <tr><td><code>np_editions</code></td><td class="num">4</td><td>The newspaper as uploaded: publication, edition, date, stored path, SHA-256, pages, and the run counts that make it auditable — <code>pages_ocr</code>, <code>pages_skipped</code>, <code>articles_found</code>, <code>events</code>, <code>merged</code>. Unique on (publication, date, file hash).</td></tr>
+  <tr><td><code>np_articles</code></td><td class="num">411</td><td>Every article the segmenter found, kept whether or not it was used. Carries headline, standfirst, byline, <strong>dateline</strong>, body, page, prominence, extraction mode, genre, the score and its breakdown, and <code>item_id</code> once it becomes a knowledge item.</td></tr>
+</table>
+
+<p><strong>Why keep the source at all in a topic-centric system?</strong> Because a knowledge
+item must be traceable to the page it came from. Without these two tables the only provenance
+was a citation string, which cannot answer "show me everything from the 21 August Vijayawada
+edition", cannot show what a run discarded, and cannot let an admin re-run one page.</p>
+
+<h3>E. Section 2 — knowledge intelligence <span class="badge b-none">derived</span></h3>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th class="num" style="width:10%">Rows</th><th>What it holds</th></tr>
+  <tr><td><code>np_article_entities</code></td><td class="num">1,829</td><td>People, organisations, places and schemes named. Separate from the article row because one article names many, and "which articles mention APCRDA" is worth being able to ask directly.</td></tr>
+  <tr><td><code>np_article_keywords</code></td><td class="num">1,189</td><td>Blueprint angles matched <em>before</em> drafting, with <code>in_headline</code> and the <code>pyq_count</code> copied in at scoring time so the score stays reproducible from the row.</td></tr>
+  <tr><td><code>np_article_topics</code></td><td class="num">109</td><td>Master topics matched through the alias vocabulary.</td></tr>
+  <tr><td><code>np_article_units</code></td><td class="num">395</td><td>Syllabus units an article touches, decided before any model is asked. A row is written only when the match is already solid.</td></tr>
+</table>
+
+<h3>F. The topic layer, the PYQ layer, and the audit trail</h3>
+
+<div class="box">
+  <span class="label">Why the topic layer exists</span>
+  <p>Everything in group B is organised by <strong>day</strong>. That is the right shape for
+  reading a day's news and the wrong shape for preparing an exam, because the exam does not ask
+  about a day. It asks about Polavaram.</p>
+  <p>A topic is the entity a news item is <em>about</em>, and it persists. Ten items across
+  eight months mentioning Polavaram are ten updates to one master topic — and until there is a
+  row for the topic itself there is nowhere for the eleventh to attach.</p>
+</div>
+
+<table class="wide">
+  <tr><th style="width:24%">Table</th><th class="num" style="width:10%">Rows</th><th>What it holds</th></tr>
+  <tr><td><code>topics</code></td><td class="num">119</td><td>Curated master topics with kind, tier and an <code>ap</code> flag.</td></tr>
+  <tr><td><code>topic_aliases</code></td><td class="num">441</td><td>How the topic is actually written in print. A paper says "APCRDA", "CRDA" and "Capital Region Development Authority" for one body.</td></tr>
+  <tr><td><code>topic_items</code></td><td class="num">109</td><td><span class="badge b-none">derived</span> Which items touch which topic.</td></tr>
+  <tr><td><code>topic_units</code></td><td class="num">182</td><td><span class="badge b-none">derived</span> The cross-paper reuse map, and <strong>the source of Factor E</strong>. A topic inherits the units of every item naming it; <code>weight</code> = how many items support the pairing.</td></tr>
+  <tr><td><code>topic_links</code></td><td class="num">20</td><td>Curated relations for what item overlap cannot express: Polavaram belongs <em>under</em> AP Bifurcation.</td></tr>
+  <tr><td><code>pyq_papers</code></td><td class="num">10</td><td>Real past papers: 6 Group&#8209;II Screening, 4 Group&#8209;II Mains. Carries a <code>notes</code> field, because extraction is imperfect and should say so.</td></tr>
+  <tr><td><code>pyq_questions</code></td><td class="num">1,137</td><td>Every question extracted, with <code>format</code> in the <em>same vocabulary</em> as <code>ca_mcqs.format</code>. Keeps <code>raw</code>, <code>ocr_confidence</code> and <code>needs_review</code>.</td></tr>
+  <tr><td><code>pyq_question_keywords</code></td><td class="num">1,367</td><td>Which blueprint angle each question tests.</td></tr>
+  <tr><td><code>pyq_question_topics</code></td><td class="num">218</td><td><span class="badge b-none">derived</span> Which master topic each question belongs to. <strong>The source of <code>topics.tier</code>.</strong></td></tr>
+  <tr><td><code>ca_runs</code></td><td class="num">30</td><td>One row per pipeline run: window, mode, model, status, candidates, drafted, <strong>discarded</strong>, approved, log. Also the drafting lock.</td></tr>
+</table>
+
+<h2>15. The API surface</h2>
+
+<h3>Authentication — <code>/api/auth</code></h3>
+<table class="tight">
+  <tr><th style="width:34%">Route</th><th>Notes</th></tr>
+  <tr><td><code>POST /register</code></td><td>Gated by <code>ALLOW_REGISTRATION</code>, throttled per IP per hour</td></tr>
+  <tr><td><code>POST /login</code></td><td>Throttled; keys on client IP, which is why <code>X-Forwarded-For</code> is mandatory behind a proxy</td></tr>
+  <tr><td><code>GET&nbsp;/reset/:token</code> &middot; <code>POST /reset/:token</code></td><td>Single-use password reset</td></tr>
+  <tr><td><code>GET /me</code> &middot; <code>PUT /me</code></td><td>Profile, exam track, pacing preference, password change</td></tr>
+</table>
+
+<h3>Student content — <code>/api</code></h3>
+<table class="tight">
+  <tr><th style="width:34%">Route</th><th>Notes</th></tr>
+  <tr><td><code>GET /meta</code></td><td>Vocabularies the UI needs — buckets, keywords, units</td></tr>
+  <tr><td><code>GET /today</code></td><td>Resolves to the <em>latest published</em> digest, not the literal date</td></tr>
+  <tr><td><code>GET /days</code> &middot; <code>GET /days/:date</code> &middot; <code>GET /archive</code></td><td>The month-first archive</td></tr>
+  <tr><td><code>GET /items/:id</code></td><td>Full item, both lanes; questions included only once unlocked</td></tr>
+  <tr><td><code>POST/DELETE /items/:id/read</code></td><td>The unlock gate</td></tr>
+  <tr><td><code>POST/DELETE /items/:id/bookmark</code> &middot; <code>GET /bookmarks</code></td><td>Saved items</td></tr>
+  <tr><td><code>GET /practice</code> &middot; <code>POST /mcqs/:id/attempt</code></td><td>Paper builder and answering</td></tr>
+  <tr><td><code>POST /sessions</code> &middot; <code>GET /sessions</code></td><td>Practice sessions</td></tr>
+  <tr><td><code>GET /revision/due</code> &middot; <code>POST /revision/review</code></td><td>Leitner queue</td></tr>
+  <tr><td><code>GET /mistakes</code></td><td>Wrong answers grouped by keyword angle</td></tr>
+  <tr><td><code>GET /progress</code> &middot; <code>GET /months/:month</code> &middot; <code>GET /search</code></td><td>Progress, monthly revision, search</td></tr>
+</table>
+
+<h3>Topics and syllabus — <code>/api/topics</code></h3>
+<table class="tight">
+  <tr><th style="width:34%">Route</th><th>Notes</th></tr>
+  <tr><td><code>GET /</code> &middot; <code>GET /:slug</code></td><td>The topic list and one topic's full dossier</td></tr>
+  <tr><td><code>GET /reuse-map</code></td><td>Which topics pay across which objective papers</td></tr>
+  <tr><td><code>GET /gaps</code></td><td>Tier-1 topics with no material attached</td></tr>
+  <tr><td><code>GET /syllabus</code> &middot; <code>GET /syllabus/:code</code></td><td>The syllabus map grouped by exam, counting items and questions per unit</td></tr>
+</table>
+
+<h3>Admin — <code>/api/admin</code></h3>
+<table class="tight">
+  <tr><th style="width:34%">Route group</th><th>Notes</th></tr>
+  <tr><td><code>GET /overview</code> &middot; <code>GET /queue</code></td><td>Dashboard and the review queue</td></tr>
+  <tr><td><code>/days</code> — list, create, update, delete, <code>:id/items</code>, <code>:id/publish</code>, <code>:id/unpublish</code></td><td>Publishing a day validates every draft first</td></tr>
+  <tr><td><code>/items</code> — create, update, delete, <code>:id/publish</code>, <code>:id/discard</code>, <code>:id/restore</code>, <code>:id/corrections</code></td><td>Discard and restore, never delete by default</td></tr>
+  <tr><td><code>/items/:id/mcqs/publish</code> &middot; <code>/items/:id/mcqs/discard</code> &middot; <code>/mcqs/publish-all</code></td><td>The second gate — question review, including Approve all</td></tr>
+  <tr><td><code>/mcqs</code></td><td>Manual authoring, first-class</td></tr>
+  <tr><td><code>/students</code> &middot; <code>/students/:id/reset-link</code></td><td>Create a student, send them a reset link</td></tr>
+</table>
+
+<h3>Editions — <code>/api/admin/editions</code></h3>
+<table class="tight">
+  <tr><th style="width:34%">Route</th><th>Notes</th></tr>
+  <tr><td><code>POST /</code></td><td>Multipart PDF upload; idempotent on file hash</td></tr>
+  <tr><td><code>POST /:id/process</code></td><td>Spawns extract → segment → score, detached</td></tr>
+  <tr><td><code>POST /:id/draft</code> &middot; <code>GET /:id/draft</code></td><td>Starts a drafting run and reports its progress</td></tr>
+  <tr><td><code>GET /</code> &middot; <code>GET /:id</code> &middot; <code>GET /:id/articles/:articleId</code></td><td>Inspect an edition down to a single article</td></tr>
+  <tr><td><code>DELETE /:id</code></td><td>Remove an edition</td></tr>
+</table>
+
+<!-- ==================== PART IV ==================== -->
+<section class="part">
+  <div class="part-no">Part IV</div>
+  <h1>The intelligence layers</h1>
+  <div class="part-blurb">The ten-layer model the product spec sets out, what is genuinely
+  built against each, and then the three pieces of machinery that do the real work: the
+  syllabus map, the PYQ engine, and the topic graph.</div>
+</section>
+
+<h2>16. The ten layers</h2>
+
+<table class="wide">
+  <tr><th style="width:5%">#</th><th style="width:22%">Layer</th><th style="width:11%">Status</th><th>Where it lives / what remains</th></tr>
+  <tr><td>1</td><td>Newspaper ingestion</td><td><span class="badge b-built">Built</span></td><td><code>np_editions</code>, <code>np_articles</code>, <code>lib/ingest.js</code>, <code>routes/editions.js</code>, <code>np-daily/</code></td></tr>
+  <tr><td>2</td><td>Duplicate intelligence</td><td><span class="badge b-partial">Partial</span></td><td>Same-edition merge works. Cross-language merge is <strong>out of scope</strong> by decision (English only)</td></tr>
+  <tr><td>3</td><td>APPSC relevance filter</td><td><span class="badge b-built">Built</span></td><td><code>lib/relevance.js</code> — 0&ndash;100 on five factors, CRITICAL–LOW bands, vetoes first</td></tr>
+  <tr><td>4</td><td>Blueprint keyword engine</td><td><span class="badge b-built">Built</span></td><td>737 <code>ref_keywords</code>, <code>np_article_keywords</code>, <code>np_article_entities</code></td></tr>
+  <tr><td>5</td><td>PYQ intelligence</td><td><span class="badge b-built">Built</span></td><td><code>pyq_questions</code> (1,137 across 10 papers), <code>plannedFormats()</code>, and topic recurrence</td></tr>
+  <tr><td>6</td><td>Group&#8209;II output engine</td><td><span class="badge b-built">Built</span></td><td>Notes → keyword → PYQ pattern → MCQs → revision</td></tr>
+  <tr><td>7</td><td>Group&#8209;I output engine</td><td><span class="badge b-built">Built</span></td><td><strong>Prelims only.</strong> 27 units, its own lane in the syllabus map and the lens</td></tr>
+  <tr><td>8</td><td>AP knowledge graph</td><td><span class="badge b-built">Built</span></td><td><code>topics</code> / <code>topic_aliases</code> / <code>topic_items</code> / <code>topic_links</code>, with a UI at <code>/topics</code></td></tr>
+  <tr><td>9</td><td>Unified note engine</td><td><span class="badge b-built">Built</span></td><td>One master note → two syllabus views. The article→note bridge, <code>lib/draft.js</code></td></tr>
+  <tr><td>10</td><td>Paper&#8209;I essay engine</td><td><span class="badge b-gone">Removed</span></td><td>Served Group&#8209;I Mains only. Deleted 23 Aug 2026 — see §33</td></tr>
+</table>
+
+<h2>17. The syllabus map and its aliases</h2>
+
+<div class="box">
+  <span class="label">The insight the whole map rests on</span>
+  <p>The syllabus says <em>"Distribution of Legislative and Executive Powers between the Union
+  and the States"</em>. The newspaper says <em>"Centre-State"</em>, <em>"concurrent list"</em>,
+  <em>"Article 246"</em>. <strong>Matching the syllabus's own phrasing would match almost
+  nothing.</strong></p>
+  <p>So <code>ref_unit_aliases</code> holds 934 newspaper-side phrasings across 52 units — and
+  it is the single highest-leverage file in the repository. Improving it costs nothing and
+  changes what every future article scores.</p>
+</div>
+
+<h3>Unit flags that keep the map honest</h3>
+
+<table class="tight">
+  <tr><th style="width:18%">Flag</th><th>Effect</th></tr>
+  <tr><td><code>exam</code></td><td><code>g1p</code> or <code>g2</code>. This is what the lens switches on, and what Factor E counts distinct papers within.</td></tr>
+  <tr><td><code>broad</code></td><td>A unit so wide it matches nearly everything — e.g. the 30-mark general current-affairs paper. Excluded from leverage, scoring evidence and coverage reports.</td></tr>
+  <tr><td><code>unfeedable</code></td><td>A unit no newspaper article can ever feed — mental ability, the language papers. Excluded the same way.</td></tr>
+</table>
+
+<h3>The standing coverage report</h3>
+
+<p><code>syllabus-coverage.js</code> is run after each edition. It answers three questions the
+map cannot answer about itself: what the map fed, what was never fed, and what over-matched.
+Currently <strong>110 articles score 45 or more; 93 map to a syllabus unit and 17 map to
+none</strong>, and only three units have never been fed — <code>G1P-A2</code>,
+<code>G2-P1-U1</code>, <code>G2-P1-U4</code>.</p>
+
+<div class="box warn">
+  <span class="label">The live concentration problem, and why it is priced rather than fixed</span>
+  <p><code>G2-P1-U7</code> is fed by <strong>61 articles against a median of 7</strong>, and
+  34 of those rest on a single matched term — mostly "Supreme Court" or "High Court" appearing
+  in a story that is really about something else. A unit matching a third of the paper cannot
+  answer "which items feed it", which is the only question it exists to answer.</p>
+  <p>The report prices the obvious fix rather than applying it, because dropping the weak term
+  strands articles and written questions. Its own advice, and the right reading: a high
+  stranding number usually means the <em>other</em> units are too narrow rather than this one
+  being too broad. Widen those first; it costs nothing already written.
+  <strong>This is a judgement call for the product owner, not a bug to be silently
+  patched.</strong></p>
+</div>
+
+<h2>18. The PYQ engine</h2>
+
+<p>What the commission has actually asked, held as data: <strong>1,137 objective questions
+across 10 real papers</strong>, each with its format classified into the same eight-value
+vocabulary the generator uses. That deliberate sameness is the entire point — it lets the
+system compare <em>what was asked</em> with <em>what is being generated</em>, per keyword.</p>
+
+<pre>Given the blueprint keyword "Scheme":
+  52 past questions of evidence
+  observed mix → [direct_recall, direct_recall, direct_recall, negative_statement]
+
+Generation follows that, not a rotation.</pre>
+
+<table class="tight" style="width:80%">
+  <tr><th>Corpus</th><th class="num">Papers</th><th class="num">Questions</th></tr>
+  <tr><td>Group&#8209;II Screening</td><td class="num">6</td><td class="num">537</td></tr>
+  <tr><td>Group&#8209;II Mains</td><td class="num">4</td><td class="num">600</td></tr>
+  <tr><td><strong>Total</strong></td><td class="num"><strong>10</strong></td><td class="num"><strong>1,137</strong></td></tr>
+</table>
+
+<div class="box">
+  <span class="label">What the Group-I Mains corpus was doing, and why losing it costs little</span>
+  <p>20 descriptive papers and 252 question slots were seeded here and are now removed. A
+  descriptive paper cannot tell you which FORMAT a topic is asked in, so that half only ever
+  contributed <em>recurrence</em> — and it contributed it to an app that no longer sits the
+  paper. <code>topics.tier</code> is now derived from recurrence in the 1,137 real objective
+  questions instead, which changed the tier of 23 topics.</p>
+  <p>One seeding decision from that era is worth keeping in mind if a descriptive corpus is
+  ever re-added: <strong>one row per question NUMBER, not per alternative.</strong>
+  <code>1 (a) … OR (b) …</code> is one slot a candidate answers once, and counting alternatives
+  separately would double every topic count and inflate recurrence.</p>
+</div>
+
+<h2>19. The topic knowledge graph</h2>
+
+<p>119 curated master topics, 441 aliases, 20 curated relations, and a derived reuse map of
+182 topic↔unit pairings across 109 item matches.</p>
+
+<h3>What it buys</h3>
+
+<ul>
+  <li><strong>Accumulation.</strong> The eleventh Polavaram story attaches to the previous ten
+  instead of starting a new page.</li>
+  <li><strong>Cross-paper reuse as a query.</strong> "Which papers does this topic serve?" is
+  answered from <code>topic_units</code>, with <code>weight</code> separating a real reuse from
+  one item's stray tag. <strong>This is now the source of Factor E.</strong></li>
+  <li><strong>Tier from measured recurrence</strong> rather than hand assignment.</li>
+</ul>
+
+<h3>Two precision rules that were needed</h3>
+
+<p>The matcher originally returned 73 matches where 59 were correct. Two rules fixed it, and
+both are the same idea as the syllabus-unit evidence rule in §7: <strong>a match must be
+earned</strong> — named in the headline, or supported by more than one distinct alias, or
+carried by a phrase specific enough to stand alone. A single common word is not evidence of
+what a story is about.</p>
+
+<div class="box">
+  <span class="label">A number that moved for a good reason</span>
+  <p>Topic matches fell from 152 to 109 when the Mains layer went. That is not a regression:
+  the eight-section Mains note was most of the text being matched against, and a topic is now
+  matched on what the objective lanes actually publish.</p>
+</div>
+
+<!-- ==================== PART V ==================== -->
+<section class="part">
+  <div class="part-no">Part V</div>
+  <h1>The product</h1>
+  <div class="part-blurb">What a student and an admin actually see, and the complete list of
+  gates standing between a model's output and a student's screen.</div>
+</section>
+
+<h2>20. Student screens</h2>
+
+<table class="wide">
+  <tr><th style="width:20%">Screen</th><th>What it does, and the decision behind it</th></tr>
+  <tr><td><strong>Today</strong> <code>/</code></td><td>Resolves to the <em>latest published</em> digest, not the literal date — a day the pipeline hasn't run should not look like a broken app. Items grouped by bucket, importance-ranked, with the <strong>lens toggle</strong> in the header switching which syllabus each card is filed against.</td></tr>
+  <tr><td><strong>Day</strong> <code>/day/:date</code></td><td>One digest in full.</td></tr>
+  <tr><td><strong>Item</strong> <code>/item/:id</code></td><td>Notes → static linkage → static notes → the two syllabus lanes → sources → questions. Questions unlock on <em>Mark as read</em>.</td></tr>
+  <tr><td><strong>Archive</strong> <code>/archive</code></td><td>Month-first, because current affairs is revised by month, not by day. Density-shaded grid; filter by bucket, keyword, unit, importance.</td></tr>
+  <tr><td><strong>Month revision</strong> <code>/month/:month</code></td><td>Auto-compiled month compendium, a monthly test, and "what changed since you last read this".</td></tr>
+  <tr><td><strong>Practice</strong> <code>/practice</code></td><td>Scoped by <strong>window</strong> ("last 7 days", "this month") rather than by topic — news is revised by date. Mixes the paper deliberately across formats instead of serving the bank in whatever order SQL returns it. Reports how many questions are still locked, so a thin paper reads as "go and read" rather than "the bank is empty".</td></tr>
+  <tr><td><strong>Revision</strong> <code>/revision</code></td><td>Leitner due-queue over items and questions together.</td></tr>
+  <tr><td><strong>Mistakes</strong> <code>/mistakes</code></td><td>Grouped by keyword angle, because "you keep missing <code>Appointed</code> questions" is actionable and a flat list of wrong answers is not.</td></tr>
+  <tr><td><strong>Topics</strong> <code>/topics</code>, <code>/topics/:slug</code></td><td>The knowledge graph, the reuse map, the gaps, and the syllabus map by exam and unit.</td></tr>
+  <tr><td><strong>Saved · Progress · Search · Profile</strong></td><td>Bookmarks; streak, accuracy trend, coverage heatmap, AP share; full-text search; account settings including exam track and the pacing switch.</td></tr>
+</table>
+
+<h3>The lens</h3>
+
+<p><code>LensContext</code> holds <code>g1</code> / <code>g2</code> / <code>both</code>, and
+every screen reads it. It defaults from the user's <code>exam_track</code>. The stored key
+stays <code>g1</code> rather than becoming <code>g1p</code> deliberately: it is written into
+every user's localStorage and into <code>users.exam_track</code>, and renaming it would
+silently reset the lens for everyone who has already chosen one — for a label change.</p>
+
+<h3>The MCQ unlock</h3>
+
+<div class="box">
+  <span class="label">Why questions are hidden until the item is marked read</span>
+  <p>A question answered before the notes teaches the answer, not the topic.</p>
+  <p>But "mark as read" is a button, and a button takes half a second — the gate records an
+  intention, not a reading. <strong>Pacing</strong> makes the gate mean what it says: the clock
+  starts server-side when the item is opened, and the questions open when the clock has run.</p>
+  <p>It is <strong>opt-in and stays opt-in</strong>, because a discipline imposed on somebody
+  is just an obstacle. A candidate revising the night before wants to move at their own speed
+  through material they have already read; a candidate meeting an item for the first time does
+  not. The same person is both, on different days.</p>
+</div>
+
+<h3>Spaced revision</h3>
+
+<p>Five Leitner boxes at 1 / 3 / 7 / 14 / 30 days. A correct answer promotes; a miss drops
+straight back to box 1. New cards start at box 1 due <em>tomorrow</em>, so they appear as
+"due soon" rather than retroactively overdue. Dates are <strong>local</strong>
+<code>YYYY-MM-DD</code> strings, not UTC — as UTC, the day boundary fell at 05:30 in the
+morning for every Indian student.</p>
+
+<h2>21. Admin screens</h2>
+
+<table class="wide">
+  <tr><th style="width:20%">Screen</th><th>What it does</th></tr>
+  <tr><td><strong>Dashboard</strong> <code>/admin</code></td><td>Counts across the queue, discards (shown as a positive signal), runs, and content health.</td></tr>
+  <tr><td><strong>Editions</strong> <code>/admin/editions</code></td><td>The primary lane. Upload the day's PDF, watch processing, then drafting — both spawned out of process. The panel counts candidates with the <em>same selector the drafter uses</em>, so the number shown is the number you get.</td></tr>
+  <tr><td><strong>Review queue</strong> <code>/admin/queue</code></td><td>The safety gate. Sources, tags and correction hits inline. Two tabs: items awaiting review, and <strong>questions waiting on review</strong> — the second gate, with Approve all.</td></tr>
+  <tr><td><strong>Days</strong> <code>/admin/days</code></td><td>Create, edit, publish and unpublish digests. Publishing validates the whole day first.</td></tr>
+  <tr><td><strong>Item editor</strong> <code>/admin/days/:dayId</code></td><td>Full manual authoring — the same form the pipeline fills. Syllabus units are picked here; question editor with format picker and live preview.</td></tr>
+  <tr><td><strong>Students</strong> <code>/admin/students</code></td><td>Create a student and send a reset link — the alternative to open registration.</td></tr>
+</table>
+
+<div class="box warn">
+  <span class="label">Two UI failures worth generalising</span>
+  <p><strong>"Approve all" did nothing when clicked, with no error.</strong> The app used
+  <code>window.confirm</code>, and embedded browsers suppress it and return <code>false</code> —
+  so the code correctly did nothing, forever. All eight native dialogs were replaced with an
+  in-page component. A browser primitive that can be silently disabled is not a safe place to
+  put a decision.</p>
+  <p><strong>Every edition-detail page rendered blank.</strong> One hook was called after an
+  early return, so the loading render called four hooks and the loaded render called five.
+  React counts them, throws error #310, and unmounts the entire tree — navbar and all. Nothing
+  else complains: every route returns 200, the API is fine, the server log is clean. It is now
+  caught by a static gate.</p>
+</div>
+
+<h2>22. The gates</h2>
+
+<p>Everything that must pass before a student sees a word. Layered deliberately, because the
+single most expensive failure mode for this app is a confidently wrong current-affairs fact —
+which, unlike a static-subject error, cannot be caught against a textbook.</p>
+
+<table class="wide">
+  <tr><th style="width:6%">#</th><th style="width:24%">Gate</th><th>What it stops</th></tr>
+  <tr><td>1</td><td><strong>The veto list</strong></td><td>Crime, sport, letters, archive reprints — excluded before scoring, so they cannot be outvoted by it.</td></tr>
+  <tr><td>2</td><td><strong>The selector</strong></td><td>Anything with no syllabus connection, and anything the scorer called junk regardless of leverage.</td></tr>
+  <tr><td>3</td><td><strong>The facts rule</strong></td><td>An item with no memorise-this block — nothing can be asked about it. Applied in the drafter before anything more is spent, and flagged in the review queue.</td></tr>
+  <tr><td>4</td><td><strong>The corrections guard</strong></td><td>A superseded position being re-filed. Runs at three points — pipeline write, queue render, editor request. It <em>annotates rather than blocks</em>, because only a person can tell "an item about the 16th Finance Commission" from "an item that assumes the 15th is still operative".</td></tr>
+  <tr><td>5</td><td><strong><code>validateItem</code></strong></td><td>Publishing without notes; a missing prelims-facts block; an unknown bucket or importance.</td></tr>
+  <tr><td>6</td><td><strong><code>validateMcq</code></strong></td><td>A question under 10 characters; a missing option; duplicate options; an invalid key; an unknown format; a <strong>missing explanation</strong>.</td></tr>
+  <tr><td>7</td><td><strong>Corpus-wide dedupe</strong></td><td>A question already asked, matched on a normalised hash across the whole bank rather than the current run.</td></tr>
+  <tr><td>8</td><td><strong>Item status</strong></td><td>A person publishes. Nothing publishes itself.</td></tr>
+  <tr><td>9</td><td><strong>Question status</strong></td><td>Questions regenerated onto an already-published item wait for their own approval.</td></tr>
+  <tr><td>10</td><td><strong>The read/pacing gate</strong></td><td>A question shown before the note it tests.</td></tr>
+</table>
+
+<!-- ==================== PART VI ==================== -->
+<section class="part">
+  <div class="part-no">Part VI</div>
+  <h1>Operations</h1>
+  <div class="part-blurb">How to set it up, run a day, configure it, deploy it, back it up,
+  and what the automated checks cover.</div>
+</section>
+
+<h2>23. Setup, running, and the daily commands</h2>
+
+<h4>First-time setup</h4>
+<pre><code>cd server &amp;&amp; npm install &amp;&amp; npm run seed
+cd ../web &amp;&amp; npm install &amp;&amp; npm run build
+node server/scripts/seed-g2-syllabus.js</code></pre>
+
+<h4>Running</h4>
+<pre><code>cd server &amp;&amp; npm start          # one process, API + built frontend, port 4100
+cd web    &amp;&amp; npm run dev        # frontend only, proxies /api to 4100</code></pre>
+
+<h4>The daily newspaper lane</h4>
+<pre><code># 1. Upload the PDF in Admin → Editions (or run the two steps directly)
+
+node server/scripts/process-edition.js &lt;editionId&gt;          # extract → segment → score
+node server/scripts/draft-articles.js  &lt;editionId&gt; --plan   # see the selection, free
+node server/scripts/draft-articles.js  &lt;editionId&gt;          # notes + questions
+
+# 2. Review and publish in Admin → Review queue
+
+# 3. Standing reports
+node server/scripts/syllabus-coverage.js             # fed, never fed, over-matched
+node server/scripts/requestion-items.js --dry-run    # re-tag questions, priced first</code></pre>
+
+<h4>Useful flags on the drafting worker</h4>
+<table class="tight">
+  <tr><th style="width:24%">Flag</th><th>Effect</th></tr>
+  <tr><td><code>--plan</code></td><td>Print the selection and stop. <strong>No model calls, no cost, ~0.4s.</strong></td></tr>
+  <tr><td><code>--dry-run</code></td><td>Draft everything and print it, but write nothing. Costs full price.</td></tr>
+  <tr><td><code>--max N</code> / <code>--min N</code></td><td>Cap and floor on the adaptive selection. <code>--max</code> wins over the floor.</td></tr>
+  <tr><td><code>--min-score N</code></td><td>Restore the old flat threshold for one run.</td></tr>
+  <tr><td><code>--article ID,ID</code></td><td>Hand-pick, whatever they score. The gate is the person.</td></tr>
+  <tr><td><code>--redraft</code></td><td>Include articles that already produced an item.</td></tr>
+  <tr><td><code>--mcqs-per N</code> / <code>--no-mcqs</code></td><td>Base question count, or notes only.</td></tr>
+  <tr><td><code>--limit N</code> / <code>--model &lt;id&gt;</code></td><td>Stop after N; override the model.</td></tr>
+</table>
+
+<h4>The web lane (PIB), which predates the newspaper lane</h4>
+<pre><code>node content-pipeline/ca-daily/daily.js --date 2026-08-21 --dry-run
+node content-pipeline/ca-daily/daily.js --date 2026-08-21</code></pre>
+
+<p>Four stages: <strong>discover → shortlist → fetch → draft</strong>. Two decisions carry most
+of its value. <strong>Discovery uses no model</strong> — asking a model what happened invites
+invented URLs; asking PIB for its own index returns the actual list. And <strong>the shortlist
+runs on headlines, not bodies</strong> — fetching 40 releases to throw 32 away is waste.</p>
+
+<h2>24. Configuration</h2>
+
+<table class="wide">
+  <tr><th style="width:26%">Variable</th><th style="width:14%">Default</th><th>What it does</th></tr>
+  <tr><td><code>JWT_SECRET</code></td><td>—</td><td><strong>Set it.</strong> Without it the server falls back to a secret published in the repository, and anyone who has read the source can mint an admin token. 48 random bytes. Changing it later logs everyone out.</td></tr>
+  <tr><td><code>NODE_ENV</code></td><td>unset</td><td><strong>Set to <code>production</code>.</strong> Not cosmetic — it is what turns the missing-secret <em>warning</em> into a <em>refusal to start</em>, and what stops Express sending stack traces.</td></tr>
+  <tr><td><code>ALLOW_REGISTRATION</code></td><td><code>1</code></td><td>Whether anyone with the URL can sign themselves up. Every item cost money to draft, and the admin screen already has the other model — create the student, send a reset link.</td></tr>
+  <tr><td><code>MAX_SIGNUPS_PER_HOUR</code></td><td><code>5</code></td><td>Per IP.</td></tr>
+  <tr><td><code>PORT</code></td><td><code>4100</code></td><td></td></tr>
+  <tr><td><code>CORS_ORIGINS</code></td><td>empty</td><td>Leave blank. The frontend is served by the same process and needs no CORS at all.</td></tr>
+  <tr><td><code>OPENAI_API_KEY</code></td><td>—</td><td>Required only for drafting. The app itself runs without it.</td></tr>
+  <tr><td><code>OPENAI_MODEL</code></td><td><code>gpt-5.6-luna</code></td><td>The drafting model.</td></tr>
+  <tr><td><code>OPENAI_TIMEOUT_MS</code></td><td><code>180000</code></td><td>How long one call may take before it is abandoned and retried.</td></tr>
+  <tr><td><code>ALT_BASE_URL</code> / <code>ALT_API_KEY</code> / <code>ALT_MODELS</code></td><td>unset</td><td>A second provider for the cheap job only. See the warning below.</td></tr>
+  <tr><td><code>LOG_ALL_REQUESTS</code> / <code>SLOW_REQUEST_MS</code></td><td><code>0</code> / <code>1000</code></td><td>The log records no IP, no query string and no email by design.</td></tr>
+  <tr><td><code>NP_PYTHON</code></td><td><code>python</code></td><td>Interpreter used for layout extraction.</td></tr>
+</table>
+
+<div class="box warn">
+  <span class="label">Which jobs are safe to move to a cheap model</span>
+  <p><strong>Shortlisting is.</strong> It is judgement over forty supplied headlines, no recall
+  involved, and a wrong call loses one article the next day's paper will cover anyway.</p>
+  <p><strong>Drafting is not.</strong> It writes the static notes — Articles, sections, landmark
+  cases, AP schemes — from the model's own knowledge, and a cheap model that invents there
+  teaches a candidate something false with total confidence. Measured August 2026: one popular
+  budget model hallucinated on 96% of knowledge questions. Keep drafting on the better model;
+  the whole month costs about $4 either way.</p>
+</div>
+
+<h2>25. Preflight, backup, deploy, restore</h2>
+
+<h3>Preflight — what must be true before anyone else can reach it</h3>
+
+<pre><code>npm --prefix server run preflight</code></pre>
+
+<p>It checks the things that leave the app <em>working perfectly while being totally wrong</em>:
+an unset <code>JWT_SECRET</code>, a <code>web/dist</code> older than <code>web/src</code>, an
+unopenable database, an admin still on the seed password, published items with no visible
+questions. It exits non-zero, so it can gate a deploy.</p>
+
+<div class="box good">
+  <span class="label">Current preflight result — 23 August 2026</span>
+  <p><strong>8 passed, 2 warnings, 0 failures.</strong></p>
+  <p>PASS &middot; <code>.env</code> present &middot; <code>JWT_SECRET</code> set, 64 characters
+  &middot; <code>CORS_ORIGINS</code> empty &middot; web build newer than src &middot; database
+  opens, integrity ok &middot; 2 admins, none on a seed password &middot; every published item
+  has questions a student can see &middot; backups present.</p>
+  <p>WARN &middot; <code>NODE_ENV</code> is unset — set it to <code>production</code>.<br>
+     WARN &middot; registration is OPEN — anyone with the URL can create an account.</p>
+  <p><strong>Both warnings are decisions waiting on the product owner, not defects.</strong></p>
+</div>
+
+<h3>Backup</h3>
+
+<pre><code>npm --prefix server run backup          # --verify opens the copy afterwards</code></pre>
+
+<p>Backups use SQLite's <strong>online backup API, not a file copy</strong>. A <code>cp</code>
+of a WAL-mode database can silently produce one missing its most recent writes — and it opens
+cleanly, so you find out during a restore.</p>
+
+<h3>Deploy</h3>
+
+<p>One box, one process, one SQLite file. <code>systemd</code> with
+<code>Restart=always</code>, <code>ProtectSystem=strict</code> and <code>ReadWritePaths</code>
+limited to the data directory; nginx in front terminating TLS with
+<code>client_max_body_size 130M</code>. <code>X-Forwarded-For</code> is <strong>required, not
+optional</strong>: the app sets <code>trust proxy</code> and the login throttle keys on client
+IP — without it every request looks like 127.0.0.1 and the throttle becomes one shared bucket
+for the whole internet.</p>
+
+<div class="box warn">
+  <span class="label">A Windows caveat that matters for this machine</span>
+  <p>On <code>SIGTERM</code> the process stops accepting connections, lets in-flight requests
+  finish, checkpoints the WAL and closes the database. <strong>On Windows that path does not
+  run</strong> — <code>Stop-Process</code> and Task Manager both terminate outright rather than
+  signalling.</p>
+  <p>It is not fatal: SQLite recovers the WAL when the next process opens the file. But it is
+  exactly the window in which a <code>cp</code>-style backup produces a copy missing its most
+  recent writes. On Windows: stop it with Ctrl+C in its own console, and take backups
+  <em>only</em> through <code>server/scripts/backup.js</code>.</p>
+</div>
+
+<h2>26. Tests and static gates</h2>
+
+<pre><code>npm --prefix server test</code></pre>
+
+<p>The bridge suite plus three static gates. <strong>146 of 146 tests pass as of 23 August
+2026.</strong> Every gate was written after the fault it catches had already shipped:</p>
+
+<table class="wide">
+  <tr><th style="width:24%">Gate</th><th>Catches</th></tr>
+  <tr><td><code>check-rich-text.js</code></td><td>A model-written field printed raw, so its <code>**bold**</code> shows as literal asterisks — and a self-closing <code>&lt;RichText /&gt;</code>, which takes <code>children</code> and therefore renders <strong>nothing</strong>. That one blanked an entire review screen.</td></tr>
+  <tr><td><code>check-routes.js</code></td><td>An internal link pointing at no declared route — currently checking against 26 declared routes. The router answers with the 404 page rather than an error, so nothing else notices.</td></tr>
+  <tr><td><code>check-hooks.js</code></td><td>A React hook called after an early return, which throws error #310 and unmounts the whole tree. The user sees a white page and a minified console error naming no component.</td></tr>
+</table>
+
+<p>The suite's coverage is heaviest where the reasoning is subtlest. Sixteen tests cover the
+adaptive selector alone, including <em>"a high score with no syllabus unit is NOT drafted"</em>
+and <em>"leverage cannot rescue an article the scorer called junk"</em>. Two now pin the
+objective-only prompt: <em>"no descriptive unit survives anywhere in the vocabulary"</em> and
+<em>"the prompt tells the model the units are settled elsewhere"</em> — a regression there
+would be expensive rather than merely wrong, because the unit listing was the largest block in
+a paid call.</p>
+
+<!-- ==================== PART VII ==================== -->
+<section class="part">
+  <div class="part-no">Part VII</div>
+  <h1>Constraints, limits and state</h1>
+  <div class="part-blurb">The reference card. Standing decisions, enforced invariants, honest
+  limitations, the open backlog, the live numbers, and what the objective-only migration took
+  out.</div>
+</section>
+
+<h2>27. Standing decisions</h2>
+
+<p>These are settled. Reopening one is a product decision, not a code change.</p>
+
+<table class="wide">
+  <tr><th style="width:24%">Decision</th><th style="width:40%">Value</th><th style="width:14%">Since</th></tr>
+  <tr><td>Repository</td><td>Extend <code>appsc-current-affairs-app</code>. Do <strong>not</strong> start a new one.</td><td>21 Aug 2026</td></tr>
+  <tr><td><code>appsc-group2-prep-app</code></td><td><strong>Never modified.</strong> Sibling, standalone, separate database.</td><td>21 Aug 2026</td></tr>
+  <tr><td>Input</td><td>Admin uploads a PDF; everything flows from it.</td><td>21 Aug 2026</td></tr>
+  <tr><td>Newspaper sources</td><td><strong>English only — The Hindu.</strong> Eenadu / Telugu ingestion is out of scope.</td><td>22 Aug 2026</td></tr>
+  <tr><td><strong>Exams served</strong></td><td><strong>OBJECTIVE ONLY</strong> — Group&#8209;II Screening, Group&#8209;II Mains, Group&#8209;I Prelims. Group&#8209;I Mains is out of scope and its layer has been removed.</td><td><strong>23 Aug 2026</strong></td></tr>
+  <tr><td>Publishing</td><td><strong>Always manual.</strong> The drafting is worth automating; the approving is not.</td><td>21 Aug 2026</td></tr>
+  <tr><td>Login</td><td>No shared login with the sibling app. Standalone means standalone.</td><td>21 Aug 2026</td></tr>
+  <tr><td>Spec authority</td><td><code>SPEC.md</code> is the authoritative product record. Anything agreed in conversation is written there <em>before</em> it is built.</td><td>22 Aug 2026</td></tr>
+</table>
+
+<div class="box warn">
+  <span class="label">Two distinctions that must not be collapsed</span>
+  <p><strong>English-only removes Eenadu as an input newspaper. It does not remove Telugu as
+  exam content.</strong> AP History, Society and Culture are full of Telugu topics, and
+  <code>relevance.js</code> must keep matching "Telugu literature", Telugu dynasties and the
+  like.</p>
+  <p><strong>Objective-only removes Group-I MAINS. It does not remove Group-I.</strong>
+  Group&#8209;I Prelims is served, and its 27 units are more than half the syllabus map.</p>
+</div>
+
+<h2>28. Invariants the code enforces</h2>
+
+<ol>
+  <li><strong>No facts, no item.</strong> An item nothing can be asked about is turned away in
+  the drafter and flagged in the queue.</li>
+  <li><strong>Discard is a row, never a deletion.</strong> Articles and items alike. A
+  segmenter that quietly loses a column looks identical to one that works, and the only defence
+  is being able to read what it decided.</li>
+  <li><strong>Every question carries an explanation and a <code>fact_as_of</code> date.</strong></li>
+  <li><strong>Nothing publishes itself.</strong> Two status gates, both human.</li>
+  <li><strong>Print items carry no invented URL.</strong> Citation from the edition row;
+  <code>is_primary = 0</code>; <code>needs_verify = 1</code>.</li>
+  <li><strong>Derived tables are rebuildable.</strong> Any table the matchers produce can be
+  dropped and regenerated.</li>
+  <li><strong>Scores store their breakdown.</strong> A number nobody can decompose is a number
+  nobody trusts.</li>
+  <li><strong>Shared libraries, not parallel implementations.</strong> One ingest, one drafting
+  insert, one model-call implementation, one alias matcher.</li>
+  <li><strong>The model is never asked what code already settled</strong> — not the bucket, not
+  the keywords, not the topics, and now not the syllabus units.</li>
+  <li><strong>An article with no syllabus connection is never drafted automatically.</strong></li>
+  <li><strong>Dates are local, not UTC.</strong></li>
+  <li><strong>Uploads are idempotent on file hash.</strong></li>
+</ol>
+
+<h2>29. Known limitations</h2>
+
+<table class="wide">
+  <tr><th style="width:28%">Limitation</th><th>Detail</th></tr>
+  <tr><td><strong>One publication, one language</strong></td><td>The segmenter is tuned to The Hindu's layout: it reads the paper's own running head to tell an opinion page from a news page. Another masthead needs a profile in <code>np-daily/profiles.js</code>.</td></tr>
+  <tr><td><strong><code>G2-P1-U7</code> over-matches</strong></td><td>Fed by 61 articles against a median of 7, 34 of them on a single term. The fix is priced in every coverage run; the decision is the owner's.</td></tr>
+  <tr><td><strong>The app has no crawler</strong></td><td>Nothing in the codebase hits the web on a schedule. A scraper cannot tell a superseded figure from a current one, and this is the material where that mistake is unrecoverable.</td></tr>
+  <tr><td><strong>Automated discovery covers PIB only</strong></td><td>AP government orders, PRS Bill summaries, RBI documents and newspaper reporting still need the manual route. RBI's document server is CAPTCHA-gated to automated clients.</td></tr>
+  <tr><td><strong>The drafting lock has a race</strong></td><td>The route checks it; the worker registers it seconds later. Rapid repeat clicks create phantom runs that hold the lock until the two-hour sweep. They cost nothing but block drafting meanwhile.</td></tr>
+  <tr><td><strong>No shared login</strong></td><td>With <code>appsc-group2-prep-app</code>. By decision.</td></tr>
+  <tr><td><strong>Service worker in the in-app browser</strong></td><td>It serves correctly and works in a normal browser; the embedded pane's sandbox refuses the registration.</td></tr>
+  <tr><td><strong>The value compounds with daily runs</strong></td><td>Four editions in, Practice has 874 questions and the map covers 46 units. A month in, per-unit coverage becomes worth <em>reading</em> rather than worth <em>checking</em>.</td></tr>
+</table>
+
+<h2>30. Open backlog</h2>
+
+<table class="wide">
+  <tr><th style="width:34%">Item</th><th>Detail</th></tr>
+  <tr><td><strong>The upload form does not read the date from the filename</strong></td><td>A file named <code>…Full Edition 10~08~2026.pdf</code> uploaded on the 23rd is filed as the 23rd unless the admin changes the date by hand. It happened once and was caught by reading the paper's own weekday. Defaulting the field from the filename would close it — see §31.</td></tr>
+  <tr><td><strong>Syllabus vocabulary gaps</strong></td><td>17 articles score 45+ and match no unit. Each is either a missing alias or a genuine non-match, and telling them apart is a short job with a large payoff.</td></tr>
+  <tr><td><strong>Three units never fed</strong></td><td><code>G1P-A2</code>, <code>G2-P1-U1</code>, <code>G2-P1-U4</code> — all AP/ancient history, genuinely rare in a daily paper.</td></tr>
+  <tr><td><strong>Duplicate topics</strong></td><td>From merging the news vocabulary with the blueprint vocabulary. Needs a human merge.</td></tr>
+  <tr><td><strong>PYQ extraction is incomplete</strong></td><td>Several past-paper PDFs still have only partial extraction. The filter is fixed; a full run has not been done.</td></tr>
+  <tr><td><strong>119 published items were drafted under the old prompt</strong></td><td>Deliberately left alone. Their Mains fields were stripped; their notes, facts and questions are untouched. New editions get the leaner objective-only drafting.</td></tr>
+  <tr><td><strong><code>seed-content.js</code> carries dead keys</strong></td><td>The seeded digests still set <code>g1_*</code> fields. They are ignored on insert, so it works — it is untidy rather than broken.</td></tr>
+  <tr><td><strong><code>np-daily/README.md</code> is stale</strong></td><td>It still says <code>np_editions</code> does not exist.</td></tr>
+</table>
+
+<h2>31. Current content state</h2>
+
+<p class="footnote">Read directly from <code>server/data/ca.db</code>, 23 August 2026.</p>
+
+<div class="stat-grid">
+  <div class="stat"><div class="v">4</div><div class="k">Editions</div></div>
+  <div class="stat"><div class="v">88</div><div class="k">Pages</div></div>
+  <div class="stat"><div class="v">411</div><div class="k">Articles</div></div>
+  <div class="stat"><div class="v">119</div><div class="k">Published items</div></div>
+  <div class="stat"><div class="v">874</div><div class="k">Questions</div></div>
+  <div class="stat"><div class="v">690</div><div class="k">Carry a unit</div></div>
+  <div class="stat"><div class="v">52</div><div class="k">Units mapped</div></div>
+  <div class="stat"><div class="v">35</div><div class="k">Tables</div></div>
+</div>
+
+<h3>Source</h3>
+<table class="tight" style="width:88%">
+  <tr><th>Edition</th><th class="num">Pages</th><th class="num">Articles</th><th>Note</th></tr>
+  <tr><td>The Hindu, Vijayawada &mdash; 10 Aug 2026</td><td class="num">24</td><td class="num">97</td><td>Catch-up edition, not yet drafted</td></tr>
+  <tr><td>The Hindu, Vijayawada &mdash; 21 Aug 2026</td><td class="num">28</td><td class="num">121</td><td></td></tr>
+  <tr><td>The Hindu, Vijayawada &mdash; 22 Aug 2026</td><td class="num">18</td><td class="num">95</td><td></td></tr>
+  <tr><td>The Hindu, Vijayawada &mdash; 23 Aug 2026</td><td class="num">18</td><td class="num">98</td><td></td></tr>
+</table>
+
+<div class="box">
+  <span class="label">A dating error worth recording, because it was nearly invisible</span>
+  <p>The 10 August edition was uploaded on 23 August with the form's date left at today, so it
+  sat in the database as a second 23 August edition. Nothing about it looked wrong: it
+  processed cleanly, scored normally, and appeared in the list beside the real one.</p>
+  <p>It matters because <strong>print citations are built from the edition row</strong>, so
+  every item drafted from it would have cited "The Hindu (Vijayawada), 2026-08-23" — a date the
+  story was not published on, on an app whose whole discipline is that a fact carries the date
+  it was true. The date also decides which digest the items land in.</p>
+  <p>It was caught by reading the filename against the content — the paper reports events
+  "on Sunday", and 10 August 2026 is a Monday — and corrected before anything was drafted, so
+  nothing had to be re-paid for. <strong>The upload form should default its date from the
+  filename where the filename carries one</strong>; that is the fix that stops it recurring,
+  and it is not yet built.</p>
+</div>
+
+<h3>What happened to the 411 articles</h3>
+<table class="tight" style="width:64%">
+  <tr><th>Status</th><th class="num">Articles</th></tr>
+  <tr><td>not selected (<code>new</code>)</td><td class="num">171</td></tr>
+  <tr><td>drafted into an item</td><td class="num">119</td></tr>
+  <tr><td>discarded with a reason</td><td class="num">64</td></tr>
+  <tr><td>relevant, not yet drafted</td><td class="num">43</td></tr>
+  <tr><td>merged as duplicates</td><td class="num">14</td></tr>
+</table>
+
+<h3>Published items by bucket</h3>
+<table class="tight" style="width:64%">
+  <tr><th>Bucket</th><th class="num">Items</th><th class="num">Share</th></tr>
+  <tr><td>national</td><td class="num">67</td><td class="num">56%</td></tr>
+  <tr><td><strong>andhra pradesh</strong></td><td class="num">45</td><td class="num">38%</td></tr>
+  <tr><td>international</td><td class="num">4</td><td class="num">3%</td></tr>
+  <tr><td>dynamic</td><td class="num">3</td><td class="num">3%</td></tr>
+</table>
+
+<h3>Reference data seeded</h3>
+<table class="tight" style="width:82%">
+  <tr><th>Vocabulary</th><th class="num">Rows</th><th>Notes</th></tr>
+  <tr><td>Keyword angles</td><td class="num">737</td><td>Nine subject blueprints</td></tr>
+  <tr><td>Syllabus units</td><td class="num">52</td><td>27 Group&#8209;I Prelims &middot; 25 Group&#8209;II</td></tr>
+  <tr><td>Unit aliases</td><td class="num">934</td><td>Newspaper-side phrasings</td></tr>
+  <tr><td>Master topics</td><td class="num">119</td><td>with 441 aliases and 20 curated links</td></tr>
+  <tr><td>Past-paper questions</td><td class="num">1,137</td><td>across 10 objective papers</td></tr>
+  <tr><td>Known corrections</td><td class="num">4</td><td>Labour Codes &middot; Amaravati &middot; 16th FC &middot; Census 2027</td></tr>
+</table>
+
+<h3>Verification status</h3>
+<table class="tight" style="width:82%">
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Test suite</td><td><strong>146 / 146 passing</strong></td></tr>
+  <tr><td>Static gate — rich text</td><td>PASS</td></tr>
+  <tr><td>Static gate — routes</td><td>PASS &mdash; 26 declared routes</td></tr>
+  <tr><td>Static gate — hooks</td><td>PASS &mdash; no hook after an early return</td></tr>
+  <tr><td>Preflight</td><td>8 passed, 2 warnings, 0 failures</td></tr>
+  <tr><td>API sweep</td><td>23 endpoints, all 200</td></tr>
+  <tr><td>Factor E coverage</td><td>75 articles earn it, against 26 under the old evidence</td></tr>
+</table>
+
+<h2>32. Decision log — failures that shaped the design</h2>
+
+<p>Almost every rule in this document exists because something went wrong first. Kept here
+because the reasoning is more portable than the fix.</p>
+
+<table class="wide">
+  <tr><th style="width:30%">What happened</th><th>What it taught, and what changed</th></tr>
+  <tr><td><strong>A verification pass found 4 of 9 blueprint facts stale in 15 months</strong>, 3 of them Tier&#8209;1</td><td>Staleness is the app's defining risk, not a corner case. Produced <code>ref_corrections</code>, the three-point guard, and <code>fact_as_of</code> on every question.</td></tr>
+  <tr><td><strong>29 articles lost in one drafting run</strong> to <code>fetch failed</code></td><td>The retry gave up on attempt 1 because the error carried no <code>retryable</code> flag. Now a classifier walks the whole cause chain, with backoff, jitter, a timeout, and a second-pass queue.</td></tr>
+  <tr><td><strong>A killed run lost 13 paid-for drafts</strong></td><td>They were held in memory until the end. Now written per record.</td></tr>
+  <tr><td><strong>The PYQ format engine was inert and every run looked healthy</strong></td><td>A <code>ReferenceError</code> in a log line fell into its own <code>catch</code>, which returned the legitimate fallback. Dependencies are now parameters.</td></tr>
+  <tr><td><strong>313 of 314 datelines wiped</strong> by running a backfill twice</td><td>The second pass derived from already-stripped bylines. A derivation that consumes its own output is not idempotent.</td></tr>
+  <tr><td><strong>A whole review screen rendered blank</strong></td><td><code>&lt;RichText text={...} /&gt;</code> — the component takes <code>children</code>. Became a static gate.</td></tr>
+  <tr><td><strong>Every admin edition page rendered blank</strong></td><td>One hook called after an early return; React counted more hooks than the previous render and unmounted the tree. Became a second static gate.</td></tr>
+  <tr><td><strong>"Approve all" did nothing, silently</strong></td><td>Embedded browsers suppress <code>window.confirm</code> and return <code>false</code>. All eight native dialogs replaced.</td></tr>
+  <tr><td><strong>Seven phantom drafting runs in three minutes</strong></td><td>The blank page above made the admin click repeatedly, and the lock is registered by the worker rather than the route. They drafted nothing, but held the lock.</td></tr>
+  <tr><td><strong>A blanket <code>DELETE FROM ca_progress</code> removed real reading history</strong></td><td>Restored from backup. Test-data cleanup is now scoped to the probe account explicitly.</td></tr>
+  <tr><td><strong>The syllabus addendum contradicted the base prompt</strong></td><td>Two instruction blocks in one prompt must be checked against each other.</td></tr>
+  <tr><td><strong>The unit vocabulary contradicted the instructions</strong></td><td>The model returned 14 units, then 3 objective and 0 descriptive. Narrowing the vocabulary fixed it; removing it entirely made the contradiction impossible.</td></tr>
+  <tr><td><strong><code>--max 10</code> returned 12</strong></td><td>The default minimum silently overrode the explicit cap. A flag that is quietly ignored is worse than one that errors.</td></tr>
+</table>
+
+<div class="box">
+  <span class="label">The method these have in common</span>
+  <p><strong>Measure, don't assert.</strong> Every threshold in this system — 45, 32, 12, 35,
+  the 55/45 weighting, the four-unit flattening point, the Factor E rescale — was set by
+  running the rule over real articles and reading what it did, then adjusted when the output
+  disagreed with judgement. None is a guess that survived because nobody checked.</p>
+</div>
+
+<h2>33. What the Group-I Mains removal took out</h2>
+
+<p class="footnote">Performed 23 August 2026 by <code>server/scripts/drop-g1-mains.js</code>,
+which is kept in the repository as the record. It is re-runnable and prints a before/after.</p>
+
+<table class="wide">
+  <tr><th style="width:34%">Removed</th><th class="num" style="width:12%">Scale</th><th>What it was for</th></tr>
+  <tr><td>11 <code>g1_*</code> columns on <code>ca_items</code></td><td class="num">154 items</td><td>The eight-section Mains note: theme, why-in-news, background, AP angle, linked instruments, essay bridges, way forward, plus THE FACT and THE ANGLE</td></tr>
+  <tr><td><code>ca_essay_questions</code></td><td class="num">461 rows</td><td>Paper&#8209;I essay prompts, direct and indirect</td></tr>
+  <tr><td><code>ca_item_dimensions</code></td><td class="num">605 rows</td><td>The seven-dimension coverage tags</td></tr>
+  <tr><td><code>ca_item_themes</code></td><td class="num">425 rows</td><td>Bank-review themes</td></tr>
+  <tr><td><code>topic_evidence</code></td><td class="num">149 rows</td><td>Mains recurrence — <strong>and the sole source of Factor E</strong></td></tr>
+  <tr><td><code>ca_user_cards</code>, <code>ca_skeletons</code></td><td class="num">0 rows</td><td>The personal Q/D/E/S bank and answer skeletons — <strong>never used once</strong></td></tr>
+  <tr><td>Descriptive <code>ref_units</code></td><td class="num">54 units</td><td>The five written papers. They had <strong>0 aliases</strong> — never matched from newspaper text, only offered to the model as a vocabulary</td></tr>
+  <tr><td><code>ca_item_units</code> rows on those units</td><td class="num">641 rows</td><td>Mains routing</td></tr>
+  <tr><td>Group&#8209;I Mains PYQ corpus</td><td class="num">252 q / 20 papers</td><td>Descriptive past papers</td></tr>
+  <tr><td>The two angle triggers</td><td class="num">2</td><td>Blocked publishing to the Mains lane without an argument</td></tr>
+  <tr><td><code>bankReview.js</code>, <code>Banks.jsx</code>, <code>G1Note.jsx</code>, 4 seeders</td><td class="num">7 files</td><td>The bank review, its screen, the note renderer, and the Mains seed scripts</td></tr>
+</table>
+
+<h3>What was rebuilt rather than deleted</h3>
+
+<table class="tight">
+  <tr><th style="width:26%">Piece</th><th>Old source</th><th>New source</th></tr>
+  <tr><td>Factor E, 15 of 100</td><td><code>topic_evidence</code> — a blueprint</td><td><code>topic_units</code> ⋈ <code>ref_units</code>, counting distinct objective papers</td></tr>
+  <tr><td><code>topics.tier</code></td><td>Hand-assigned, informed by the blueprint</td><td>Recurrence in 1,137 real Group&#8209;II questions. 23 topics changed tier</td></tr>
+  <tr><td>The discard rule</td><td>No angle, no Group&#8209;I lane</td><td>No prelims facts, no item</td></tr>
+  <tr><td>The lens</td><td>Written paper vs ticked paper</td><td>Two published syllabi, both ticked</td></tr>
+</table>
+
+<h2>34. Glossary</h2>
+
+<table class="wide">
+  <tr><th style="width:24%">Term</th><th>Meaning</th></tr>
+  <tr><td><strong>Blueprint keyword</strong></td><td>A recurring <em>question angle</em> APPSC reuses across years — <code>Appointed</code>, <code>GI tag</code>, <code>Index</code>. Not a fact.</td></tr>
+  <tr><td><strong>Bucket</strong></td><td>One of four: international, national, <strong>ap</strong>, dynamic. <em>Dynamic</em> is the fast-changing edge of another subject — a fresh GI tag, a rate decision.</td></tr>
+  <tr><td><strong>Composite score</strong></td><td>The 0&ndash;100 relevance number from the five weighted factors.</td></tr>
+  <tr><td><strong>Dateline</strong></td><td>Where a story was filed from. The strongest single signal that a story is an AP story, even when its text never names the State.</td></tr>
+  <tr><td><strong>Derived table</strong></td><td>A table the matchers produce and that can be dropped and rebuilt at any time. The opposite of curated.</td></tr>
+  <tr><td><strong>Digest / day</strong></td><td>One <code>ca_days</code> row — a calendar day's published items.</td></tr>
+  <tr><td><strong>Edition</strong></td><td>One uploaded newspaper: publication + edition + date + file hash.</td></tr>
+  <tr><td><strong>Genre</strong></td><td>News, editorial, opinion — read from the paper's own running head, not classified.</td></tr>
+  <tr><td><strong>Item</strong></td><td>The master knowledge object. One <code>ca_items</code> row, routed to both syllabi.</td></tr>
+  <tr><td><strong>Lane</strong></td><td>Group&#8209;I Prelims or Group&#8209;II — the two syllabi one item is routed into.</td></tr>
+  <tr><td><strong>Lens</strong></td><td>The student's G1-Prelims / G2 / both toggle. Changes which syllabus units each card shows.</td></tr>
+  <tr><td><strong>Leverage</strong></td><td>0&ndash;100, from the count of distinct syllabus units an article feeds, plus a bonus if a unit is named in the headline.</td></tr>
+  <tr><td><strong>Prelims facts</strong></td><td>The memorise-this block. The examinable residue of an item, and — since every paper is objective — the whole output.</td></tr>
+  <tr><td><strong>Prominence</strong></td><td>Headline size as a multiple of body size — the editor's own judgement of importance, free and requiring no model.</td></tr>
+  <tr><td><strong>PYQ</strong></td><td>Previous Year Question. Here, 1,137 of them held as structured data.</td></tr>
+  <tr><td><strong>Rank</strong></td><td>0.55 × leverage + 0.45 × composite. What actually orders the selection.</td></tr>
+  <tr><td><strong>Static linkage / static notes</strong></td><td>The field naming the standing syllabus topic a news item updates, and the standing material itself — what stops current affairs being a separate subject.</td></tr>
+  <tr><td><strong>Tier</strong></td><td>A topic's priority, 1&ndash;3, derived from measured recurrence in the objective papers.</td></tr>
+  <tr><td><strong>Unit / unit code</strong></td><td>A syllabus unit, e.g. <code>G2-P1-U7</code> or <code>G1P-B2</code>. The atom of the syllabus map.</td></tr>
+  <tr><td><strong>Unfeedable / broad</strong></td><td>Unit flags. <em>Unfeedable</em>: no article can ever feed it (mental ability, languages). <em>Broad</em>: it matches nearly everything and so proves nothing.</td></tr>
+</table>
+
+<hr>
+
+<p class="footnote">Compiled 23 August 2026 from the source tree and the live database of
+<code>appsc-current-affairs-app</code>. Every figure in Part&nbsp;VII was read from the running
+system rather than from documentation. This version supersedes Version 1.0, which described
+the system before the Group&#8209;I Mains layer was removed; where the two disagree, this one
+is current.</p>
+
+</body>
+</html>
