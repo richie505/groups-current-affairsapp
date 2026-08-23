@@ -101,10 +101,51 @@ function clearForEmail(email) {
 // the next one's assertions.
 function resetAll() {
   buckets.clear();
+  // The signup buckets are a second map added later, and a resetAll that
+  // cleared only the first would leave one test's signups counting against the
+  // next one's — the exact leak this function exists to prevent.
+  signups.clear();
+}
+
+// SIGNUP HAS ITS OWN, TIGHTER, LIMIT — AND IT COUNTS SUCCESSES.
+//
+// The login throttle above deliberately counts only FAILURES: a correct
+// password must never be held against anyone. Registration is the opposite
+// case. There is no such thing as a failed registration worth protecting, and
+// the abuse is the successful one — a script creating accounts until the
+// students table is unusable and the admin screen is unreadable.
+//
+// Keyed on IP alone. There is no email to key on that the caller does not
+// choose freely, so an email key would be an attacker-supplied bucket name.
+// Five an hour is generous for a household or a college sharing an address and
+// useless for a script.
+const MAX_SIGNUPS_PER_IP = Number(process.env.MAX_SIGNUPS_PER_HOUR || 5);
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
+const signups = new Map();
+
+function signupRateLimit(req, res, next) {
+  const now = Date.now();
+  const key = `signup:${req.ip}`;
+  const b = signups.get(key);
+  if (!b || now - b.firstAt > SIGNUP_WINDOW_MS) {
+    signups.set(key, { count: 1, firstAt: now });
+    return next();
+  }
+  if (b.count >= MAX_SIGNUPS_PER_IP) {
+    const wait = Math.ceil((SIGNUP_WINDOW_MS - (now - b.firstAt)) / 1000);
+    res.set('Retry-After', String(wait));
+    return res.status(429).json({
+      error: 'Too many accounts created from here. Try again later.',
+    });
+  }
+  b.count += 1;
+  next();
 }
 
 module.exports = {
   loginRateLimit,
+  signupRateLimit,
+  MAX_SIGNUPS_PER_IP,
   recordFailure,
   recordSuccess,
   clearForEmail,

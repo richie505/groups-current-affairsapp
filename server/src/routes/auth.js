@@ -2,7 +2,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { signToken, requireAuth } = require('../auth');
-const { loginRateLimit, recordFailure, recordSuccess, clearForEmail } = require('../lib/rateLimit');
+const {
+  loginRateLimit, signupRateLimit, recordFailure, recordSuccess, clearForEmail,
+} = require('../lib/rateLimit');
 const { findValidReset, consumeReset } = require('../lib/passwordReset');
 
 const router = express.Router();
@@ -10,13 +12,45 @@ const router = express.Router();
 const TRACKS = ['g1', 'g2', 'both'];
 const { MODES: PACING_MODES, MIN_MINUTES, MAX_MINUTES } = require('../lib/pacing');
 
-router.post('/register', (req, res) => {
+// WHETHER ANYONE MAY SIGN THEMSELVES UP.
+//
+// Open by default, which is what this app has always done — closing it silently
+// would break the signup flow of a running deployment, and that is not a
+// decision a hardening pass gets to make.
+//
+// But it IS a decision, and it was never a considered one. Every item in this
+// app cost money to draft, and the admin screen already has the other model
+// built: create the student, send them a reset link. A deployment that intends
+// that model sets ALLOW_REGISTRATION=0 and the public form stops working.
+// Preflight says which mode is in force so the choice is made once, on purpose.
+const registrationOpen = () => process.env.ALLOW_REGISTRATION !== '0';
+
+// Eight, not six.
+//
+// Six is two guesses' worth of entropy short of anything, and this is the only
+// credential in the system — there is no second factor and no device trust. It
+// applies to new passwords only; nobody is locked out of an account they
+// already have.
+const MIN_PASSWORD = 8;
+
+// Ordered before the throttle deliberately. With registration closed, running
+// the rate limiter first meant a blocked attempt still consumed throttle budget
+// and came back with "too many accounts created from here" — which is both the
+// wrong reason and a misleading one, since no account was or could be created.
+function registrationEnabled(req, res, next) {
+  if (registrationOpen()) return next();
+  res.status(403).json({
+    error: 'Accounts are created by the administrator. Ask them for an invite link.',
+  });
+}
+
+router.post('/register', registrationEnabled, signupRateLimit, (req, res) => {
   const { name, email, password, exam_track } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required.' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  if (password.length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters.` });
   }
   // 'both' is the default because it is the common case: most people sit
   // Group-II while preparing Group-I, and the whole point of the app is that
@@ -84,8 +118,8 @@ router.get('/reset/:token', (req, res) => {
 
 router.post('/reset/:token', (req, res) => {
   const { new_password } = req.body || {};
-  if (!new_password || String(new_password).length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  if (!new_password || String(new_password).length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters.` });
   }
   const reset = findValidReset(db, req.params.token);
   if (!reset) return res.status(404).json({ error: 'This reset link is no longer valid.' });
@@ -179,8 +213,10 @@ router.put('/me', requireAuth, (req, res) => {
   }
 
   if (new_password !== undefined && new_password !== '') {
-    if (String(new_password).length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    if (String(new_password).length < MIN_PASSWORD) {
+      return res
+        .status(400)
+        .json({ error: `New password must be at least ${MIN_PASSWORD} characters.` });
     }
     const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!row) return res.status(404).json({ error: 'Account not found.' });

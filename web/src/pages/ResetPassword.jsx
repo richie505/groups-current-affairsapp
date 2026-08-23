@@ -69,7 +69,7 @@ export default function ResetPassword() {
             type="password"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"

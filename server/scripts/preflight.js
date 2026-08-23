@@ -60,6 +60,19 @@ if (process.env.NODE_ENV !== 'production') {
   pass('NODE_ENV', 'production');
 }
 
+// Not a failure either way — it is a product decision, and the point of
+// printing it is that it gets made once, deliberately, rather than inherited.
+if (process.env.ALLOW_REGISTRATION === '0') {
+  pass('registration', 'closed — accounts are created by an admin, who sends a reset link');
+} else {
+  warn(
+    'registration',
+    'is OPEN: anyone with the URL can create an account and read every published item. ' +
+      'Every one of those items cost money to draft. Set ALLOW_REGISTRATION=0 to require ' +
+      'an admin to create accounts.'
+  );
+}
+
 const origins = (process.env.CORS_ORIGINS || '').trim();
 if (origins === '*') {
   fail('CORS_ORIGINS', 'is "*" — any site could read a logged-in student\'s data.');

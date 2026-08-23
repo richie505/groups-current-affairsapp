@@ -81,6 +81,14 @@ shuts down cleanly: on `SIGTERM` it stops accepting connections, lets in-flight
 requests finish, checkpoints the WAL and closes the database. Give it the ten
 seconds — `TimeoutStopSec` below that will `SIGKILL` mid-checkpoint.
 
+**On Windows that path does not run.** `Stop-Process` and Task Manager both
+terminate a process outright rather than sending a signal, so a Windows host
+gets no checkpoint and no clean close. It is not fatal — SQLite recovers the WAL
+when the next process opens the file — but it is exactly the window in which a
+`cp`-style backup produces a copy missing its most recent writes. If this ever
+runs on Windows, stop it with Ctrl+C in its own console, and take backups only
+through `server/scripts/backup.js`, which is safe either way.
+
 nginx in front, terminating TLS:
 
 ```nginx

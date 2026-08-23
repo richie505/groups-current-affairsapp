@@ -71,12 +71,12 @@ export default function Register() {
             type="password"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={8}
             value={form.password}
             onChange={(e) => set('password', e.target.value)}
             className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm"
           />
-          <span className="mt-1 block text-xs text-slate-500">At least 6 characters.</span>
+          <span className="mt-1 block text-xs text-slate-500">At least 8 characters.</span>
         </label>
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium text-slate-700">Which exam?</legend>
