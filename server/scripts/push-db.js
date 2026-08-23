@@ -47,22 +47,30 @@ if (!args.to || !args.email) {
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'ca.db');
 
-// The password is read from the terminal and never taken as an argument.
-// A --password flag lands in shell history, in `ps` output, and in any
-// transcript of the session; a prompt does not.
+
+// Muted by overriding readline's own output hook — the standard idiom, rather
+// than the raw-stdin listener this used to use. That version fought readline
+// for the same keystrokes, which is fragile everywhere and reliably wrong in
+// PowerShell, where two consumers interleave and the answer arrives truncated
+// or empty.
+//
+// PUSH_PASSWORD is honoured for non-interactive use. Not offered as a --flag:
+// an argument is visible in shell history and in the process list to every
+// other user on the machine.
 function askPassword(prompt) {
+  if (process.env.PUSH_PASSWORD) return Promise.resolve(process.env.PUSH_PASSWORD);
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    const onData = (char) => {
-      if (['\n', '\r', ''].includes(String(char))) process.stdin.removeListener('data', onData);
-      else readline.clearLine(process.stdout, 0) || readline.cursorTo(process.stdout, 0) || process.stdout.write(prompt);
+    let muted = false;
+    rl._writeToOutput = (str) => {
+      if (!muted) rl.output.write(str);
     };
-    process.stdin.on('data', onData);
     rl.question(prompt, (answer) => {
       rl.close();
       process.stdout.write('\n');
-      resolve(answer);
+      resolve(String(answer || '').trim());
     });
+    muted = true;
   });
 }
 
