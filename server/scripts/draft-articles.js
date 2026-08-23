@@ -114,6 +114,8 @@ function parseArgs(argv) {
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--plan') args.plan = true;
+    // The run row the API already opened. See the lock comment below.
+    else if (a === '--run-id') args.runId = Number(argv[++i]);
     else if (a === '--article') args.articleIds = String(argv[++i]).split(',').map(Number).filter(Boolean);
   }
   return args;
@@ -199,14 +201,38 @@ async function main() {
     process.exit(0);
   }
 
-  const runId = args.dryRun
-    ? null
-    : (openRunId = L.startRun(db, {
-        windowStart: edition.date,
-        windowEnd: edition.date,
-        mode: `edition-${edition.id}`,
-        model: args.model,
-      }));
+  // NOT OPENED FOR A PLAN, and that is not a tidiness point.
+  //
+  // The run row IS the drafting lock. `--plan` opened one and then exited at the
+  // early return below without ever closing it, so the free preview took the
+  // lock and held it until the two-hour stale sweep — the admin screen showed
+  // "Drafting…" with 0 considered and 0 drafted, and a real run was refused as
+  // already in progress. Two phantom rows were created that way in twenty
+  // minutes, both by previewing.
+  //
+  // A preview that blocks the thing it is previewing is worse than no preview.
+  // WHO OPENS THE LOCK, AND WHY IT IS NOT ALWAYS THIS PROCESS.
+  //
+  // A ca_runs row with status 'running' IS the drafting lock. When the API
+  // starts a run it now opens that row BEFORE spawning this process, because
+  // the seconds Node takes to boot were a window in which a second request saw
+  // no row and started a second worker. So an --run-id here means "the lock is
+  // already yours" and this process adopts it rather than opening another.
+  //
+  // Run straight from a terminal there is no such row, and this process opens
+  // its own — where the unique index on ca_runs(mode) WHERE status='running' is
+  // what stops two terminals racing.
+  const runId =
+    args.dryRun || args.plan
+      ? null
+      : (openRunId =
+          args.runId ||
+          L.startRun(db, {
+            windowStart: edition.date,
+            windowEnd: edition.date,
+            mode: `edition-${edition.id}`,
+            model: args.model,
+          }));
 
   // Roughly 33 seconds per article across every run so far: one call for the
   // note, one for the questions. Printed so a long run is a known wait rather
@@ -273,38 +299,28 @@ async function main() {
   // database rather than a file so the prompt and the canonicaliser in
   // insertDrafted are always looking at the same list — a prompt offering units
   // the checker will reject is how tags go missing.
-  // DESCRIPTIVE units only.
+  // NO UNIT LISTING AT ALL.
   //
-  // The listing used to be every row in ref_units, which quietly put the
-  // objective syllabus units — Group-II and Group-I Prelims — in front of the
-  // model as things to choose. They are not: Section 2 matched them against the
-  // published syllabus before this ran, and insertDrafted attaches them itself.
+  // It used to list every row in ref_units, which put the objective syllabus
+  // units in front of the model as things to choose. They are not: Section 2
+  // matched them against the published syllabus before this ran, and
+  // insertDrafted attaches them itself.
   //
-  // Offering them anyway did real damage in both directions. Told nothing, the
-  // model returned fourteen units for one story, half of them objective codes
-  // it had copied back from the findings; told not to copy them, it returned
-  // three objective codes and no descriptive ones at all. Both are the same
-  // fault — a prompt that says one thing in the instructions and the opposite
-  // in the vocabulary, and the vocabulary wins.
+  // Offering them anyway did damage in both directions. Told nothing, the model
+  // returned fourteen units for one story, half of them objective codes copied
+  // back from the findings; told not to copy them, it returned three objective
+  // codes and no descriptive ones at all. Both are the same fault — a prompt
+  // that says one thing in the instructions and the opposite in the vocabulary,
+  // and the vocabulary wins.
   //
-  // So the contradiction is removed at source. What is left is the one question
-  // that is genuinely the model's: which of the five WRITTEN papers this story
-  // serves.
-  const units = db
-    .prepare(
-      `SELECT unit_code, label FROM ref_units
-        WHERE format = 'descriptive' AND unfeedable = 0
-        ORDER BY unit_code`
-    )
-    .all();
+  // Narrowing it to the descriptive units was the fix while a written paper
+  // existed. There is no written paper now, so the listing is gone entirely and
+  // the contradiction cannot come back. What remains below is the vocabulary
+  // the model is genuinely being asked to use.
   const keywords = db
     .prepare('SELECT keyword, subject FROM ref_keywords ORDER BY subject, keyword')
     .all();
   const vocabulary = [
-    '=== GROUP-I MAINS PAPER UNITS — the WRITTEN papers (use the CODE only, e.g. "P3-U7") ===',
-    'The objective syllabus units are settled elsewhere and are not chosen here.',
-    ...units.map((u) => `${u.unit_code} — ${u.label}`),
-    '',
     // Grouped by subject, matching the web lane, rather than one term per line
     // with its subject beside it. The per-line form invited the model to return
     // "Election [Polity]" as the keyword, and 20 of the first 84 tags came back
@@ -380,13 +396,17 @@ async function main() {
 
     D.normaliseTextFields(record);
 
-    // The angle rule, applied before anything else is spent on this item. An
-    // item with no argument will never reach an answer, so filing it to the
-    // Group-I lane would inflate the bank counts with unusable material.
-    if (Number(record.relevance_g1) === 1 && !String(record.g1_angle || '').trim()) {
+    // THE FACTS RULE, which replaces the angle rule the Mains lane enforced.
+    //
+    // An item with no memorise-this block is an item no question can be written
+    // from, and every paper this app serves is answered by ticking a box. So it
+    // is exactly as unusable as an item with no argument was for the written
+    // paper, and it is turned away at the same point — before anything more is
+    // spent on it.
+    if (!String(record.prelims_facts || '').trim()) {
       const reason =
-        'No angle produced — an item that cannot be argued from is not examinable for Group I.';
-      say(`${label} DISCARD (no angle) — ${(record.headline || '').slice(0, 55)}`);
+        'No prelims facts produced — an item nothing can be asked about is not examinable.';
+      say(`${label} DISCARD (no facts) — ${(record.headline || '').slice(0, 55)}`);
       discarded.push({ _articleId: article.id, discard_reason: reason });
       continue;
     }

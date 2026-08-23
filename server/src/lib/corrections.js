@@ -39,8 +39,6 @@ function haystackFor(item) {
     item.notes_markdown,
     item.static_linkage,
     item.prelims_facts,
-    item.g1_fact,
-    item.g1_angle,
   ]
     .filter(Boolean)
     .join('\n')

@@ -80,12 +80,12 @@ function loadAliases(db) {
 // The text of an item, split into the part that decides what it is ABOUT and
 // the part that merely mentions things.
 function itemText(item) {
-  const head = [item.headline, item.g1_theme, item.g1_sub_theme].filter(Boolean).join(' \n ');
-  const body = [
-    item.notes_markdown, item.prelims_facts, item.static_linkage,
-    item.g1_fact, item.g1_angle, item.g1_why_news, item.g1_background,
-    item.g1_ap_angle, item.g1_linked, item.g1_bridges, item.g1_way_forward,
-  ]
+  const head = item.headline || '';
+  // The eight-section Group-I Mains note used to be read here too, and it was
+  // most of the body text — removing it took topic matches from 152 to 109.
+  // That is the correct number rather than a regression: a topic is now matched
+  // on what the objective lanes actually publish.
+  const body = [item.notes_markdown, item.prelims_facts, item.static_linkage]
     .filter(Boolean)
     .join(' \n ');
   return { head, body, headNorm: norm(head), bodyNorm: norm(body) };
@@ -200,6 +200,11 @@ function rebuild(db, { statuses = ['draft', 'published'], minHits = 1, minBodyHi
        SELECT ti.topic_id, iu.unit_code, COUNT(DISTINCT ti.item_id), 'derived'
          FROM topic_items ti
          JOIN ca_item_units iu ON iu.item_id = ti.item_id
+         -- Only real, feedable syllabus units. This map is what factor E is
+         -- measured from, so a code with no unit behind it would inflate the
+         -- paper count with a paper that does not exist.
+         JOIN ref_units ru ON ru.unit_code = iu.unit_code
+                          AND ru.unfeedable = 0 AND ru.broad = 0
         WHERE NOT EXISTS (
                 SELECT 1 FROM topic_units m
                  WHERE m.topic_id = ti.topic_id
@@ -230,8 +235,8 @@ function topicDossier(db, slug) {
 
   const items = db
     .prepare(
-      `SELECT i.id, i.headline, i.bucket, i.importance, i.status, i.g1_bank,
-              i.g1_angle, d.date, ti.in_headline, ti.hits, ti.matched
+      `SELECT i.id, i.headline, i.bucket, i.importance, i.status,
+              d.date, ti.in_headline, ti.hits, ti.matched
          FROM topic_items ti
          JOIN ca_items i ON i.id = ti.item_id
          JOIN ca_days  d ON d.id = i.day_id
@@ -257,38 +262,23 @@ function topicDossier(db, slug) {
     )
     .all(topic.id, topic.id, topic.id);
 
-  // Paper reach comes from two places, and needs both. `topic_units` gives the
-  // papers implied by the units of news items that mention the topic; the
-  // Group-I blueprint gives the papers a person observed it being asked in.
-  // Reading only the first reported Polavaram as serving one paper when the
-  // blueprint had it in four.
-  const evidencePapers = (() => {
-    try {
-      return db
-        .prepare('SELECT DISTINCT paper FROM topic_evidence WHERE topic_id = ? AND paper <> \'\'')
-        .all(topic.id)
-        .map((r) => r.paper);
-    } catch {
-      return [];
-    }
-  })();
-  const papers = [
-    ...new Set([...units.map((u) => u.paper).filter(Boolean), ...evidencePapers]),
-  ].sort();
+  // Paper reach, from the units of the news items that mention the topic.
+  //
+  // This used to be merged with the Group-I Mains blueprint's own observations.
+  // That source is gone, and with it the case for merging: every paper named
+  // here is now one this app actually serves.
+  const papers = [...new Set(units.map((u) => u.paper).filter(Boolean))].sort();
 
   // What the commission has actually asked. This is the join that makes a topic
   // page worth opening: the news history and the exam history side by side, so
   // "is this worth my time" stops being a guess.
-  let evidence = [];
+  // `evidence` was the Group-I Mains blueprint's per-topic observations. It is
+  // kept as an always-empty array rather than removed from the shape, because
+  // the field is read by the topic page and an absent key and an empty list
+  // render differently.
+  const evidence = [];
   let pyq = [];
   try {
-    evidence = db
-      .prepare(
-        `SELECT paper, unit, questions, years, evidence, is_primary, kind
-           FROM topic_evidence WHERE topic_id = ?
-          ORDER BY is_primary DESC, questions DESC, paper`
-      )
-      .all(topic.id);
     pyq = db
       .prepare(
         `SELECT q.format, COUNT(*) AS n

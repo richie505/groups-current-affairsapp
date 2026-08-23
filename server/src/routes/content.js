@@ -2,7 +2,6 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { seedRevisionItem, scheduleOutcome, fmt, addDays } = require('../lib/revision');
-const { bankReview, BANK_TARGETS } = require('../lib/bankReview');
 const { buildQuiz } = require('../lib/quiz');
 
 const router = express.Router();
@@ -52,11 +51,8 @@ function itemColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
           ${alias}.subject_tag, ${alias}.notes_markdown, ${alias}.static_linkage,
           ${alias}.static_notes,
-          ${alias}.prelims_facts, ${alias}.g1_bank, ${alias}.g1_fact, ${alias}.g1_angle,
-          ${alias}.g1_theme, ${alias}.g1_sub_theme, ${alias}.g1_why_news,
-          ${alias}.g1_background, ${alias}.g1_ap_angle, ${alias}.g1_linked,
-          ${alias}.g1_bridges, ${alias}.g1_way_forward,
-          ${alias}.importance, ${alias}.relevance_g1, ${alias}.relevance_g2,
+          ${alias}.prelims_facts,
+          ${alias}.importance, ${alias}.relevance_g2,
           ${alias}.needs_verify, ${alias}.verify_note,
           ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
@@ -74,14 +70,13 @@ function itemColumns(alias = 'i') {
 // That is paid for on a phone, on mobile data, before anything appears.
 //
 // The split is not a guess. Every field below is one a list screen actually
-// reads; every field left out belongs to `G1Note` or to `Item.jsx`, both of
-// which are only ever rendered from the item page. If a card ever needs one
-// back, add it here — the cost is visible and the detail query is unchanged.
+// reads; every field left out is read only on the item page, which fetches the
+// item again anyway. If a card ever needs one back, add it here — the cost is
+// visible and the detail query is unchanged.
 function listColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
-          ${alias}.subject_tag, ${alias}.prelims_facts, ${alias}.g1_bank, ${alias}.g1_angle,
-          ${alias}.g1_theme, ${alias}.g1_sub_theme, ${alias}.g1_why_news, ${alias}.g1_ap_angle,
-          ${alias}.importance, ${alias}.relevance_g1, ${alias}.relevance_g2,
+          ${alias}.subject_tag, ${alias}.prelims_facts,
+          ${alias}.importance, ${alias}.relevance_g2,
           ${alias}.needs_verify, ${alias}.verify_note,
           ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
@@ -97,21 +92,16 @@ function attachTags(items, { full = true } = {}) {
   for (const it of items) {
     it.keywords = [];
     it.units = [];
-    it.themes = [];
     it.sources = [];
-    it.dimensions = [];
-    it.essay_questions = [];
   }
   for (const r of db.prepare(`SELECT item_id, keyword FROM ca_item_keywords WHERE item_id IN (${holes})`).all(...ids)) {
     byId.get(r.item_id)?.keywords.push(r.keyword);
   }
   for (const r of db
     .prepare(
-      // exam and format come along because the two lanes need DIFFERENT units.
-      // Group-I Mains is written and takes the descriptive paper units; Group-II
-      // and Group-I Prelims are answered by ticking a box and take the objective
-      // syllabus units. Rendering one list in both places would show a Group-II
-      // student the essay-paper routing and call it their syllabus.
+      // exam comes along because the two lanes are two SYLLABI, not two answer
+      // shapes: Group-I Prelims and Group-II are both ticked, but they examine
+      // different units, and the lens switches between them.
       `SELECT u.item_id, u.unit_code, r.label, r.paper, r.exam, r.format
          FROM ca_item_units u LEFT JOIN ref_units r ON r.unit_code = u.unit_code
         WHERE u.item_id IN (${holes}) ORDER BY u.unit_code`
@@ -121,11 +111,8 @@ function attachTags(items, { full = true } = {}) {
       unit_code: r.unit_code, label: r.label, paper: r.paper, exam: r.exam, format: r.format,
     });
   }
-  for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids)) {
-    byId.get(r.item_id)?.themes.push(r.theme);
-  }
-  // Citations and essay questions are read on the item page and nowhere else, so
-  // a list pays for them and shows none of them.
+  // Citations are read on the item page and nowhere else, so a list pays for
+  // them and shows none of them.
   if (full) {
     for (const r of db
       .prepare(
@@ -134,25 +121,6 @@ function attachTags(items, { full = true } = {}) {
       )
       .all(...ids)) {
       byId.get(r.item_id)?.sources.push(r);
-    }
-  }
-  // Sections 3 and 8 of the Group-I note template.
-  for (const r of db
-    .prepare(
-      `SELECT item_id, dimension, note FROM ca_item_dimensions
-        WHERE item_id IN (${holes}) ORDER BY dimension`
-    )
-    .all(...ids)) {
-    byId.get(r.item_id)?.dimensions.push({ dimension: r.dimension, note: r.note });
-  }
-  if (full) {
-    for (const r of db
-      .prepare(
-        `SELECT item_id, id, question, kind, note FROM ca_essay_questions
-          WHERE item_id IN (${holes}) ORDER BY kind DESC, id`
-      )
-      .all(...ids)) {
-      byId.get(r.item_id)?.essay_questions.push({ id: r.id, question: r.question, kind: r.kind, note: r.note });
     }
   }
   return items;
@@ -194,7 +162,6 @@ function attachUserState(items, userId) {
   for (const it of items) {
     it.marked_read = 0;
     it.bookmarked = 0;
-    it.my_card = null;
   }
   for (const r of db
     .prepare(
@@ -210,12 +177,6 @@ function attachUserState(items, userId) {
     .all(userId, ...ids)) {
     const it = byId.get(r.item_id);
     if (it) it.bookmarked = 1;
-  }
-  for (const r of db
-    .prepare(`SELECT item_id, bank, own_note FROM ca_user_cards WHERE user_id = ? AND item_id IN (${holes})`)
-    .all(userId, ...ids)) {
-    const it = byId.get(r.item_id);
-    if (it) it.my_card = { bank: r.bank, own_note: r.own_note };
   }
   // MCQ counts, and how many the student has already answered — the Today
   // screen shows "4 questions" on a locked item so the unlock is worth doing.
@@ -250,10 +211,8 @@ function attachUserState(items, userId) {
 router.get('/meta', (req, res) => {
   res.json({
     buckets: BUCKETS,
-    bank_targets: BANK_TARGETS,
     units: db.prepare('SELECT unit_code, paper, label FROM ref_units ORDER BY order_index').all(),
     keywords: db.prepare('SELECT keyword, subject FROM ref_keywords ORDER BY subject, order_index').all(),
-    themes: db.prepare('SELECT DISTINCT theme FROM ca_item_themes ORDER BY theme').all().map((r) => r.theme),
     corrections: db
       .prepare('SELECT topic, superseded_claim, correct_position, effective_date FROM ref_corrections ORDER BY id')
       .all(),
@@ -414,10 +373,6 @@ router.get('/items/:id', (req, res) => {
         .all(item.id)
     : [];
 
-  item.skeletons = db
-    .prepare('SELECT id, paper, question_text, skeleton_markdown FROM ca_skeletons WHERE item_id = ? ORDER BY id')
-    .all(item.id);
-
   res.json({ item });
 });
 
@@ -504,64 +459,6 @@ router.get('/bookmarks', (req, res) => {
   attachWordCounts(items);
   attachUserState(items, req.user.id);
   res.json({ items });
-});
-
-// ---- Group-I personal banks --------------------------------------------
-
-// Filing a card is a deliberate act, not a side effect of reading. A bank that
-// fills itself is a bank nobody has read, and the targets it's measured
-// against only mean something if the student chose each entry.
-router.post('/items/:id/card', (req, res) => {
-  const { bank, own_note } = req.body || {};
-  if (!['Q', 'D', 'E', 'S'].includes(bank)) {
-    return res.status(400).json({ error: 'Bank must be Q, D, E or S.' });
-  }
-  const item = db
-    .prepare(
-      `SELECT i.id, i.g1_angle FROM ca_items i JOIN ca_days d ON d.id = i.day_id
-        WHERE i.id = ? AND ${VISIBLE}`
-    )
-    .get(req.params.id);
-  if (!item) return res.status(404).json({ error: 'Item not found.' });
-  if (!item.g1_angle.trim()) {
-    // Refusing here rather than silently filing it: a card with no argument
-    // will never make it into an answer, so letting it inflate the bank count
-    // would make the bank review lie about how ready the student is.
-    return res.status(400).json({ error: 'This item has no angle, so it cannot be filed to a bank.' });
-  }
-  db.prepare(
-    `INSERT INTO ca_user_cards (user_id, item_id, bank, own_note) VALUES (?, ?, ?, ?)
-     ON CONFLICT(user_id, item_id) DO UPDATE SET bank = excluded.bank, own_note = excluded.own_note`
-  ).run(req.user.id, item.id, bank, String(own_note || '').slice(0, 2000));
-  res.json({ ok: true, bank });
-});
-
-router.delete('/items/:id/card', (req, res) => {
-  db.prepare('DELETE FROM ca_user_cards WHERE user_id = ? AND item_id = ?').run(req.user.id, req.params.id);
-  res.json({ ok: true });
-});
-
-router.get('/banks', (req, res) => {
-  res.json(bankReview(db, req.user.id));
-});
-
-// The cards themselves, for browsing one bank at a time.
-router.get('/banks/:bank', (req, res) => {
-  const bank = String(req.params.bank).toUpperCase();
-  if (!['Q', 'D', 'E', 'S'].includes(bank)) return res.status(400).json({ error: 'Unknown bank.' });
-  const items = db
-    .prepare(
-      `SELECT ${listColumns()}, d.date AS day_date, c.own_note, c.created_at AS filed_at
-         FROM ca_user_cards c
-         JOIN ca_items i ON i.id = c.item_id
-         JOIN ca_days d ON d.id = i.day_id
-        WHERE c.user_id = ? AND c.bank = ? AND ${VISIBLE}
-        ORDER BY c.created_at DESC`
-    )
-    .all(req.user.id, bank);
-  attachTags(items, { full: false });
-  attachWordCounts(items);
-  res.json({ bank, items });
 });
 
 // ---- Practice -----------------------------------------------------------
@@ -934,14 +831,13 @@ router.get('/search', (req, res) => {
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE ${VISIBLE}
           AND (i.headline LIKE ? ESCAPE '~' OR i.notes_markdown LIKE ? ESCAPE '~'
-               OR i.g1_fact LIKE ? ESCAPE '~' OR i.g1_angle LIKE ? ESCAPE '~'
                OR i.prelims_facts LIKE ? ESCAPE '~'
                OR EXISTS (SELECT 1 FROM ca_item_keywords k
                            WHERE k.item_id = i.id AND k.keyword LIKE ? ESCAPE '~'))
         ORDER BY d.date DESC
         LIMIT 50`
     )
-    .all(like, like, like, like, like, like);
+    .all(like, like, like, like);
   attachTags(items, { full: false });
   attachWordCounts(items);
   res.json({ items, query: q });

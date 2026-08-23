@@ -139,13 +139,6 @@ async function main() {
   const keywords = database
     .prepare(`SELECT keyword, subject FROM ref_keywords ORDER BY subject, order_index`)
     .all();
-  const units = database
-    .prepare(
-      `SELECT unit_code, label FROM ref_units
-        WHERE format = 'descriptive' AND unfeedable = 0
-        ORDER BY order_index`
-    )
-    .all();
 
   const vocabulary = [
     '=== BLUEPRINT KEYWORD ANGLES (choose from these exactly) ===',
@@ -155,14 +148,6 @@ async function main() {
         return acc;
       }, {})
     ).map(([subject, list]) => `${subject}: ${list.join(', ')}`),
-    '',
-    // The WRITTEN papers only. The objective syllabus units belong to the
-    // newspaper lane's deterministic match and are not the model's to choose;
-    // offering them here would reintroduce the contradiction removed from
-    // server/scripts/draft-articles.js — instructions saying one thing and the
-    // vocabulary saying another.
-    '=== GROUP-I MAINS PAPER UNITS — the WRITTEN papers (choose from these exactly) ===',
-    ...units.map((u) => `${u.unit_code} — ${u.label}`),
     '',
     correctionsPromptBlock(database),
   ].join('\n');
@@ -238,12 +223,12 @@ async function main() {
       continue;
     }
 
-    // The angle rule, enforced here as well as in the database. An item with no
-    // argument will never reach an answer, so filing it to the G1 lane would
-    // inflate the bank counts with material that cannot be used.
-    if (Number(record.relevance_g1) === 1 && !String(record.g1_angle || '').trim()) {
-      const reason = 'No angle produced — an item that cannot be argued from is not examinable for Group I.';
-      say(`[${processed}] DISCARD (no angle) — ${record.headline?.slice(0, 60)}`);
+    // The facts rule, which replaced the angle rule when the written paper was
+    // removed. An item with no memorise-this block is an item no question can be
+    // written from, and every paper this app serves is answered by ticking a box.
+    if (!String(record.prelims_facts || '').trim()) {
+      const reason = 'No prelims facts produced — an item nothing can be asked about is not examinable.';
+      say(`[${processed}] DISCARD (no facts) — ${record.headline?.slice(0, 60)}`);
       discarded.push({ ...cand, discard_reason: reason });
       L.recordState({ key, outcome: 'discard', reason });
       continue;

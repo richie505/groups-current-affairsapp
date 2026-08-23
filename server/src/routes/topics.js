@@ -71,10 +71,15 @@ router.get('/', (req, res) => {
                  JOIN ca_items i ON i.id = ti.item_id
                  JOIN ca_days  d ON d.id = i.day_id
                 WHERE ti.topic_id = t.id AND ti.in_headline = 1 AND ${VISIBLE}) AS about,
-              (SELECT COALESCE(SUM(questions), 0) FROM topic_evidence e
-                WHERE e.topic_id = t.id)                            AS pyq_questions,
-              (SELECT GROUP_CONCAT(DISTINCT e.paper) FROM topic_evidence e
-                WHERE e.topic_id = t.id AND e.paper <> '')          AS papers
+              -- Real past questions, from the objective papers. This was the
+              -- Group-I Mains blueprint's own count; it is now a count of
+              -- questions that were actually printed.
+              (SELECT COUNT(*) FROM pyq_question_topics qt
+                WHERE qt.topic_id = t.id)                           AS pyq_questions,
+              (SELECT GROUP_CONCAT(DISTINCT u.paper) FROM topic_units tu
+                 JOIN ref_units u ON u.unit_code = tu.unit_code
+                WHERE tu.topic_id = t.id AND u.paper <> ''
+                  AND u.unfeedable = 0 AND u.broad = 0)             AS papers
          FROM topics t
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY t.ap DESC, t.tier, t.name`
@@ -97,21 +102,31 @@ router.get('/', (req, res) => {
 router.get('/reuse-map', (req, res) => {
   const minPapers = Number(req.query.minPapers || 2);
 
-  // Paper reach from the blueprint's own observations, which is where a
-  // multi-paper claim can actually be justified. `is_primary` carries the
-  // "study it from here" instruction that makes the map actionable rather than
-  // merely interesting.
+  // Paper reach, measured from the units of the items that name the topic.
+  //
+  // This was read off the Group-I Mains blueprint, which carried an explicit
+  // `is_primary` — the paper a person had decided to study the topic FROM. With
+  // the Mains layer gone there is no such judgement on file, so "study from" is
+  // derived instead: the paper carrying the most weight, meaning the one the
+  // most items point at. That is a weaker claim than the blueprint's, and it is
+  // the strongest one the remaining evidence actually supports.
   const rows = db
     .prepare(
       `SELECT t.id, t.slug, t.name, t.ap, t.tier,
-              COUNT(DISTINCT e.paper) AS papers,
-              SUM(e.questions)        AS questions,
-              GROUP_CONCAT(DISTINCT e.paper) AS paper_list,
-              (SELECT e2.paper FROM topic_evidence e2
-                WHERE e2.topic_id = t.id AND e2.is_primary = 1
-                ORDER BY e2.questions DESC LIMIT 1) AS study_from
+              COUNT(DISTINCT u.paper)        AS papers,
+              (SELECT COUNT(*) FROM pyq_question_topics qt
+                WHERE qt.topic_id = t.id)    AS questions,
+              GROUP_CONCAT(DISTINCT u.paper) AS paper_list,
+              (SELECT u2.paper FROM topic_units tu2
+                 JOIN ref_units u2 ON u2.unit_code = tu2.unit_code
+                WHERE tu2.topic_id = t.id AND u2.paper <> ''
+                  AND u2.unfeedable = 0 AND u2.broad = 0
+                GROUP BY u2.paper
+                ORDER BY SUM(tu2.weight) DESC LIMIT 1) AS study_from
          FROM topics t
-         JOIN topic_evidence e ON e.topic_id = t.id
+         JOIN topic_units tu ON tu.topic_id = t.id
+         JOIN ref_units  u  ON u.unit_code = tu.unit_code
+        WHERE u.paper <> '' AND u.unfeedable = 0 AND u.broad = 0
         GROUP BY t.id
        HAVING papers >= ?
         ORDER BY papers DESC, questions DESC`
@@ -139,8 +154,8 @@ router.get('/gaps', (req, res) => {
   const rows = db
     .prepare(
       `SELECT t.slug, t.name, t.ap, t.tier, t.kind,
-              (SELECT COALESCE(SUM(questions), 0) FROM topic_evidence e
-                WHERE e.topic_id = t.id) AS pyq_questions
+              (SELECT COUNT(*) FROM pyq_question_topics qt
+                WHERE qt.topic_id = t.id) AS pyq_questions
          FROM topics t
         WHERE t.tier <= 2
           AND NOT EXISTS (

@@ -118,21 +118,13 @@ const MIN_SECONDS = 45;
 const MAX_SECONDS = 8 * 60;
 
 // Every field a student actually reads on the item page. Deliberately NOT the
-// whole row: `verify_note` is an instruction to the reviewer, `g1_linked` is a
-// list of references, and counting them would charge the student time for text
-// they are not reading.
-const READ_FIELDS = [
-  'notes_markdown',
-  'static_notes',
-  'prelims_facts',
-  'g1_why_news',
-  'g1_background',
-  'g1_ap_angle',
-  'g1_bridges',
-  'g1_way_forward',
-  'g1_fact',
-  'g1_angle',
-];
+// whole row: `verify_note` is an instruction to the reviewer, and counting it
+// would charge the student time for text they are not reading.
+//
+// This list lost the eight Group-I Mains note fields along with the Mains
+// layer, so the reading estimate is now smaller. That is the point rather than
+// a side effect: the student is no longer being asked to read that material.
+const READ_FIELDS = ['notes_markdown', 'static_notes', 'prelims_facts'];
 
 function wordsIn(item) {
   let n = 0;

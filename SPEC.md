@@ -18,6 +18,38 @@ This file is the *product vision* the app is being grown into.
 | Build style | Section by section, top to bottom | 21 Aug 2026 |
 | Input | Admin uploads a PDF; everything flows from it | 21 Aug 2026 |
 | **Newspaper sources** | **English only — The Hindu. Eenadu / Telugu ingestion is OUT of scope.** | **22 Aug 2026** |
+| **Exams served** | **OBJECTIVE ONLY — Group-II Screening, Group-II Mains, Group-I Prelims. Group-I MAINS is out of scope and its layer has been removed.** | **23 Aug 2026** |
+
+### On the objective-only decision
+
+Three of APPSC's four papers are answered by ticking a box; only Group-I Mains
+is written. Serving the written paper as well meant carrying a second output
+shape through every layer — an eight-section note per item, four capture banks
+(Q/D/E/S), essay questions, a seven-dimension tagging scheme, 54 descriptive
+syllabus units and a 252-question descriptive PYQ corpus — none of which a
+ticked paper uses. It was removed on 23 Aug 2026 by
+`server/scripts/drop-g1-mains.js`, which is kept as the record of what went.
+
+**The lens did not go with it.** Group-I Prelims and Group-II are two different
+published syllabi, and the same item belongs to different units in each. The
+lens now switches between those two syllabi rather than between a written paper
+and a ticked one, and `users.exam_track` keeps its `g1` / `g2` / `both` values.
+
+**What it must not be confused with.** This removes the Group-I *Mains* output
+shape. It does **not** remove Group-I: Group-I Prelims is served, and its 27
+units are half the syllabus map. Nor does it change what counts as examinable
+content — AP history, Telugu topics and the rest are still matched exactly as
+before.
+
+**The one thing that was load-bearing.** Factor E of the relevance score —
+cross-paper reuse, 15 of 100 — read `topic_evidence`, which held one person's
+reading of the Mains papers and nothing else. Deleting it without a replacement
+would have taken 15 points off every article silently. It is now measured from
+`topic_units` joined to `ref_units`, counting the distinct OBJECTIVE papers the
+topic's units belong to, and `topics.tier` is derived from recurrence in the
+1,137 real Group-II questions rather than from the Mains blueprint. The
+thresholds were rescaled with it: five Mains papers became ten objective ones,
+so `4+ → 15` would have quietly redefined full marks from 80% breadth to 40%.
 
 ### On the English-only decision
 

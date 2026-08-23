@@ -10,6 +10,38 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// BEFORE THE SCHEMA, NOT AFTER — because the schema now asserts something this
+// database might already violate.
+//
+// `idx_runs_one_running` is a UNIQUE index over the running runs, and creating
+// it fails if two rows already break it. schema.sql runs on every boot, so a
+// database carrying leftover duplicates would refuse to start — turning a
+// harmless bit of stale state into an outage, which is a far worse fault than
+// the one the index exists to prevent.
+//
+// So the duplicates are closed first. They are already dead by definition: a
+// second run against the same edition never held the lock, and any run still
+// marked running at boot has no process behind it, because the worker is a
+// child of a server that has just restarted.
+(function closeOrphanedRuns() {
+  const hasRuns = db
+    .prepare(`SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'ca_runs'`)
+    .get();
+  if (!hasRuns) return;
+  const closed = db
+    .prepare(
+      `UPDATE ca_runs SET status = 'failed', finished_at = datetime('now'),
+         log = log || ?
+        WHERE status = 'running'
+          AND id NOT IN (SELECT MAX(id) FROM ca_runs WHERE status = 'running' GROUP BY mode)`
+    )
+    .run(
+      '\n\nClosed at startup: a second run was opened against this mode while ' +
+        'another was already in flight, so it never held the drafting lock.'
+    ).changes;
+  if (closed) console.log(`[db] closed ${closed} duplicate running run(s)`);
+})();
+
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
@@ -107,14 +139,6 @@ db.exec(schema);
       // Who is making the claim, where the source was signed opinion. Rendered
       // beside the item so an argument is never presented as anonymous record.
       ['source_author', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_theme', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_sub_theme', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_why_news', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_background', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_ap_angle', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_linked', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_bridges', "TEXT NOT NULL DEFAULT ''"],
-      ['g1_way_forward', "TEXT NOT NULL DEFAULT ''"],
       // The STATIC syllabus content the news sits on top of.
       //
       // `static_linkage` names the topic a news item updates — "this updates the

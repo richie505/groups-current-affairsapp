@@ -50,15 +50,11 @@ const SRC = path.join(ROOT, 'web', 'src');
 const TEXT_FIELDS = [
   // ca_items
   'notes_markdown', 'static_linkage', 'static_notes', 'prelims_facts',
-  'g1_fact', 'g1_angle', 'g1_theme', 'g1_sub_theme', 'g1_why_news',
-  'g1_background', 'g1_ap_angle', 'g1_linked', 'g1_bridges', 'g1_way_forward',
   'verify_note', 'discard_reason',
   // ca_mcqs
   'explanation', 'question_text',
   // ca_days
   'intro_markdown',
-  // ca_skeletons
-  'skeleton_markdown',
 ];
 
 // `question` and the four options are deliberately absent from the list above.

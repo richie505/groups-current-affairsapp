@@ -8,12 +8,6 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 const BUCKETS = ['international', 'national', 'ap', 'dynamic'];
-const BANKS = ['Q', 'D', 'E', 'S'];
-// Section 3 of the Group-I note template. A closed set: the point of the
-// multi-dimensional tag is coverage, and an open list cannot be checked for gaps.
-const DIMENSIONS = [
-  'economic', 'social', 'political', 'ethical', 'environmental', 'legal', 'international',
-];
 const FORMATS = [
   'direct_recall',
   'negative_statement',
@@ -52,36 +46,13 @@ function validateItem(body, { forPublish = false } = {}) {
   const errors = [];
   if (!String(body.headline || '').trim()) errors.push('Headline is required.');
   if (body.bucket && !BUCKETS.includes(body.bucket)) errors.push('Unknown bucket.');
-  if (body.g1_bank && !BANKS.includes(body.g1_bank)) errors.push('Bank must be Q, D, E or S.');
   if (body.importance && ![1, 2, 3].includes(Number(body.importance))) {
     errors.push('Importance must be 1, 2 or 3.');
   }
   if (forPublish) {
     if (!String(body.notes_markdown || '').trim()) errors.push('Notes are required to publish.');
-    // The same rule the database trigger enforces, checked here so the admin
-    // gets a sentence explaining it rather than a raw constraint failure.
-    if (Number(body.relevance_g1) === 1) {
-      if (!String(body.g1_fact || '').trim()) errors.push('Group-I lane needs THE FACT.');
-      if (!String(body.g1_angle || '').trim()) {
-        errors.push('Group-I lane needs THE ANGLE — an item with no argument will never reach an answer.');
-      }
-    }
     if (Number(body.relevance_g2) === 1 && !String(body.prelims_facts || '').trim()) {
       errors.push('Group-II lane needs a prelims-facts block.');
-    }
-    // The template's two load-bearing sections. "Why in news" is the trigger a
-    // Mains answer opens with, and the AP angle is the half of the marks no
-    // national source will hand you — so an item published to the G1 lane
-    // without them is an item that will read as generic in the exam.
-    if (Number(body.relevance_g1) === 1) {
-      if (!String(body.g1_why_news || '').trim()) {
-        errors.push('Group-I lane needs "Why in News" — the one-line trigger.');
-      }
-      if (!String(body.g1_ap_angle || '').trim()) {
-        errors.push(
-          'Group-I lane needs an AP-specific angle. If the topic genuinely has none, say so explicitly in that field rather than leaving it blank.'
-        );
-      }
     }
   }
   return errors;
@@ -177,7 +148,6 @@ router.get('/queue', (req, res) => {
     for (const it of items) {
       it.keywords = [];
       it.units = [];
-      it.themes = [];
       it.sources = [];
       it.mcq_count = 0;
     }
@@ -185,7 +155,11 @@ router.get('/queue', (req, res) => {
       byId.get(r.item_id)?.keywords.push(r.keyword);
     for (const r of db
       .prepare(
-        `SELECT u.item_id, u.unit_code, r.label, r.paper
+        // `exam` and `format` are selected because the push below has always
+        // read them. They were not in the SELECT, so every unit in the review
+        // queue carried exam: undefined — invisible, because the queue did not
+        // render them. It does now: the lens switches between two syllabi.
+        `SELECT u.item_id, u.unit_code, r.label, r.paper, r.exam, r.format
            FROM ca_item_units u LEFT JOIN ref_units r ON r.unit_code = u.unit_code
           WHERE u.item_id IN (${holes}) ORDER BY u.unit_code`
       )
@@ -193,8 +167,6 @@ router.get('/queue', (req, res) => {
       byId.get(r.item_id)?.units.push({
         unit_code: r.unit_code, label: r.label, paper: r.paper, exam: r.exam, format: r.format,
       });
-    for (const r of db.prepare(`SELECT item_id, theme FROM ca_item_themes WHERE item_id IN (${holes})`).all(...ids))
-      byId.get(r.item_id)?.themes.push(r.theme);
     for (const r of db
       .prepare(`SELECT item_id, url, publisher, is_primary FROM ca_item_sources WHERE item_id IN (${holes})`)
       .all(...ids))
@@ -330,18 +302,10 @@ router.get('/days/:id/items', (req, res) => {
           WHERE u.item_id = ? ORDER BY u.unit_code`
       )
       .all(it.id);
-    it.themes = db.prepare('SELECT theme FROM ca_item_themes WHERE item_id = ?').all(it.id).map((r) => r.theme);
     it.sources = db
       .prepare('SELECT id, url, publisher, is_primary FROM ca_item_sources WHERE item_id = ? ORDER BY is_primary DESC, id')
       .all(it.id);
-    it.dimensions = db
-      .prepare('SELECT dimension, note FROM ca_item_dimensions WHERE item_id = ? ORDER BY dimension')
-      .all(it.id);
-    it.essay_questions = db
-      .prepare('SELECT id, question, kind, note FROM ca_essay_questions WHERE item_id = ? ORDER BY id')
-      .all(it.id);
     it.mcqs = db.prepare('SELECT * FROM ca_mcqs WHERE item_id = ? ORDER BY id').all(it.id);
-    it.skeletons = db.prepare('SELECT * FROM ca_skeletons WHERE item_id = ? ORDER BY id').all(it.id);
   }
   res.json({ items });
 });
@@ -391,7 +355,7 @@ router.delete('/days/:id', (req, res) => {
 
 // ---- Items --------------------------------------------------------------
 
-function writeTags(itemId, { keywords, units, themes }) {
+function writeTags(itemId, { keywords, units }) {
   if (Array.isArray(keywords)) {
     db.prepare('DELETE FROM ca_item_keywords WHERE item_id = ?').run(itemId);
     const ins = db.prepare('INSERT OR IGNORE INTO ca_item_keywords (item_id, keyword) VALUES (?, ?)');
@@ -401,41 +365,6 @@ function writeTags(itemId, { keywords, units, themes }) {
     db.prepare('DELETE FROM ca_item_units WHERE item_id = ?').run(itemId);
     const ins = db.prepare('INSERT OR IGNORE INTO ca_item_units (item_id, unit_code) VALUES (?, ?)');
     for (const u of units) if (String(u).trim()) ins.run(itemId, String(u).trim());
-  }
-  if (Array.isArray(themes)) {
-    db.prepare('DELETE FROM ca_item_themes WHERE item_id = ?').run(itemId);
-    const ins = db.prepare('INSERT OR IGNORE INTO ca_item_themes (item_id, theme) VALUES (?, ?)');
-    for (const t of themes) if (String(t).trim()) ins.run(itemId, String(t).trim().toLowerCase());
-  }
-}
-
-// Section 3 of the Group-I template. Replaces the whole set, like the other tag
-// writers, so removing a dimension in the editor actually removes it.
-function writeDimensions(itemId, dimensions) {
-  if (!Array.isArray(dimensions)) return;
-  db.prepare('DELETE FROM ca_item_dimensions WHERE item_id = ?').run(itemId);
-  const ins = db.prepare(
-    'INSERT OR IGNORE INTO ca_item_dimensions (item_id, dimension, note) VALUES (?, ?, ?)'
-  );
-  for (const d of dimensions) {
-    const dim = String(d.dimension || d).trim().toLowerCase();
-    if (!DIMENSIONS.includes(dim)) continue;
-    ins.run(itemId, dim, String(d.note || '').trim());
-  }
-}
-
-// Section 8. Same replace-the-set approach.
-function writeEssayQuestions(itemId, questions) {
-  if (!Array.isArray(questions)) return;
-  db.prepare('DELETE FROM ca_essay_questions WHERE item_id = ?').run(itemId);
-  const ins = db.prepare(
-    'INSERT INTO ca_essay_questions (item_id, question, kind, note) VALUES (?, ?, ?, ?)'
-  );
-  for (const q of questions) {
-    const text = String(q.question || q).trim();
-    if (!text) continue;
-    const kind = q.kind === 'indirect' ? 'indirect' : 'direct';
-    ins.run(itemId, text, kind, String(q.note || '').trim());
   }
 }
 
@@ -461,20 +390,8 @@ const ITEM_FIELDS = [
   'static_linkage',
   'static_notes',
   'prelims_facts',
-  'g1_bank',
-  'g1_fact',
-  'g1_angle',
   // The eight-section Group-I note template.
-  'g1_theme',
-  'g1_sub_theme',
-  'g1_why_news',
-  'g1_background',
-  'g1_ap_angle',
-  'g1_linked',
-  'g1_bridges',
-  'g1_way_forward',
   'importance',
-  'relevance_g1',
   'relevance_g2',
   'needs_verify',
   'verify_note',
@@ -497,19 +414,7 @@ router.post('/items', (req, res) => {
     static_linkage: String(body.static_linkage || ''),
     static_notes: String(body.static_notes || ''),
     prelims_facts: String(body.prelims_facts || ''),
-    g1_bank: body.g1_bank || null,
-    g1_fact: String(body.g1_fact || ''),
-    g1_angle: String(body.g1_angle || ''),
-    g1_theme: String(body.g1_theme || ''),
-    g1_sub_theme: String(body.g1_sub_theme || ''),
-    g1_why_news: String(body.g1_why_news || ''),
-    g1_background: String(body.g1_background || ''),
-    g1_ap_angle: String(body.g1_ap_angle || ''),
-    g1_linked: String(body.g1_linked || ''),
-    g1_bridges: String(body.g1_bridges || ''),
-    g1_way_forward: String(body.g1_way_forward || ''),
     importance: Number(body.importance) || 2,
-    relevance_g1: body.relevance_g1 === 0 ? 0 : 1,
     relevance_g2: body.relevance_g2 === 0 ? 0 : 1,
     needs_verify: body.needs_verify ? 1 : 0,
     verify_note: String(body.verify_note || ''),
@@ -525,8 +430,6 @@ router.post('/items', (req, res) => {
   const id = info.lastInsertRowid;
   writeTags(id, body);
   writeSources(id, body.sources);
-  writeDimensions(id, body.dimensions);
-  writeEssayQuestions(id, body.essay_questions);
   res.json({ id });
 });
 
@@ -552,8 +455,6 @@ router.put('/items/:id', (req, res) => {
   }
   writeTags(req.params.id, body);
   writeSources(req.params.id, body.sources);
-  writeDimensions(req.params.id, body.dimensions);
-  writeEssayQuestions(req.params.id, body.essay_questions);
   res.json({ ok: true });
 });
 
@@ -787,33 +688,6 @@ router.delete('/mcqs/:id', (req, res) => {
 
 // ---- Skeletons ----------------------------------------------------------
 
-router.post('/skeletons', (req, res) => {
-  const { item_id, paper, question_text, skeleton_markdown } = req.body || {};
-  if (!item_id || !String(question_text || '').trim()) {
-    return res.status(400).json({ error: 'item_id and a question are required.' });
-  }
-  const info = db
-    .prepare(
-      `INSERT INTO ca_skeletons (item_id, paper, question_text, skeleton_markdown)
-       VALUES (?, ?, ?, ?)`
-    )
-    .run(item_id, String(paper || ''), String(question_text).trim(), String(skeleton_markdown || ''));
-  res.json({ id: info.lastInsertRowid });
-});
-
-router.put('/skeletons/:id', (req, res) => {
-  const { paper, question_text, skeleton_markdown } = req.body || {};
-  db.prepare(
-    'UPDATE ca_skeletons SET paper = ?, question_text = ?, skeleton_markdown = ? WHERE id = ?'
-  ).run(String(paper || ''), String(question_text || ''), String(skeleton_markdown || ''), req.params.id);
-  res.json({ ok: true });
-});
-
-router.delete('/skeletons/:id', (req, res) => {
-  db.prepare('DELETE FROM ca_skeletons WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
-});
-
 // ---- Students -----------------------------------------------------------
 
 router.get('/students', (req, res) => {
@@ -822,8 +696,7 @@ router.get('/students', (req, res) => {
       `SELECT u.id, u.name, u.email, u.exam_track, u.created_at,
               (SELECT COUNT(*) FROM ca_progress p WHERE p.user_id = u.id AND p.marked_read = 1) AS items_read,
               (SELECT COUNT(*) FROM ca_attempts a WHERE a.user_id = u.id) AS attempts,
-              (SELECT SUM(a.is_correct) FROM ca_attempts a WHERE a.user_id = u.id) AS correct,
-              (SELECT COUNT(*) FROM ca_user_cards c WHERE c.user_id = u.id) AS cards
+              (SELECT SUM(a.is_correct) FROM ca_attempts a WHERE a.user_id = u.id) AS correct
          FROM users u WHERE u.role = 'student' ORDER BY u.created_at DESC`
     )
     .all();
@@ -845,4 +718,3 @@ module.exports = router;
 module.exports.validateMcq = validateMcq;
 module.exports.validateItem = validateItem;
 module.exports.FORMATS = FORMATS;
-module.exports.DIMENSIONS = DIMENSIONS;

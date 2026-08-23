@@ -9,7 +9,6 @@ import Loading from '../components/Loading';
 import ErrorState from '../components/ErrorState';
 import Markdown from '../components/Markdown';
 import McqCard from '../components/McqCard';
-import G1Note from '../components/G1Note';
 import RichText from '../components/RichText';
 import PacingBar from '../components/PacingBar';
 import {
@@ -17,12 +16,11 @@ import {
   ImportanceBadge,
   KeywordBadge,
   UnitBadge,
-  BankBadge,
   VerifyBadge,
   GenreBadge,
   Chip,
 } from '../components/Badges';
-import { BANKS, longDate, shortDate } from '../lib/caFormat';
+import { longDate, shortDate } from '../lib/caFormat';
 import { IconBookmark, IconCheck, IconLock } from '../components/Icon';
 
 // The prelims-facts block is line-per-fact, so it needs hard breaks. The notes
@@ -49,11 +47,13 @@ export default function Item() {
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
   const item = data.item;
-  // The objective syllabus units — the three APPSC papers answered by ticking a
-  // box. Kept apart from the descriptive paper units, which the Group-I note
-  // renders, because the two lanes are examined differently and a candidate
-  // revising for one should not be handed the other's routing.
-  const objectiveUnits = (item.units || []).filter((u) => u.format === 'objective');
+  // The two published syllabi, kept apart. Both exams are answered by ticking a
+  // box, so the split is no longer written-versus-objective — it is which
+  // syllabus the unit belongs to, and a candidate revising for one should not be
+  // handed the other's routing. A unit whose code is no longer in ref_units has
+  // no `exam`, and shows in both rather than disappearing.
+  const g1pUnits = (item.units || []).filter((u) => u.exam !== 'g2');
+  const g2Units = (item.units || []).filter((u) => u.exam !== 'g1p');
 
   async function toggleRead() {
     setBusy('read');
@@ -220,7 +220,7 @@ export default function Item() {
       ) : null}
 
       {/* ---- Group-II lane ---- */}
-      {showG2 && item.relevance_g2 ? (
+      {showG2 ? (
         <section className="mb-5 rounded-lg border border-brand-200 bg-brand-50 p-4">
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-700">
             Group II — what to recall
@@ -251,15 +251,14 @@ export default function Item() {
               Given its own heading rather than mixed in with the angles above,
               because it answers a different question. The angle is the SHAPE the
               examiner uses; the unit is the part of the syllabus being examined,
-              and it is the one a candidate revises by. Objective units only —
-              these are the three papers answered by ticking a box. */}
-          {objectiveUnits.length ? (
+              and it is the one a candidate revises by. */}
+          {g2Units.length ? (
             <>
               <p className="mb-1 mt-3 text-xs font-medium text-slate-600">
                 Syllabus topics this feeds
               </p>
               <div className="flex flex-wrap gap-1">
-                {objectiveUnits.map((u) => (
+                {g2Units.map((u) => (
                   <UnitBadge key={u.unit_code} unit={u} />
                 ))}
               </div>
@@ -268,36 +267,36 @@ export default function Item() {
         </section>
       ) : null}
 
-      {/* ---- Group-I lane: the eight-section note template ---- */}
-      {showG1 && item.relevance_g1 ? (
-        <section className="mb-5">
+      {/* ---- Group-I Prelims lane ---- */}
+      {showG1 ? (
+        <section className="mb-5 rounded-lg border border-green-300 bg-green-50 p-4">
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-green-800">
-            Group I — note
+            Group I Prelims — what to recall
           </h2>
-          <G1Note item={item} />
-          <div className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3">
-            <BankFiler item={item} onFiled={reload} />
-          </div>
-        </section>
-      ) : null}
-
-      {/* ---- Answer skeletons ---- */}
-      {showG1 && item.skeletons?.length ? (
-        <section className="mb-5 space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-600">
-            Answer skeletons
-          </h2>
-          {item.skeletons.map((s) => (
-            <div key={s.id} className="rounded-lg border border-slate-200 bg-surface p-4">
-              <p className="mb-2 font-medium text-slate-900">
-                {s.paper ? <span className="mr-1 font-mono text-xs text-slate-500">{s.paper}</span> : null}
-                <RichText>{s.question_text}</RichText>
-              </p>
-              <div className="prose-notes text-sm">
-                <Markdown>{s.skeleton_markdown}</Markdown>
-              </div>
+          {/* The facts are not repeated when both lanes are showing: they are
+              the same facts. What the lens changes is which syllabus they are
+              filed against, and that is what this block carries. */}
+          {!showG2 && item.prelims_facts ? (
+            <div className="prose-notes mb-3 text-sm">
+              <Markdown remarkPlugins={FACT_PLUGINS}>{item.prelims_facts}</Markdown>
             </div>
-          ))}
+          ) : null}
+          {g1pUnits.length ? (
+            <>
+              <p className="mb-1 text-xs font-medium text-slate-600">
+                Syllabus topics this feeds
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {g1pUnits.map((u) => (
+                  <UnitBadge key={u.unit_code} unit={u} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-slate-600">
+              No Group-I Prelims unit matched this item.
+            </p>
+          )}
         </section>
       ) : null}
 
@@ -372,65 +371,3 @@ export default function Item() {
   );
 }
 
-// Filing to a personal bank. Deliberately a distinct action from reading: the
-// bank-review targets only mean something if the student chose each entry, and
-// a bank that fills itself is a bank nobody has read.
-function BankFiler({ item, onFiled }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const filed = item.my_card;
-
-  async function file(bank) {
-    setBusy(true);
-    setError('');
-    try {
-      if (filed?.bank === bank) await api.del(`/items/${item.id}/card`);
-      else await api.post(`/items/${item.id}/card`, { bank });
-      onFiled();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!item.g1_angle) {
-    return (
-      <p className="text-xs text-slate-600">
-        This item has no angle, so it cannot be filed — an item you cannot argue from will never
-        reach an answer.
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      <p className="mb-1.5 text-xs font-medium text-slate-600">
-        {filed ? `Filed to your ${filed.bank} bank` : 'File to one of your banks'}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {Object.entries(BANKS).map(([key, b]) => (
-          <button
-            key={key}
-            type="button"
-            disabled={busy}
-            onClick={() => file(key)}
-            title={b.hint}
-            // min-h-11 because these were 26px tall, and a 26px target is one a
-            // thumb misses. They are not chips — each one files this item into a
-            // bank — and the four sit side by side, so a near miss lands on the
-            // wrong bank rather than on nothing.
-            className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
-              filed?.bank === key
-                ? 'border-slate-800 bg-slate-800 text-white'
-                : 'border-slate-300 bg-surface text-slate-700 hover:border-slate-500'
-            }`}
-          >
-            {key} · {b.label}
-          </button>
-        ))}
-      </div>
-      {error ? <p className="mt-1 text-xs text-red-700">{error}</p> : null}
-    </div>
-  );
-}

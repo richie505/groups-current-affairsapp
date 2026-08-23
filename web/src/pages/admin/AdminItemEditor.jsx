@@ -8,20 +8,10 @@ import ErrorState from '../../components/ErrorState';
 import McqEditor from '../../components/admin/McqEditor';
 import TagPicker from '../../components/admin/TagPicker';
 import { Chip } from '../../components/Badges';
-import { BUCKETS, BANKS, longDate } from '../../lib/caFormat';
+import { BUCKETS, longDate } from '../../lib/caFormat';
 import { IconPlus, IconTrash, IconCheck } from '../../components/Icon';
 import useConfirm from '../../components/useConfirm';
 
-const THEMES = [
-  'governance',
-  'ethics',
-  'science & tech',
-  'environment',
-  'economy',
-  'society & education',
-  'federalism',
-  'andhra pradesh',
-];
 
 const BLANK = {
   headline: '',
@@ -32,30 +22,17 @@ const BLANK = {
   static_linkage: '',
   static_notes: '',
   prelims_facts: '',
-  g1_bank: '',
-  g1_fact: '',
-  g1_angle: '',
   // The rest of the eight-section Group-I note. These columns were added to
   // ca_items after this editor first shipped, and the editor was never caught
   // up — so the pipeline was writing six populated sections that no screen in
   // the app could display or edit. On a 28-item run that was roughly 2,250
   // characters per item of drafted content, invisible.
-  g1_theme: '',
-  g1_sub_theme: '',
-  g1_why_news: '',
-  g1_background: '',
-  g1_ap_angle: '',
-  g1_linked: '',
-  g1_bridges: '',
-  g1_way_forward: '',
   importance: 2,
-  relevance_g1: 1,
   relevance_g2: 1,
   needs_verify: 0,
   verify_note: '',
   keywords: [],
   units: [],
-  themes: [],
   sources: [],
 };
 
@@ -169,9 +146,6 @@ function ItemRow({ item, meta, onEdit, onChanged, anchorId }) {
           {BUCKETS[item.bucket]?.label || item.bucket}
         </Chip>
         <Chip className="border-slate-300 bg-slate-100 text-slate-700">Tier {item.importance}</Chip>
-        {item.g1_bank ? (
-          <Chip className="border-slate-800 bg-slate-800 text-white">{item.g1_bank}</Chip>
-        ) : null}
         <span className="ml-auto text-xs text-slate-500">
           {item.mcqs.length} question{item.mcqs.length === 1 ? '' : 's'}
         </span>
@@ -232,10 +206,8 @@ function ItemForm({ initial, dayId, meta, onDone, onCancel }) {
     ...BLANK,
     ...initial,
     event_date: initial.event_date || '',
-    g1_bank: initial.g1_bank || '',
     keywords: initial.keywords || [],
     units: (initial.units || []).map((u) => (typeof u === 'string' ? u : u.unit_code)),
-    themes: initial.themes || [],
     sources: initial.sources || [],
   }));
   const [error, setError] = useState('');
@@ -266,10 +238,8 @@ function ItemForm({ initial, dayId, meta, onDone, onCancel }) {
     const body = {
       ...form,
       day_id: dayId,
-      g1_bank: form.g1_bank || null,
       event_date: form.event_date || null,
       importance: Number(form.importance),
-      relevance_g1: Number(form.relevance_g1),
       relevance_g2: Number(form.relevance_g2),
       needs_verify: Number(form.needs_verify),
     };
@@ -422,131 +392,20 @@ function ItemForm({ initial, dayId, meta, onDone, onCancel }) {
         />
       </fieldset>
 
-      {/* ---- Group-I lane ---- */}
-      <fieldset className="rounded-lg border border-green-300 bg-green-50 p-3">
-        <legend className="px-1 text-xs font-bold uppercase tracking-wide text-green-800">
-          Group I lane
+      {/* THE PAPER UNITS, moved out of the old Group-I fieldset.
+          They are not a lane any more — both exams are objective and an item
+          is routed to units in each — so they sit on their own, above the
+          sources, rather than inside a block about a written paper. */}
+      <fieldset className="rounded-lg border border-slate-200 p-3">
+        <legend className="px-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+          Syllabus units
         </legend>
-        <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={Number(form.relevance_g1) === 1}
-            onChange={(e) => set('relevance_g1', e.target.checked ? 1 : 0)}
-          />
-          Relevant to Group I
-        </label>
-        <div className="mb-3 grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className={label}>Bank</span>
-            <select value={form.g1_bank} onChange={(e) => set('g1_bank', e.target.value)} className={input}>
-              <option value="">— none —</option>
-              {Object.entries(BANKS).map(([k, b]) => (
-                <option key={k} value={k}>
-                  {k} · {b.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label className="mb-3 block">
-          <span className={label}>The fact</span>
-          <textarea
-            rows={2}
-            value={form.g1_fact}
-            onChange={(e) => set('g1_fact', e.target.value)}
-            placeholder="The exact sentence they would write in an exam — figure, name, provision or quote."
-            className={input}
-          />
-        </label>
-        <label className="mb-3 block">
-          <span className={label}>The angle</span>
-          <textarea
-            rows={3}
-            value={form.g1_angle}
-            onChange={(e) => set('g1_angle', e.target.value)}
-            placeholder="The ARGUMENT this fact supports — not what happened, but why it matters and what case it makes."
-            className={input}
-          />
-          <span className="mt-1 block text-xs text-slate-600">
-            Not the fact restated. If you cannot write an argument here, the item should be
-            discarded — an item you cannot argue from will never appear in an answer.
-          </span>
-        </label>
-
-        {/* The remaining six sections of the note template. Each is a separate
-            field rather than one prose blob for the reason the schema gives: a
-            note missing its AP angle will fail in the papers where AP is half
-            the content, and that is only checkable if the AP angle has somewhere
-            of its own to be missing from. */}
-        <div className="mb-3 grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className={label}>Theme</span>
-            <input
-              type="text"
-              value={form.g1_theme}
-              onChange={(e) => set('g1_theme', e.target.value)}
-              placeholder="GOVERNANCE"
-              className={input}
-            />
-          </label>
-          <label className="block">
-            <span className={label}>Sub-theme</span>
-            <input
-              type="text"
-              value={form.g1_sub_theme}
-              onChange={(e) => set('g1_sub_theme', e.target.value)}
-              placeholder="local government"
-              className={input}
-            />
-          </label>
-        </div>
-
-        {[
-          ['g1_why_news', 'Why in news', 2,
-            'One line: what happened, and when.'],
-          ['g1_background', 'Meaning / background', 4,
-            'What a reader needs to know before the argument makes sense.'],
-          ['g1_ap_angle', 'Andhra Pradesh angle', 3,
-            'The AP dimension. If this is empty the note will fail in Papers II and IV.'],
-          ['g1_linked', 'Linked schemes, reports, judgments', 3,
-            'The specific instruments this connects to.'],
-          ['g1_bridges', 'Essay link-lines', 3,
-            'Lines ready to drop into a Paper I essay.'],
-          ['g1_way_forward', 'Way forward', 2,
-            'The forward-looking conclusion line.'],
-        ].map(([field, labelText, rows, placeholder]) => (
-          <label key={field} className="mb-3 block">
-            <span className={label}>{labelText}</span>
-            <textarea
-              rows={rows}
-              value={form[field]}
-              onChange={(e) => set(field, e.target.value)}
-              placeholder={placeholder}
-              className={input}
-            />
-            {field === 'g1_ap_angle' && !String(form.g1_ap_angle || '').trim() ? (
-              <span className="mt-1 block text-xs text-amber-700">
-                No AP angle. Andhra Pradesh is roughly half of Papers II and IV and present in
-                every Paper I essay — an item without one is worth much less.
-              </span>
-            ) : null}
-          </label>
-        ))}
-        <div className="mb-3">
-          <TagPicker
-            label="Paper units"
-            hint="Tag every paper this feeds, not just the obvious one — a single event often serves three."
-            options={meta.units.map((u) => ({ value: u.unit_code, group: u.paper, hint: u.label }))}
-            selected={form.units}
-            onChange={(v) => set('units', v)}
-          />
-        </div>
         <TagPicker
-          label="Themes"
-          hint="For the bank review. Add 'andhra pradesh' as well as the topical theme where it applies."
-          options={THEMES.map((t) => ({ value: t, group: 'themes' }))}
-          selected={form.themes}
-          onChange={(v) => set('themes', v)}
+          label="Paper units"
+          hint="Group-I Prelims and Group-II. Tag every unit this feeds, not just the obvious one — one event often serves three."
+          options={meta.units.map((u) => ({ value: u.unit_code, group: u.paper, hint: u.label }))}
+          selected={form.units}
+          onChange={(v) => set('units', v)}
         />
       </fieldset>
 

@@ -290,42 +290,26 @@ function topicRecurrence(db) {
       )
       .all(exam);
 
-  const g2 = byExam('group2');
-  const g1Measured = byExam('group1');
-
-  // The blueprint's own observations, used only where a real paper does not
-  // already cover the topic. Summing both would double-count: the blueprint is
-  // a reading OF the 2023 and 2025 papers, which are now seeded themselves.
-  const measured = new Set(g1Measured.map((r) => r.id));
-  let g1Blueprint = [];
-  try {
-    g1Blueprint = db
-      .prepare(
-        `SELECT topic_id AS id, SUM(questions) AS questions,
-                COUNT(DISTINCT paper) AS papers
-           FROM topic_evidence
-          WHERE exam = 'group1'
-          GROUP BY topic_id`
-      )
-      .all()
-      .filter((r) => !measured.has(r.id));
-  } catch {
-    // topic_evidence is optional.
-  }
-  const g1 = [...g1Measured, ...g1Blueprint];
-
+  // MEASURED QUESTIONS ONLY, AND ONLY FROM THE OBJECTIVE PAPERS.
+  //
+  // This used to merge three sources: the Group-II papers, the Group-I MAINS
+  // papers, and `topic_evidence` — one person's reading of the Mains papers,
+  // used wherever a real paper did not already cover the topic.
+  //
+  // Both Group-I Mains sources are gone with the Mains layer, and their loss is
+  // smaller than it looks: a descriptive paper cannot tell you which FORMAT a
+  // topic is asked in, so the Mains half only ever contributed recurrence. The
+  // 1,137 real Group-II questions carry both, and they are the papers this app
+  // now serves.
   const merged = new Map();
   const add = (row, source) => {
     const cur = merged.get(row.id) || { id: row.id, questions: 0, papers: 0, sources: [] };
     cur.questions += row.questions || 0;
-    // Papers are taken as the maximum rather than the sum: a topic asked in
-    // Paper III by both exams spans one paper, not two.
     cur.papers = Math.max(cur.papers, row.papers || 0);
     cur.sources.push(source);
     merged.set(row.id, cur);
   };
-  for (const r of g2) add(r, 'group2');
-  for (const r of g1) add(r, 'group1');
+  for (const r of byExam('group2')) add(r, 'group2');
 
   if (!merged.size) return [];
   const ids = [...merged.keys()];

@@ -115,8 +115,8 @@ const check = (name, ok) => checks.push([name, !!ok]);
 // fixtures
 // ---------------------------------------------------------------------------
 
-db.prepare("INSERT INTO ref_units (unit_code, paper, label) VALUES ('P3-U7','P3','Policy process')").run();
-db.prepare("INSERT INTO ref_units (unit_code, paper, label) VALUES ('P4-U4','P4','Fiscal federalism')").run();
+db.prepare("INSERT INTO ref_units (unit_code, paper, label, exam, format) VALUES ('G2-P1-U7','G2-P1A','Union and State government','g2','objective')").run();
+db.prepare("INSERT INTO ref_units (unit_code, paper, label, exam, format) VALUES ('G1P-B2','G1P-Polity','Union and States','g1p','objective')").run();
 db.prepare("INSERT INTO ref_keywords (keyword, subject) VALUES ('Committee','Current Affairs')").run();
 db.prepare("INSERT INTO ref_keywords (keyword, subject) VALUES ('Election','Polity')").run();
 
@@ -143,50 +143,55 @@ const record = {
   headline: 'Committee constituted on river water sharing',
   event_date: '2026-08-20',
   bucket: 'ap',
-  // Arrays where the schema wants TEXT: the fault that rolled back a whole run
-  // AFTER every draft in it had been paid for.
-  g1_bridges: ['Federalism is contested in the plumbing', 'Water is the test case'],
-  g1_linked: { scheme: 'Polavaram', report: 'KWDT-II' },
-  g1_fact: 'A committee was constituted on 20 August 2026.',
-  g1_angle: 'Inter-state water disputes are resolved administratively, not judicially.',
+  // Arrays and objects where the schema wants TEXT: the fault that rolled back
+  // a whole run AFTER every draft in it had been paid for.
+  prelims_facts: ['Committee constituted — 20 August 2026', 'Chair — not yet named'],
+  static_linkage: { topic: 'Inter-State river water disputes' },
   static_notes: '### Constitutional position\n**Article 262** bars the courts.',
   importance: 1,
   needs_verify: 1,
   verify_note: 'Confirm the chair.',
-  // One clean code, one echoed vocabulary line, one that resolves to nothing.
-  units: ['P3-U7', 'P4-U4 — Fiscal federalism and devolution', 'Paper III Unit 7'],
   // One in-vocabulary, one carrying the subject bracket, one off-vocabulary.
   keywords: ['Committee', 'Election [Polity]', 'Federalism'],
-  themes: ['Federalism'],
   sources: [{ url: '', publisher: 'The Hindu (Vijayawada), 2026-08-21, p.7', is_primary: 0 }],
-  dimensions: [{ dimension: 'political', note: 'centre-state' }, { dimension: 'nonsense', note: 'x' }],
-  essay_questions: [{ question: 'Are tribunals working?', kind: 'direct' }],
+  // Unit codes now reach the database only through a QUESTION, so that is where
+  // the canonicaliser is exercised: one clean code, one echoed vocabulary line,
+  // one that resolves to nothing.
+  mcqs: [
+    { question: 'Which body was constituted on 20 August 2026?', option_a: 'A', option_b: 'B',
+      option_c: 'C', option_d: 'D', correct_option: 'a', explanation: 'x',
+      format: 'direct_recall', unit_code: 'G2-P1-U7' },
+    { question: 'The committee reports to which authority?', option_a: 'A', option_b: 'B',
+      option_c: 'C', option_d: 'D', correct_option: 'b', explanation: 'x',
+      format: 'direct_recall', unit_code: 'G1P-B2 — Union and States, Parliament' },
+    { question: 'Article 262 concerns which subject?', option_a: 'A', option_b: 'B',
+      option_c: 'C', option_d: 'D', correct_option: 'c', explanation: 'x',
+      format: 'direct_recall', unit_code: 'Paper III Unit 7' },
+  ],
 };
 
 const out = D.insertDrafted(db, { date: '2026-08-21', drafted: [record], onLog: () => {} });
 const itemId = out.itemIds[0];
 const item = db.prepare('SELECT * FROM ca_items WHERE id = ?').get(itemId);
 const article = db.prepare('SELECT status, item_id FROM np_articles WHERE id = ?').get(articleId);
-const units = db.prepare('SELECT unit_code FROM ca_item_units WHERE item_id = ?').all(itemId).map((r) => r.unit_code);
+
 const kws = db.prepare('SELECT keyword FROM ca_item_keywords WHERE item_id = ?').all(itemId).map((r) => r.keyword);
-const dims = db.prepare('SELECT dimension FROM ca_item_dimensions WHERE item_id = ?').all(itemId).map((r) => r.dimension);
+const mcqUnits = db.prepare('SELECT unit_code FROM ca_mcqs WHERE item_id = ?').all(itemId).map((r) => r.unit_code);
 
 check('item created', !!item);
 check('article linked to the item it produced', article.item_id === itemId);
 check("article marked 'drafted'", article.status === 'drafted');
-check('array field coerced to text', typeof item.g1_bridges === 'string' && item.g1_bridges.includes('- Federalism is contested'));
-check('object field coerced to text, not emptied', typeof item.g1_linked === 'string' && item.g1_linked.length > 0);
+check('array field coerced to text', typeof item.prelims_facts === 'string' && item.prelims_facts.includes('- Committee constituted'));
+check('object field coerced to text, not emptied', typeof item.static_linkage === 'string' && item.static_linkage.length > 0);
 check('static notes stored', String(item.static_notes).includes('Article 262'));
-check('clean unit kept', units.includes('P3-U7'));
-check('echoed vocabulary line reduced to its code', units.includes('P4-U4'));
-check('unresolvable unit dropped, not written', !units.some((u) => u.includes('Paper III')));
+check('clean unit kept', mcqUnits.includes('G2-P1-U7'));
+check('echoed vocabulary line reduced to its code', mcqUnits.includes('G1P-B2'));
+check('unresolvable unit dropped, not written', !mcqUnits.some((u) => u.includes('Paper III')));
 check('unresolvable unit reported', out.droppedUnits.some((u) => u.includes('Paper III')));
 check('in-vocabulary keyword kept', kws.includes('Committee'));
 check('subject bracket stripped from keyword', kws.includes('Election') && !kws.some((k) => k.includes('[')));
 check('off-vocabulary keyword kept as a free tag', kws.includes('Federalism'));
 check('off-vocabulary keyword reported', out.offVocabKeywords.includes('Federalism'));
-check('valid dimension kept', dims.includes('political'));
-check('invalid dimension rejected', !dims.includes('nonsense'));
 check('bucket preserved', item.bucket === 'ap');
 check('day row created for the edition date', !!db.prepare("SELECT id FROM ca_days WHERE date='2026-08-21'").get());
 
@@ -499,7 +504,7 @@ const mcqItem = D.insertDrafted(db, {
       headline: 'An item whose questions carry units',
       mcqs: [
         { question: 'Real unit?', option_a: 'a', option_b: 'b', option_c: 'c', option_d: 'd',
-          correct_option: 'a', format: 'direct_recall', unit_code: 'P3-U7' },
+          correct_option: 'a', format: 'direct_recall', unit_code: 'G2-P1-U7' },
         { question: 'Invented unit?', option_a: 'a', option_b: 'b', option_c: 'c', option_d: 'd',
           correct_option: 'b', format: 'direct_recall', unit_code: 'G9-NOPE' },
       ],
@@ -510,7 +515,7 @@ const mcqItem = D.insertDrafted(db, {
 const written = db
   .prepare('SELECT question, unit_code FROM ca_mcqs WHERE item_id = ? ORDER BY id')
   .all(mcqItem.itemIds[0]);
-check('a real unit code is stored on the question', written[0]?.unit_code === 'P3-U7');
+check('a real unit code is stored on the question', written[0]?.unit_code === 'G2-P1-U7');
 check('an invented unit code is stored as blank, not as itself', written[1]?.unit_code === '');
 
 // ---------------------------------------------------------------------------
@@ -675,7 +680,7 @@ check('U1 is still itself', D.canonicalUnit('G2-P1-U1', validUnits) === 'G2-P1-U
 // 4. A question on a published item must not reach a student before review.
 db.prepare("INSERT INTO ca_days (id, date, status) VALUES (900, '2026-08-01', 'published')").run();
 db.prepare(
-  `INSERT INTO ca_items (id, day_id, headline, bucket, status, relevance_g1)
+  `INSERT INTO ca_items (id, day_id, headline, bucket, status, relevance_g2)
      VALUES (900, 900, 'H', 'national', 'published', 0)`
 ).run();
 const insQ = db.prepare(
@@ -756,19 +761,25 @@ let common = 0;
 while (common < plain.length && plain[common] === oped[common]) common += 1;
 check('adding the syllabus block keeps the whole head cacheable', common === plain.length);
 
-// The vocabulary offered to the drafter must be the WRITTEN papers only.
+// NO UNIT IS OFFERED TO THE DRAFTER AT ALL, now that every paper is objective.
+//
+// This used to check that the vocabulary listed the descriptive units and not
+// the objective ones. There are no descriptive units, so the rule is stronger
+// and simpler: the syllabus is settled by the scorer, and the prompt must not
+// invite a second opinion on it. A regression here is expensive rather than
+// merely wrong — the listing was the largest block in a paid call.
 db.prepare(
   `INSERT INTO ref_units (unit_code, paper, label, exam, format)
    VALUES ('ZZ-OBJ', 'ZZ', 'objective probe', 'g2', 'objective')`
 ).run();
-const offered = db
-  .prepare(
-    `SELECT unit_code FROM ref_units WHERE format = 'descriptive' AND unfeedable = 0`
-  )
-  .all()
-  .map((r) => r.unit_code);
-check('an objective unit is never offered as a choice', !offered.includes('ZZ-OBJ'));
-check('the descriptive units still are', offered.includes('P3-U7'));
+const descriptive = db
+  .prepare(`SELECT COUNT(*) AS n FROM ref_units WHERE format = 'descriptive'`)
+  .get().n;
+check('no descriptive unit survives anywhere in the vocabulary', descriptive === 0);
+check(
+  'the prompt tells the model the units are settled elsewhere',
+  D.SYLLABUS_ADDENDUM.includes('NOT A LIST TO RETURN')
+);
 
 // ---------------------------------------------------------------------------
 // WHICH ARTICLES GET DRAFTED — the adaptive, syllabus-led selection.
@@ -836,6 +847,53 @@ const many = Array.from({ length: 60 }, (_, i) => ({
 }));
 check('the cap bounds a rich edition', SEL.selectForDrafting(many).picked.length === 35);
 check('and is overridable', SEL.selectForDrafting(many, { maxItems: 10 }).picked.length === 10);
+
+// ---------------------------------------------------------------------------
+// 8. the drafting lock — one running run per edition, enforced by the database
+// ---------------------------------------------------------------------------
+//
+// The lock is a ca_runs row with status 'running', and it had a window in it:
+// the API route checked for one and then spawned the worker, which inserted the
+// row seconds later. Requests arriving in between all passed the check. A
+// blank-page fault made the admin click repeatedly and seven runs were opened
+// in three minutes, four against one edition.
+//
+// Checked here rather than in the route because the route is not the only
+// writer — draft-articles.js runs straight from a terminal too, and two
+// terminals racing is the same fault with no route involved.
+
+const lockOpen = (mode) =>
+  L.startRun(db, { windowStart: '2026-08-21', windowEnd: '2026-08-21', mode, model: 'test' });
+
+const lockFirst = lockOpen('edition-901');
+check('a run can be opened', !!lockFirst);
+
+let lockRefused = false;
+try {
+  lockOpen('edition-901');
+} catch (e) {
+  lockRefused = /UNIQUE constraint failed/i.test(e.message);
+}
+check('a SECOND running run on the same edition is refused by the database', lockRefused);
+
+// The lock is per edition, not global: a second paper must still be draftable
+// while the first is in flight, or one long run blocks the whole morning.
+let lockOther = false;
+try {
+  lockOther = !!lockOpen('edition-902');
+} catch {
+  lockOther = false;
+}
+check('a different edition may run at the same time', lockOther);
+
+L.finishRun(db, lockFirst, { status: 'done', candidates: 1, drafted: 1, discarded: 0, log: '' });
+let lockReopened = false;
+try {
+  lockReopened = !!lockOpen('edition-901');
+} catch {
+  lockReopened = false;
+}
+check('and the edition can be run again once the first finishes', lockReopened);
 
 // ---------------------------------------------------------------------------
 

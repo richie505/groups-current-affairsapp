@@ -1,4 +1,4 @@
-import { BUCKETS, BANKS, IMPORTANCE, formatLabel } from '../lib/caFormat';
+import { BUCKETS, IMPORTANCE, formatLabel } from '../lib/caFormat';
 import { plainText } from './RichText';
 
 // The small labelled chips that carry an item's routing. They matter more than
@@ -82,16 +82,6 @@ export function UnitBadge({ unit }) {
     >
       <span className="font-mono text-[10px] opacity-70">{code}</span>
       {label ? <span className="ml-1">{label}</span> : null}
-    </Chip>
-  );
-}
-
-export function BankBadge({ bank }) {
-  const b = BANKS[bank];
-  if (!b) return null;
-  return (
-    <Chip className="bg-slate-800 text-white border-slate-800" title={b.hint}>
-      {bank} · {b.label}
     </Chip>
   );
 }

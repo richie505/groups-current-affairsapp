@@ -16,13 +16,6 @@ export const BUCKETS = {
   dynamic: { label: 'Syllabus update', short: 'Update', cls: 'bg-green-100 text-green-800 border-green-300' },
 };
 
-export const BANKS = {
-  Q: { label: 'Quotations', hint: 'A usable line from a judgment, report or thinker' },
-  D: { label: 'Data & reports', hint: 'One figure, with source and year' },
-  E: { label: 'Examples & case studies', hint: 'One Indian and one AP instance' },
-  S: { label: 'Schemes, committees, Acts', hint: 'Name, year, one-line mandate' },
-};
-
 export const FORMATS = {
   direct_recall: 'Direct recall',
   negative_statement: 'Incorrect-statement',
@@ -101,7 +94,7 @@ export function readingMinutes(items) {
   // still be holding a digest fetched before the server sent `words`.
   const words = items.reduce((sum, it) => {
     if (Number.isFinite(Number(it.words))) return sum + Number(it.words);
-    const text = [it.notes_markdown, it.prelims_facts, it.g1_fact, it.g1_angle].filter(Boolean).join(' ');
+    const text = [it.notes_markdown, it.prelims_facts].filter(Boolean).join(' ');
     return sum + (text ? text.split(/\s+/).length : 0);
   }, 0);
   return Math.max(1, Math.round(words / 200));

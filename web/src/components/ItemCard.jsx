@@ -5,40 +5,37 @@ import {
   ImportanceBadge,
   KeywordBadge,
   UnitBadge,
-  BankBadge,
   VerifyBadge,
   GenreBadge,
-  Chip,
 } from './Badges';
 import { shortDate } from '../lib/caFormat';
 import RichText from './RichText';
 import { IconCheck, IconBookmark } from './Icon';
 
-// One news item, in whichever shape the lens asks for.
+// One news item, filed against whichever syllabus the lens asks for.
 //
-// The G2 block leads with the prelims facts — what to recall — and the keyword
-// angles that say how it would be asked. The G1 block leads with THE ANGLE
-// rather than THE FACT, which looks backwards until you notice that the fact is
-// the part every candidate will have and the argument is the part that scores.
-// Under the 'both' lens the two sit stacked, which is the point of the app: the
-// student reads once and files twice.
+// Every paper this app serves is answered by ticking a box, so both lanes carry
+// the same recallable facts and the same keyword angles. What differs is the
+// SYLLABUS UNIT — where on each published syllabus this item sits. Under the
+// 'both' lens the two sit stacked, which is the point of the app: the student
+// reads once and files twice.
 
 export default function ItemCard({ item, showDate = false }) {
   const { showG1, showG2, isBoth } = useLens();
 
-  // THE TWO LANES TAKE DIFFERENT UNITS, so the one list is split rather than
-  // repeated. Group-I Mains is written and routes to the descriptive paper
-  // units (P1–P5); Group-II and Group-I Prelims are answered by ticking a box
-  // and route to the objective syllabus units (G2-*, G1P-*). Showing all of
-  // them in both places would tell a Group-II candidate that their syllabus
-  // includes the essay paper.
+  // THE TWO LANES ARE TWO SYLLABI, not two answer shapes.
   //
-  // `format` is null for a code no longer in ref_units — an old tag whose unit
-  // was renamed. Those fall to the descriptive lane, which is where they came
-  // from, rather than disappearing.
+  // Both exams are answered by ticking a box, so the difference is no longer
+  // written-versus-objective — it is WHICH published syllabus the unit belongs
+  // to. Group-I Prelims units are `G1P-*`, Group-II units are `G2-*`, and
+  // showing all of them in both places would tell a Group-II candidate their
+  // syllabus includes six papers it does not.
+  //
+  // `exam` is null for a code no longer in ref_units — an old tag whose unit
+  // was renamed. Those show in both lanes rather than disappearing.
   const units = item.units || [];
-  const objectiveUnits = units.filter((u) => u.format === 'objective');
-  const descriptiveUnits = units.filter((u) => u.format !== 'objective');
+  const g1pUnits = units.filter((u) => u.exam !== 'g2');
+  const g2Units = units.filter((u) => u.exam !== 'g1p');
 
   return (
     <article className="rounded-lg border border-slate-200 bg-surface p-4">
@@ -87,7 +84,7 @@ export default function ItemCard({ item, showDate = false }) {
               <RichText>{item.prelims_facts}</RichText>
             </p>
           ) : null}
-          {item.keywords?.length || objectiveUnits.length ? (
+          {item.keywords?.length || g2Units.length ? (
             <div className="flex flex-wrap gap-1">
               {item.keywords?.map((k) => (
                 <KeywordBadge key={k} keyword={k} />
@@ -99,7 +96,7 @@ export default function ItemCard({ item, showDate = false }) {
                   SYLLABUS it sits. This lane used to carry only the first, so
                   an item read as "Association, Export, Exports, Visited" with
                   no indication that it feeds AP industry and services. */}
-              {objectiveUnits.map((u) => (
+              {g2Units.map((u) => (
                 <UnitBadge key={u.unit_code} unit={u} />
               ))}
             </div>
@@ -107,69 +104,38 @@ export default function ItemCard({ item, showDate = false }) {
         </div>
       ) : null}
 
-      {/* ---- Group-I lane ---- */}
-      {showG1 && item.relevance_g1 ? (
+      {/* ---- Group-I Prelims lane ---- */}
+      {showG1 ? (
         <div className={isBoth ? 'mt-3 border-l-2 border-green-300 pl-3' : 'mt-2'}>
           {isBoth ? (
             <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-green-800">
-              Group I
+              Group I Prelims
             </p>
           ) : null}
-          {/* On the digest the card shows the theme header and the trigger —
-              enough to decide whether to open the full note. The eight sections
-              live on the item page; a digest of twelve items each showing all
-              eight would be unreadable. */}
-          {item.g1_theme ? (
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              <RichText>{item.g1_theme}</RichText>
-              {item.g1_sub_theme ? (
-                <>
-                  {' → '}
-                  <RichText>{item.g1_sub_theme}</RichText>
-                </>
-              ) : null}
+          {/* The same facts, routed to the other syllabus. Only the units
+              differ, which is exactly what the lens exists to show: one
+              reading, filed against two published syllabi. */}
+          {!showG2 && item.prelims_facts ? (
+            <p className="mb-2 whitespace-pre-line text-sm leading-relaxed text-slate-700">
+              <RichText>{item.prelims_facts}</RichText>
             </p>
           ) : null}
-          {item.g1_why_news ? (
-            <p className="mb-2 text-sm leading-relaxed text-slate-900">
-              <RichText>{item.g1_why_news}</RichText>
-            </p>
-          ) : item.g1_angle ? (
-            <p className="mb-2 text-sm leading-relaxed text-slate-800">
-              <span className="font-semibold">The angle:</span>{' '}
-              <RichText>{item.g1_angle}</RichText>
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-1">
-            {item.g1_bank ? <BankBadge bank={item.g1_bank} /> : null}
-            {/* Which dimensions the note actually covers, and whether it has an
-                AP angle at all. Both are things a student should be able to see
-                without opening the item — a note with one dimension and no AP
-                line is a note that will produce a thin answer. */}
-            {item.dimensions?.length ? (
-              <Chip
-                className="border-slate-300 bg-slate-100 capitalize text-slate-600"
-                title={item.dimensions.map((d) => d.dimension).join(', ')}
-              >
-                {item.dimensions.length} dimension{item.dimensions.length === 1 ? '' : 's'}
-              </Chip>
-            ) : null}
-            {item.g1_ap_angle ? (
-              <Chip className="border-amber-300 bg-amber-100 text-amber-800" title="Has an Andhra Pradesh angle">
-                AP angle
-              </Chip>
-            ) : null}
-            {descriptiveUnits.map((u) => (
-              <UnitBadge key={u.unit_code || u} unit={u} />
-            ))}
-          </div>
+          {g1pUnits.length ? (
+            <div className="flex flex-wrap gap-1">
+              {g1pUnits.map((u) => (
+                <UnitBadge key={u.unit_code} unit={u} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">No Group-I Prelims unit matched.</p>
+          )}
         </div>
       ) : null}
 
       {/* MCQ count doubles as the reason to mark the item read — the questions
           are behind that click, and saying how many are waiting is what makes
           the unlock worth doing. */}
-      {showG2 && item.mcq_count > 0 ? (
+      {item.mcq_count > 0 ? (
         <p className="mt-3 text-xs text-slate-500">
           {item.marked_read ? (
             <>

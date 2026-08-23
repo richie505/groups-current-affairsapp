@@ -10,7 +10,7 @@ import RichText from '../../components/RichText';
 import QuestionReview from '../../components/admin/QuestionReview';
 import useConfirm from '../../components/useConfirm';
 import {
-  BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, BankBadge, GenreBadge, Chip,
+  BucketBadge, ImportanceBadge, KeywordBadge, UnitBadge, GenreBadge, Chip,
 } from '../../components/Badges';
 import { longDate } from '../../lib/caFormat';
 import { IconCheck, IconTrash, IconAlert, IconList, IconPencil } from '../../components/Icon';
@@ -231,7 +231,6 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <BucketBadge bucket={item.bucket} />
         <ImportanceBadge importance={item.importance} />
-        {item.g1_bank ? <BankBadge bank={item.g1_bank} /> : null}
         <GenreBadge genre={item.source_genre} author={item.source_author} />
         {item.needs_verify ? (
           <Chip className="border-amber-400 bg-amber-100 text-amber-900">⚠ Needs verify</Chip>
@@ -363,68 +362,21 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
           {item.prelims_facts ? (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">
-                Prelims facts (G2)
+                Prelims facts — the examinable residue
               </p>
               <p className="whitespace-pre-line text-sm text-slate-700">
                 <RichText>{item.prelims_facts}</RichText>
               </p>
             </div>
           ) : null}
-          {item.g1_fact ? (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">
-                The fact (G1)
-              </p>
-              <p className="text-sm text-slate-700">
-                <RichText>{item.g1_fact}</RichText>
-              </p>
-            </div>
-          ) : null}
-          {item.g1_angle ? (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">
-                The angle (G1)
-              </p>
-              <p className="text-sm text-slate-900">
-                <RichText>{item.g1_angle}</RichText>
-              </p>
-            </div>
-          ) : (
+          {/* Flagged rather than merely absent. Every paper this app serves is
+              answered by ticking a box, so an item with no memorise-this block
+              is an item no question can be written from — the one gap worth
+              interrupting a review for. */}
+          {!String(item.prelims_facts || '').trim() ? (
             <p className="text-xs text-red-700">
-              No angle — this cannot be published to the Group-I lane. Either write one or turn the
-              G1 lane off for this item.
-            </p>
-          )}
-
-          {/* The remaining six sections of the note template. Absent from this
-              panel until now, which meant a reviewer was approving a note while
-              seeing about a third of it — and `validateItem` already requires
-              two of these fields, so the queue was demanding content it would
-              not show. */}
-          {[
-            ['g1_why_news', 'Why in news'],
-            ['g1_background', 'Background'],
-            ['g1_ap_angle', 'AP angle'],
-            ['g1_linked', 'Linked schemes / reports / judgments'],
-            ['g1_bridges', 'Essay link-lines'],
-            ['g1_way_forward', 'Way forward'],
-          ].map(([field, labelText]) =>
-            item[field] ? (
-              <div key={field}>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">
-                  {labelText}
-                </p>
-                <p className="whitespace-pre-line text-sm text-slate-700">{item[field]}</p>
-              </div>
-            ) : null
-          )}
-
-          {/* Flagged rather than merely absent: Andhra Pradesh is roughly half
-              of Papers II and IV, so a missing AP angle is the one gap in this
-              template worth interrupting a review for. */}
-          {item.relevance_g1 && !String(item.g1_ap_angle || '').trim() ? (
-            <p className="text-xs text-amber-700">
-              No AP angle on a Group-I item — worth adding before publishing.
+              No prelims facts — nothing can be asked about this item. Either write them or
+              discard it.
             </p>
           ) : null}
         </div>

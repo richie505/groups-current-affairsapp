@@ -153,43 +153,7 @@ CREATE TABLE IF NOT EXISTS ca_items (
   -- ---- Group-II lane ----
   prelims_facts  TEXT NOT NULL DEFAULT '',   -- the memorise-this block
 
-  -- ---- Group-I lane ----
-  --
-  -- Group-I answers are written, not ticked, so the lane follows a fixed
-  -- eight-section note template rather than holding a single block of prose.
-  -- The sections exist because each one is a different thing a Mains answer
-  -- needs and a different thing that is easy to leave out: the trigger, the
-  -- background, the dimensions, the AP angle, the linkages, the essay bridge,
-  -- the way forward, and the questions it could be asked as.
-  --
-  -- Storing them as separate fields rather than one markdown blob is what makes
-  -- the gaps visible. A note missing its AP angle is a note that will fail in
-  -- the papers where AP is half the content, and that is only checkable if the
-  -- AP angle has somewhere of its own to be missing from.
-  g1_bank  TEXT CHECK (g1_bank IN ('Q', 'D', 'E', 'S')),
-  g1_fact  TEXT NOT NULL DEFAULT '',   -- THE FACT: the exact sentence to write
-  -- THE ANGLE: the argument the fact supports, not a restatement of it. An
-  -- item with no angle is one the student can never argue from, so publishing
-  -- to the G1 lane is blocked without it (see the trigger below).
-  g1_angle TEXT NOT NULL DEFAULT '',
-
-  -- The template header: "[THEME] → Sub-theme". Kept as two fields so items can
-  -- be grouped by theme across months, which is how a Paper I essay bank is
-  -- actually browsed.
-  g1_theme     TEXT NOT NULL DEFAULT '',
-  g1_sub_theme TEXT NOT NULL DEFAULT '',
-
-  g1_why_news    TEXT NOT NULL DEFAULT '',   -- 1. one-line trigger: what happened, when
-  g1_background  TEXT NOT NULL DEFAULT '',   -- 2. meaning / background
-  -- 4. The AP-specific angle. Its own field, not a paragraph inside the
-  -- background, precisely so its absence is countable.
-  g1_ap_angle    TEXT NOT NULL DEFAULT '',
-  g1_linked      TEXT NOT NULL DEFAULT '',   -- 5. linked schemes / reports / judgments
-  g1_bridges     TEXT NOT NULL DEFAULT '',   -- 6. essay link-lines, ready to drop in
-  g1_way_forward TEXT NOT NULL DEFAULT '',   -- 7. the forward-looking conclusion line
-
   importance   INTEGER NOT NULL DEFAULT 2 CHECK (importance BETWEEN 1 AND 3),
-  relevance_g1 INTEGER NOT NULL DEFAULT 1,
   relevance_g2 INTEGER NOT NULL DEFAULT 1,
 
   -- 'discarded' is a first-class outcome, not a deletion. Most news should be
@@ -212,25 +176,6 @@ CREATE INDEX IF NOT EXISTS idx_items_day ON ca_items(day_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_items_status ON ca_items(status, importance);
 CREATE INDEX IF NOT EXISTS idx_items_bucket ON ca_items(bucket, status);
 
--- Publishing to a lane requires that lane to be filled in. Enforced in the
--- database rather than only in the route, because the pipeline writes here too
--- and a half-routed item is worse than a missing one — it looks complete.
-CREATE TRIGGER IF NOT EXISTS trg_items_require_angle_insert
-BEFORE INSERT ON ca_items
-WHEN NEW.status = 'published' AND NEW.relevance_g1 = 1
-     AND (TRIM(NEW.g1_angle) = '' OR TRIM(NEW.g1_fact) = '')
-BEGIN
-  SELECT RAISE(ABORT, 'Cannot publish to the Group-I lane without both THE FACT and THE ANGLE.');
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_items_require_angle_update
-BEFORE UPDATE ON ca_items
-WHEN NEW.status = 'published' AND NEW.relevance_g1 = 1
-     AND (TRIM(NEW.g1_angle) = '' OR TRIM(NEW.g1_fact) = '')
-BEGIN
-  SELECT RAISE(ABORT, 'Cannot publish to the Group-I lane without both THE FACT and THE ANGLE.');
-END;
-
 -- G2 routing: which blueprint question angles this item can be tested through.
 CREATE TABLE IF NOT EXISTS ca_item_keywords (
   item_id INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
@@ -250,16 +195,6 @@ CREATE TABLE IF NOT EXISTS ca_item_units (
 );
 CREATE INDEX IF NOT EXISTS idx_item_units_code ON ca_item_units(unit_code);
 
--- Bank-review themes: governance, ethics, science & tech, environment,
--- economy, society & education, federalism — plus 'andhra pradesh', which
--- cuts across all seven rather than sitting beside them, because AP coverage
--- is the axis that decides marks and has to be measurable on its own.
-CREATE TABLE IF NOT EXISTS ca_item_themes (
-  item_id INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
-  theme   TEXT NOT NULL,
-  PRIMARY KEY (item_id, theme)
-);
-CREATE INDEX IF NOT EXISTS idx_item_themes_theme ON ca_item_themes(theme);
 
 -- Provenance. Every item must cite where it came from; primary sources (PIB,
 -- PRS, RBI, ISRO, AP department portals) are flagged so the review queue can
@@ -303,48 +238,8 @@ CREATE TABLE IF NOT EXISTS ca_mcqs (
 CREATE INDEX IF NOT EXISTS idx_mcqs_item ON ca_mcqs(item_id);
 CREATE INDEX IF NOT EXISTS idx_mcqs_keyword ON ca_mcqs(keyword);
 
--- Section 3 of the Group-I template: the multi-dimensional tags.
---
--- Seven fixed dimensions, each with one line saying how it applies. A separate
--- table rather than a text field because the dimension set is closed and the
--- point is coverage: a topic tagged only 'economic' is a topic the student will
--- write a one-dimensional answer about, and that is visible here in a way it
--- would not be inside a paragraph.
-CREATE TABLE IF NOT EXISTS ca_item_dimensions (
-  item_id   INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
-  dimension TEXT NOT NULL CHECK (dimension IN (
-              'economic', 'social', 'political', 'ethical',
-              'environmental', 'legal', 'international')),
-  note      TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY (item_id, dimension)
-);
-CREATE INDEX IF NOT EXISTS idx_item_dimensions_dim ON ca_item_dimensions(dimension);
 
--- Section 8 of the template: essay questions this topic could feed.
---
--- 'direct' means the topic is the question ("Discuss X"). 'indirect' means the
--- topic is an example inside a wider essay ("Technology and Inequality") — which
--- is how most current affairs actually earns its marks in Paper I, and the use
--- people forget to prepare for.
-CREATE TABLE IF NOT EXISTS ca_essay_questions (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  item_id  INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
-  question TEXT NOT NULL,
-  kind     TEXT NOT NULL CHECK (kind IN ('direct', 'indirect')) DEFAULT 'direct',
-  note     TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_essay_questions_item ON ca_essay_questions(item_id);
 
--- Group-I: a major event turned into a full answer skeleton.
-CREATE TABLE IF NOT EXISTS ca_skeletons (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  item_id           INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
-  paper             TEXT NOT NULL DEFAULT '',
-  question_text     TEXT NOT NULL,
-  skeleton_markdown TEXT NOT NULL DEFAULT '',
-  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_skeletons_item ON ca_skeletons(item_id);
 
 -- =========================================================================
 -- STUDENT STATE
@@ -413,19 +308,6 @@ CREATE TABLE IF NOT EXISTS ca_bookmarks (
   PRIMARY KEY (user_id, item_id)
 );
 
--- The student's own Group-I bank. Distinct from the item's g1_bank: this is
--- the deliberate act of filing something into *their* collection, which is
--- what the bank-review targets (Q~40, D~60, E~50, S~50) are measured against.
--- A bank that fills itself automatically is a bank nobody has read.
-CREATE TABLE IF NOT EXISTS ca_user_cards (
-  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  item_id    INTEGER NOT NULL REFERENCES ca_items(id) ON DELETE CASCADE,
-  bank       TEXT NOT NULL CHECK (bank IN ('Q', 'D', 'E', 'S')),
-  own_note   TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (user_id, item_id)
-);
-CREATE INDEX IF NOT EXISTS idx_user_cards_user ON ca_user_cards(user_id, bank);
 
 -- Most of the bank is generated rather than hand-written, so the people best
 -- placed to catch a wrong key are the students hitting it.
@@ -476,6 +358,26 @@ CREATE TABLE IF NOT EXISTS ca_runs (
   finished_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_runs_created ON ca_runs(created_at DESC);
+
+-- ONE RUNNING RUN PER MODE, ENFORCED BY THE DATABASE.
+--
+-- A `ca_runs` row with status 'running' IS the drafting lock, and the lock had a
+-- window in it. The API route checked for a running row and then spawned the
+-- worker; the WORKER inserted the row, several seconds later. Every request
+-- arriving in between passed the check, because no row existed yet.
+--
+-- That is not theoretical. A UI fault made the admin screen go blank on click,
+-- the admin clicked again, and seven runs were created in three minutes — four
+-- of them against the same edition. They drafted nothing and held the lock until
+-- the two-hour stale sweep.
+--
+-- A partial unique index closes it at the only place that is genuinely atomic.
+-- It is here rather than only in the route for the same reason the angle
+-- triggers were: the route is not the only writer. `draft-articles.js` can be
+-- run straight from a terminal, and two terminals racing is the same fault with
+-- no route involved at all.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_one_running
+  ON ca_runs(mode) WHERE status = 'running';
 
 -- ===========================================================================
 -- THE TOPIC LAYER
@@ -670,43 +572,6 @@ CREATE TABLE IF NOT EXISTS pyq_question_topics (
 );
 CREATE INDEX IF NOT EXISTS idx_pyq_qt_topic ON pyq_question_topics(topic_id);
 
--- Group-I recurrence evidence, at topic level rather than question level.
---
--- WHY THIS IS SHAPED DIFFERENTLY FROM pyq_questions
---
--- Because Group-I Mains is written, not ticked. "Which format was this asked
--- in" is a meaningful question about a screening test and a meaningless one
--- about a descriptive paper, so the Group-I half of the PYQ layer counts
--- something else: how often a topic recurs, and which papers it pays across.
---
--- That is exactly what the Group-I blueprint already measures — "Both years",
--- "Twice within 2023", "Three questions across two years" — from the 2023 and
--- 2025 papers. This table holds those observations so that `topics.tier` can be
--- derived from them instead of hand-assigned, and so the Master Reuse Map is a
--- query rather than a document.
-CREATE TABLE IF NOT EXISTS topic_evidence (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  topic_id   INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  exam       TEXT NOT NULL DEFAULT 'group1' CHECK (exam IN ('group1', 'group2')),
-  paper      TEXT NOT NULL DEFAULT '',      -- 'P2'
-  unit       TEXT NOT NULL DEFAULT '',      -- '15', or a unit code
-  -- How many questions the observation represents. "Both years" is 2, "Three
-  -- questions across two years" is 3. Kept as a number so recurrence can be
-  -- ranked, with the original wording alongside it so the number can be checked.
-  questions  INTEGER NOT NULL DEFAULT 1,
-  years      TEXT NOT NULL DEFAULT '',
-  evidence   TEXT NOT NULL DEFAULT '',
-  -- The paper the blueprint says to STUDY the topic from, as opposed to the
-  -- papers it also answers. The distinction is the whole point of a reuse map:
-  -- study once, tick it off everywhere.
-  is_primary INTEGER NOT NULL DEFAULT 0,
-  kind       TEXT NOT NULL DEFAULT 'tier1'
-             CHECK (kind IN ('tier1', 'reuse', 'ap-block', 'gap')),
-  source     TEXT NOT NULL DEFAULT 'g1-blueprint',
-  UNIQUE (topic_id, exam, paper, unit, kind)
-);
-CREATE INDEX IF NOT EXISTS idx_topic_evidence_topic ON topic_evidence(topic_id, kind);
-CREATE INDEX IF NOT EXISTS idx_topic_evidence_paper ON topic_evidence(paper);
 
 -- ===========================================================================
 -- SECTION 1 — SOURCE INTELLIGENCE

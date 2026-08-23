@@ -9,8 +9,8 @@
 // exactly as much student-visible material as one scored LOW: none.
 //
 // This module closes that. It turns a scored article into the MASTER KNOWLEDGE
-// OBJECT — one `ca_items` row, routed to both exams at once — and links the two
-// with `item_id`.
+// OBJECT — one `ca_items` row, serving both objective syllabi at once — and
+// links the two with `item_id`.
 //
 // WHY THIS IS A SHARED LIB AND NOT A SECOND PIPELINE
 //
@@ -34,7 +34,8 @@
 // write the note that uses them.
 //
 // It is asked for exactly what a scoring function cannot produce: the note
-// prose, THE FACT, and THE ANGLE — the argument the fact supports.
+// prose, the static material underneath it, and the memorise-this block of
+// facts that questions are later written from.
 
 const path = require('path');
 
@@ -48,10 +49,6 @@ const PIPELINE = path.join(ROOT, 'content-pipeline', 'ca-daily');
 // rediscovering it here.
 const L = require(path.join(PIPELINE, 'lib'));
 const G = require(path.join(ROOT, 'content-pipeline', 'np-daily', 'genre'));
-
-const DIMENSIONS = [
-  'economic', 'social', 'political', 'ethical', 'environmental', 'legal', 'international',
-];
 
 // ---------------------------------------------------------------------------
 // the model input
@@ -426,7 +423,8 @@ WHAT THAT CHANGES
    the procedure matter. Where a unit is quoted, prefer the facts that unit is
    set from over the ones the article leads with.
 
-2. "prelims_facts" IS THE EXAMINABLE RESIDUE for the three objective papers.
+2. "prelims_facts" IS THE EXAMINABLE RESIDUE, and every paper this app serves
+   is objective, so it is the whole output.
    This does not change its FORM — bare facts, one per line, no prose, exactly
    as specified above. Keep the compact "Label — value" shape: it is scanned at
    revision time, not read, and a sentence holds one fact where a label holds
@@ -454,20 +452,12 @@ WHAT THAT CHANGES
 5. THE QUOTED UNIT CODES ARE CONTEXT, NOT A LIST TO RETURN. They are already
    settled — matched against the syllabus before you were called — and are
    attached to the item automatically. Use them to decide what the note should
-   say; do not put them in "units".
-
-   "units" takes only codes from the PAPER UNITS vocabulary, which lists the
-   written Group-I Mains papers and nothing else. Fewer and right beats more and
-   hedged: a unit list long enough to fit any story is a default block, not a
-   routing decision.
+   say; do not return them.
 
 WHAT IT DOES NOT CHANGE
 
 Do not invent a fact to satisfy a unit, and do not stretch a story to reach one.
-An article that genuinely feeds no listed unit is still worth drafting on its
-own merits — the 30-mark Group-II Current Affairs paper takes anything in the
-news. Discard remains the right answer for a story with nothing examinable in
-it at all.
+Discard remains the right answer for a story with nothing examinable in it.
 `;
 
 const PRINT_ADDENDUM = `
@@ -564,8 +554,8 @@ confidently, which is the hardest kind of error to unlearn.
 1. THE FACT IS THE OCCASION, NOT THE ARGUMENT.
 
    Every opinion piece is written ABOUT something: a judgment, a Budget, a data
-   release, a Bill, a report. That occasion is verifiable and belongs in
-   "g1_fact". The author's reading of it does not.
+   release, a Bill, a report. That occasion is verifiable and belongs in the
+   note. The author's reading of it does not.
 
      WRONG  The Vanashakti verdict is balanced and pragmatic.
      RIGHT  The Supreme Court delivered judgment in Vanashakti v. Union of India
@@ -628,16 +618,12 @@ confidently, which is the hardest kind of error to unlearn.
    The same test governs the MCQs. Do not write a question whose correct answer
    is a columnist's view.
 
-5. THE ANGLE IS WHY THIS ITEM IS WORTH HAVING AT ALL.
+5. AN OP-ED IS THE PAPER'S POOREST SOURCE OF FACTS.
 
-   An op-ed is the paper's poorest source of facts and its best source of
-   argument, and Group-I Mains is graded on argument. So "g1_angle" and
-   "g1_bridges" should be FULLER here than on a news report, not thinner:
-
-     - state the argument in full, with its author and their standing
-     - give the strongest counter-argument, whether or not the piece concedes it
-     - a named authority's position is citable in an answer in a way that an
-       anonymous news summary is not: "as C. Rangarajan has argued" earns marks
+   Every paper this app serves is objective, so what an op-ed offers is thin:
+   the verifiable occasion, and any figure it cites WITH its official
+   counterpart. Prefer the few recallable facts to the argument around them, and
+   attribute anything that remains contestable.
 
 6. "static_notes" IS THE SAFE HARBOUR.
 
@@ -648,7 +634,7 @@ confidently, which is the hardest kind of error to unlearn.
    it is argument.
 `;
 
-async function draftArticle(db, { article, edition, model, vocabulary, prompt }) {
+async function draftArticle(db, { article, edition, model, vocabulary = '', prompt }) {
   // An opinion source needs a different premise, not an extra caution: the rest
   // of the prompt is written on "the source reports what happened", which is
   // false here. See OPINION_ADDENDUM.
@@ -657,21 +643,21 @@ async function draftArticle(db, { article, edition, model, vocabulary, prompt })
   // THE OPINION BLOCK GOES LAST, AND THAT IS ABOUT MONEY.
   //
   // Providers cache a prompt by its PREFIX and bill the cached part at about a
-  // tenth of the input rate. Of the 12,244 input tokens in a real drafting call,
-  // 10,478 — 86% — are this prompt plus the vocabulary, identical on every
-  // single call of the day.
+  // tenth of the input rate, so everything identical on every call of the day
+  // belongs in front, and only what varies belongs behind it.
   //
-  // Inserted between them, as it was, the opinion block forked the prefix after
-  // ~4,200 tokens, so the 6,250-token vocabulary re-billed at full price for
-  // every op-ed and, worse, for every report drafted after one. Moving it behind
-  // the vocabulary makes the whole 10,478-token head identical for every call,
-  // whatever the genre.
+  // THE PAPER-UNITS LISTING USED TO SIT INSIDE `vocabulary`, and it was the
+  // largest block in the call: every descriptive Group-I Mains unit, for the
+  // model to choose from. With the Mains layer gone the model is not asked to
+  // choose units at all — the objective units are matched against the syllabus
+  // deterministically before the call and attached afterwards — so that listing
+  // is not smaller, it is absent. What remains in `vocabulary` is the keyword
+  // angles and the corrections register, both of which the model genuinely
+  // needs and both of which are identical on every call.
   //
-  // Its position does not change what it says. It is still the last thing before
-  // the article, which is where a binding instruction belongs.
-  // SYLLABUS_ADDENDUM sits inside the cacheable head, beside PRINT_ADDENDUM,
-  // because it is identical on every call of the day. Only `opinion` varies,
-  // and it stays last for the reason above.
+  // SYLLABUS_ADDENDUM stays inside that head beside PRINT_ADDENDUM, because it
+  // too is identical on every call. Only `opinion` varies, and it stays last,
+  // which is where a binding instruction belongs.
   const system =
     `${prompt}\n\n${PRINT_ADDENDUM}\n\n${SYLLABUS_ADDENDUM}\n\n${vocabulary}${opinion}`;
   const raw = await L.complete({
@@ -763,15 +749,12 @@ function toText(value) {
   return String(value);
 }
 
-// `headline`, `event_date`, `bucket`, `subject_tag` and `g1_bank` are in this
-// list for the same reason as the prose fields, and the last one matters most:
-// `g1_bank` carries a CHECK constraint, so an array arriving there fails the
-// insert rather than merely looking odd.
+// `headline`, `event_date`, `bucket` and `subject_tag` are in this list for the
+// same reason as the prose fields: a model that returns an array where a string
+// belongs fails the insert rather than merely looking odd.
 const TEXT_FIELDS = [
   'headline', 'event_date', 'bucket', 'subject_tag', 'notes_markdown',
-  'static_linkage', 'static_notes', 'prelims_facts', 'g1_bank', 'g1_fact', 'g1_angle',
-  'g1_theme', 'g1_sub_theme', 'g1_why_news', 'g1_background', 'g1_ap_angle',
-  'g1_linked', 'g1_bridges', 'g1_way_forward', 'verify_note', 'discard_reason',
+  'static_linkage', 'static_notes', 'prelims_facts', 'verify_note', 'discard_reason',
 ];
 
 function normaliseTextFields(record) {
@@ -852,16 +835,12 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
 
     const insItem = db.prepare(
       `INSERT INTO ca_items (day_id, headline, event_date, bucket, subject_tag,
-         notes_markdown, static_linkage, static_notes, prelims_facts, g1_bank, g1_fact, g1_angle,
-         g1_theme, g1_sub_theme, g1_why_news, g1_background, g1_ap_angle,
-         g1_linked, g1_bridges, g1_way_forward,
-         importance, relevance_g1, relevance_g2, needs_verify, verify_note,
+         notes_markdown, static_linkage, static_notes, prelims_facts,
+         importance, relevance_g2, needs_verify, verify_note,
          source_genre, source_author, order_index, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
-         @notes_markdown, @static_linkage, @static_notes, @prelims_facts, @g1_bank, @g1_fact, @g1_angle,
-         @g1_theme, @g1_sub_theme, @g1_why_news, @g1_background, @g1_ap_angle,
-         @g1_linked, @g1_bridges, @g1_way_forward,
-         @importance, @relevance_g1, @relevance_g2, @needs_verify, @verify_note,
+         @notes_markdown, @static_linkage, @static_notes, @prelims_facts,
+         @importance, @relevance_g2, @needs_verify, @verify_note,
          @source_genre, @source_author, @order_index, 'draft')`
     );
     const insKeyword = db.prepare(
@@ -870,18 +849,9 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
     const insUnit = db.prepare(
       'INSERT OR IGNORE INTO ca_item_units (item_id, unit_code) VALUES (?, ?)'
     );
-    const insTheme = db.prepare(
-      'INSERT OR IGNORE INTO ca_item_themes (item_id, theme) VALUES (?, ?)'
-    );
     const insSource = db.prepare(
       `INSERT INTO ca_item_sources (item_id, url, publisher, is_primary, fetched_at)
        VALUES (?, ?, ?, ?, ?)`
-    );
-    const insDimension = db.prepare(
-      'INSERT OR IGNORE INTO ca_item_dimensions (item_id, dimension, note) VALUES (?, ?, ?)'
-    );
-    const insEssay = db.prepare(
-      'INSERT INTO ca_essay_questions (item_id, question, kind, note) VALUES (?, ?, ?, ?)'
     );
     const insMcq = db.prepare(
       `INSERT INTO ca_mcqs (item_id, question, option_a, option_b, option_c, option_d,
@@ -891,8 +861,8 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
     );
     const insDiscarded = db.prepare(
       `INSERT INTO ca_items (day_id, headline, bucket, status, discard_reason,
-         relevance_g1, relevance_g2)
-       VALUES (?, ?, 'national', 'discarded', ?, 0, 0)`
+         relevance_g2)
+       VALUES (?, ?, 'national', 'discarded', ?, 0)`
     );
     const linkArticle = db.prepare(
       `UPDATE np_articles SET item_id = ?, status = 'drafted', discard_reason = ''
@@ -943,19 +913,7 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         static_linkage: r.static_linkage || '',
         static_notes: r.static_notes || '',
         prelims_facts: r.prelims_facts || '',
-        g1_bank: r.g1_bank || null,
-        g1_fact: r.g1_fact || '',
-        g1_angle: r.g1_angle || '',
-        g1_theme: r.g1_theme || '',
-        g1_sub_theme: r.g1_sub_theme || '',
-        g1_why_news: r.g1_why_news || '',
-        g1_background: r.g1_background || '',
-        g1_ap_angle: r.g1_ap_angle || '',
-        g1_linked: r.g1_linked || '',
-        g1_bridges: r.g1_bridges || '',
-        g1_way_forward: r.g1_way_forward || '',
         importance: Number(r.importance) || 2,
-        relevance_g1: Number(r.relevance_g1) === 0 ? 0 : 1,
         relevance_g2: Number(r.relevance_g2) === 0 ? 0 : 1,
         needs_verify: Number(r.needs_verify) ? 1 : 0,
         verify_note: r.verify_note || '',
@@ -976,59 +934,36 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         insKeyword.run(itemId, kw);
         if (!refKeywords.has(kw)) offVocabKeywords.add(kw);
       }
-      for (const u of r.units || []) {
-        const code = unitOf(u);
-        if (code) insUnit.run(itemId, code);
-        else if (String(u || '').trim()) droppedUnits.push(String(u).trim().slice(0, 70));
-      }
-
-      // THE OBJECTIVE UNITS, TAKEN FROM THE SCORER RATHER THAN FROM THE MODEL.
+      // THE SYLLABUS UNITS, TAKEN FROM THE SCORER RATHER THAN FROM THE MODEL.
       //
-      // The loop above writes the units the MODEL chose, and the vocabulary it
-      // is offered is all of ref_units — so in practice it returns Group-I Mains
-      // paper units and the item ends up routed for the written paper only. Item
-      // 84 carried P2-U12, P4-U7, P4-U8, P4-U11, P4-U12 and P5-U7, and nothing
+      // Every paper this app serves is objective, and for those the syllabus
+      // unit is not a judgement call a model should be making: Section 2 matched
+      // the article's own text against APPSC's published syllabus vocabulary,
+      // deterministically and reproducibly. Asking a model to re-derive it
+      // invites a second, disagreeing answer to a settled question — the same
+      // principle this file already applies to the bucket and the keywords.
+      //
+      // The model used to return units too, chosen from a 6,250-token
+      // vocabulary of descriptive Group-I Mains units, and item 84 is what that
+      // produced: P2-U12, P4-U7, P4-U8, P4-U11, P4-U12 and P5-U7, and nothing
       // at all for Group II, while the scorer had already established that it
-      // feeds G2-P2-U5.
-      //
-      // That is the wrong way round. Three of the four APPSC papers are
-      // objective, and for those the syllabus unit is not a judgement call the
-      // model should be making: Section 2 matched the article's own text against
-      // APPSC's published syllabus vocabulary, deterministically and
-      // reproducibly. Asking a model to re-derive it invites a second,
-      // disagreeing answer to a question already settled — the same principle
-      // this file already applies to the bucket and the keyword angles.
-      //
-      // So they are copied across. The model's units stay for the descriptive
-      // lane, where the routing genuinely is a judgement.
+      // feeds G2-P2-U5. It is no longer asked, and the vocabulary is gone.
       if (r._articleId) {
         for (const u of db
           .prepare(
             `SELECT au.unit_code FROM np_article_units au
                JOIN ref_units ru ON ru.unit_code = au.unit_code
-              WHERE au.article_id = ? AND ru.format = 'objective'
-                    AND ru.broad = 0 AND ru.unfeedable = 0
+              WHERE au.article_id = ? AND ru.broad = 0 AND ru.unfeedable = 0
               ORDER BY au.in_headline DESC, au.hits DESC`
           )
           .all(r._articleId)) {
           insUnit.run(itemId, u.unit_code);
         }
       }
-      for (const t of r.themes || []) insTheme.run(itemId, String(t).toLowerCase());
       for (const s of r.sources || []) {
         if (!s || (!s.url && !s.publisher)) continue;
         insSource.run(itemId, s.url || '', s.publisher || '', s.is_primary ? 1 : 0,
           s.fetched_at || null);
-      }
-      for (const d of r.dimensions || []) {
-        if (!DIMENSIONS.includes(String(d.dimension || '').toLowerCase())) continue;
-        insDimension.run(itemId, String(d.dimension).toLowerCase(), String(d.note || ''));
-      }
-      for (const q of r.essay_questions || []) {
-        const text = String(q.question || '').trim();
-        if (!text) continue;
-        insEssay.run(itemId, text, q.kind === 'indirect' ? 'indirect' : 'direct',
-          String(q.note || ''));
       }
       for (const m of r.mcqs || []) {
         insMcq.run({
@@ -1042,10 +977,20 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
           explanation: m.explanation || '',
           format: m.format || 'direct_recall',
           keyword: m.keyword || '',
-          // Canonicalised against ref_units, same as the item's own unit tags:
-          // a code the checker will not recognise is a tag nothing can query,
-          // and it goes in as blank rather than as a code that looks real.
-          unit_code: unitOf(m.unit_code) || '',
+          // Canonicalised against ref_units: a code the checker will not
+          // recognise is a tag nothing can query, and it goes in as blank
+          // rather than as a code that looks real.
+          //
+          // This is now the ONLY place a model-supplied unit code enters the
+          // database — the item's own units come from the scorer — so it is
+          // also the only place left that can report an unresolvable one.
+          unit_code: (() => {
+            const code = unitOf(m.unit_code);
+            if (!code && String(m.unit_code || '').trim()) {
+              droppedUnits.push(String(m.unit_code).trim().slice(0, 70));
+            }
+            return code || '';
+          })(),
           difficulty: Number(m.difficulty) || 2,
           fact_as_of: m.fact_as_of || null,
         });
@@ -1395,7 +1340,6 @@ async function generateMcqs(
 }
 
 module.exports = {
-  DIMENSIONS,
   PRINT_ADDENDUM,
   SYLLABUS_ADDENDUM,
   OPINION_ADDENDUM,

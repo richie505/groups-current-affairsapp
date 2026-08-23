@@ -3,10 +3,12 @@ import { useAuth } from './AuthContext';
 
 // The track lens.
 //
-// Group-I and Group-II want the same news item in different shapes: G2 wants
-// the fact, the keyword angle and the MCQs; G1 wants the bank, the paper units,
-// THE FACT and THE ANGLE. Rather than build two apps or two content sets, every
-// screen reads this lens and renders the lane it asks for.
+// Group-I Prelims and Group-II are two different published syllabi, examined
+// separately, and the same news item belongs to different units in each. Both
+// are answered by ticking a box — the lens used to switch between a written
+// paper and a ticked one, and now switches between two syllabi. Rather than
+// build two apps or two content sets, every screen reads this lens and renders
+// the syllabus it asks for.
 //
 // The lens is *not* the same thing as the account's exam_track. The track is
 // what the student is preparing for; the lens is what they want to look at
@@ -19,8 +21,12 @@ const LensContext = createContext(null);
 const STORAGE_KEY = 'appsc_ca_lens';
 export const LENSES = ['g1', 'g2', 'both'];
 
+// The stored key stays 'g1' rather than becoming 'g1p'. It is written into
+// every user's localStorage and into users.exam_track, and renaming it would
+// silently reset the lens for everyone who has already chosen one — for a
+// label change.
 export const LENS_LABELS = {
-  g1: 'Group I',
+  g1: 'Group I Prelims',
   g2: 'Group II',
   both: 'Both',
 };

@@ -87,11 +87,6 @@ export default function Revision() {
                   >
                     {it.headline}
                   </Link>
-                  {it.g1_angle ? (
-                    <p className="mt-1 text-sm text-slate-600">
-                      <RichText>{it.g1_angle}</RichText>
-                    </p>
-                  ) : null}
                   {state ? (
                     <p className="mt-2 text-xs font-medium text-green-700">
                       {state === 'kept' ? 'Moved to a longer interval.' : 'Back to tomorrow.'}

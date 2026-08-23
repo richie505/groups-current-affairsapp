@@ -15,7 +15,6 @@ import Item from './pages/Item';
 import Archive from './pages/Archive';
 import MonthRevision from './pages/MonthRevision';
 import Practice from './pages/Practice';
-import Banks from './pages/Banks';
 import Revision from './pages/Revision';
 import Mistakes from './pages/Mistakes';
 import Bookmarks from './pages/Bookmarks';
@@ -55,8 +54,6 @@ export default function App() {
                     <Route path="/archive" element={<Archive />} />
                     <Route path="/month/:month" element={<MonthRevision />} />
                     <Route path="/practice" element={<Practice />} />
-                    <Route path="/banks" element={<Banks />} />
-                    <Route path="/banks/:bank" element={<Banks />} />
                     <Route path="/revision" element={<Revision />} />
                     <Route path="/mistakes" element={<Mistakes />} />
                     <Route path="/saved" element={<Bookmarks />} />
