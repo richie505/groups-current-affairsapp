@@ -426,11 +426,20 @@ WHAT THAT CHANGES
    the procedure matter. Where a unit is quoted, prefer the facts that unit is
    set from over the ones the article leads with.
 
-2. "prelims_facts" IS THE EXAMINABLE RESIDUE, and it is written for the three
-   objective papers. Every line should be something a question could be built
-   on without reading the article again — a name with its post, a figure with
-   its unit and date, a scheme with its ministry, a body with its parent Act.
-   A line nobody could ask about is a line that does not belong in it.
+2. "prelims_facts" IS THE EXAMINABLE RESIDUE for the three objective papers.
+   This does not change its FORM — bare facts, one per line, no prose, exactly
+   as specified above. Keep the compact "Label — value" shape: it is scanned at
+   revision time, not read, and a sentence holds one fact where a label holds
+   the same fact in a third of the space.
+
+   What it changes is WHICH facts earn a line: a name with its post, a figure
+   with its unit and date, a scheme with its ministry, a body with its parent
+   Act and year. Prefer the ones the quoted unit is set from.
+
+   NEVER DROP A FACT TO MAKE ROOM. If the note already carries a named official,
+   a section number or a figure, it stays. Rewriting an existing line as a
+   longer sentence and losing another line to length is a net loss, and it is
+   the most likely way to make this note worse than the one before it.
 
 3. The past-question examples show the SHAPE, not the subject. If the
    commission asks this angle by matching a scheme to its ministry, then the
