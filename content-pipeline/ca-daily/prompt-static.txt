@@ -1,0 +1,175 @@
+=== THE STATIC NOTES BRIEF ===
+
+This is the brief for ONE field: "static_notes", the standing material behind
+the news. It is used in two places — inside the full drafting prompt, and on its
+own when the field is filled in later — so it describes the content and the
+shape only. Whoever loads it says what to return.
+
+--- WHAT THIS FIELD IS FOR ---
+
+A current-affairs note is unusable on its own. "The Supreme Court referred the
+definition of 'industry' to a nine-judge Bench" is worth nothing to a candidate
+who cannot say what the 1978 ruling held, which Act carried the definition, or
+which Code replaced it. The news is the trigger. This field is the thing the
+trigger is about.
+
+Every paper this material serves is answered by TICKING A BOX. So this is not
+background reading and it is not an essay. It is the block of standing,
+recallable, testable material that the news has just made worth revising —
+written so a candidate who reads it can answer an objective question on the
+topic, whether or not that question mentions the news at all.
+
+--- THE ONE RULE THAT DECIDES EVERYTHING ---
+
+**The news chooses the scope. The news is never the content.**
+
+Those are two different things and both matter.
+
+CHOOSES THE SCOPE: do not write the textbook chapter. Write the part of it this
+news has put in play. A news item about a tiger reserve's buffer zone earns the
+provisions on buffer and core zones, the declaring authority and the reserve
+list — not the whole of wildlife law. A candidate reading a 300-word block that
+covers everything except the thing they just read about has been given a chapter
+and no answer.
+
+IS NEVER THE CONTENT: nothing in this field may date. No "recently", no
+"currently", no "in the present case", no reference to the event, the judgment,
+the appointment or the report that triggered it. The news lives in
+"notes_markdown" and the day-specific facts live in "prelims_facts". This field
+is what is still true next year, and it must read as though it were written
+before the news happened.
+
+The test: if the same topic returns to the news in eight months for a different
+reason, this block should still be correct and still be the right block.
+
+--- THE STRUCTURE ---
+
+Use these headings, in this order. Drop any that has nothing real to put in it —
+an empty heading is worse than a missing one. Do not add others.
+
+## What it is
+
+Two or three sentences. The definition, and where the thing sits: which Act
+created it, which Ministry or Department owns it, what it is empowered to do.
+A candidate who reads only this paragraph should be able to say what the thing
+IS, which is the single most common objective question about anything.
+
+## Key facts
+
+A markdown table, two columns. This is the highest-value block on the page,
+because a table is what a list-matching question is made of.
+
+Rows are chosen from whichever of these the topic actually has — do not invent
+a row to fill the shape, and do not pad with a row whose value is "not
+applicable":
+
+  parent Act and year · the section or Article that matters · amending Act and
+  year · Ministry or Department · statutory / constitutional / executive status ·
+  established or commenced · headquarters · composition and who appoints ·
+  tenure · chairperson ex officio · reporting line — who it reports to and who
+  lays it before the House · the first · the current count · the successor or
+  predecessor scheme
+
+Bold every Article, section, case name, year, body, figure and name. Those are
+the recall targets and nothing else on the page is.
+
+## The provisions that get asked
+
+Three to six bullets. The numbered, quotable specifics: Articles and sections
+with what each one does, thresholds, majorities, time limits, exceptions,
+the tests laid down by name. One provision per bullet, each stated so it could
+be lifted into a question stem unaltered.
+
+Where a landmark case settled the position, name it with its year and hold it to
+one line on what it held.
+
+## Easily confused with
+
+Two to four bullets, and this section earns its place.
+
+An objective paper is won on the discriminations, not the recall: the wrong
+options are the neighbouring body, the predecessor scheme, the adjacent
+Ministry, the other Article, last year's figure. A candidate who knows the
+topic but cannot separate it from the thing beside it loses the mark anyway.
+
+So name the near-neighbour and give the ONE detail that separates them.
+
+  - **National Green Tribunal** — statutory, under the **NGT Act 2010**, not
+    a constitutional body; unlike the **CEC**, it adjudicates rather than advises.
+
+Where a body, Article or scheme has no confusable neighbour, omit the section
+rather than manufacturing one.
+
+## Andhra Pradesh
+
+One to three bullets, and only where the state dimension is real: the state Act
+or Rules, the AP body and its seat, the AP figure or rank, the district, the
+department, the state scheme that corresponds to the central one.
+
+Andhra Pradesh is the highest-value material in this exam and no national source
+covers it at the depth required, so where this section can be written it should
+be. Where it cannot be written honestly from what is known, omit it. An invented
+AP fact is worse than a missing one, because it cannot be caught against a
+textbook.
+
+--- LENGTH ---
+
+200 to 350 words of prose, plus the table. Long enough to be the answer; short
+enough to be revised in three minutes on the morning of the exam.
+
+--- WHAT DISQUALIFIES A BLOCK ---
+
+  - It could have been written without reading the news item (too general)
+  - It goes stale — it contains "recently", "currently", or the event itself
+  - It is argument rather than fact: significance, challenges, way forward,
+    critical evaluation. There is no written paper here. A sentence that cannot
+    become a question, or be the thing a question tests, is not doing any work
+  - Its facts are unbolded, so nothing on the page is scannable
+  - It asserts a figure, section number or date that is not securely known.
+    Omit rather than guess: a wrong static fact is the most expensive kind,
+    because a candidate will trust it and rebuild an answer on it
+
+--- WORKED EXAMPLE ---
+
+News: a nine-judge Bench is to reconsider the definition of "industry".
+
+## What it is
+
+The term **industry** determines which disputes fall within labour-dispute
+adjudication and which workers may invoke it. It was defined in
+**Section 2(j), Industrial Disputes Act 1947**, and is carried forward in
+**Section 2(p), Industrial Relations Code 2020**, one of the four labour codes
+consolidating central labour law. Administration rests with the **Ministry of
+Labour and Employment**.
+
+## Key facts
+
+| Attribute | Value |
+|---|---|
+| Defining provision | **Section 2(j)**, Industrial Disputes Act **1947** |
+| Successor provision | **Section 2(p)**, Industrial Relations Code **2020** |
+| Landmark ruling | **Bangalore Water Supply v. R. Rajappa (1978)** |
+| Bench strength then | **Seven judges** |
+| Ministry | **Labour and Employment** |
+| Codes consolidating labour law | **Four** |
+
+## The provisions that get asked
+
+  - **Bangalore Water Supply (1978)** laid down the **triple test** — systematic
+    activity, cooperation between employer and employee, production or
+    distribution of goods or services to satisfy human wants
+  - The ruling brought **hospitals, educational institutions and charitable
+    bodies** within the definition, and excluded **sovereign functions**
+  - The **Industrial Relations Code 2020** consolidates the Industrial Disputes
+    Act **1947**, the Trade Unions Act **1926** and the Industrial Employment
+    (Standing Orders) Act **1946**
+
+## Easily confused with
+
+  - **Industrial Relations Code** vs **Code on Wages** — the first governs
+    disputes, unions and standing orders; the second governs wages, bonus
+    and payment
+  - **Workman** (Section 2(s), 1947 Act) vs **worker** (Code, 2020) — the Code
+    widens the class and raises the supervisory salary threshold
+
+--- END OF THE STATIC NOTES BRIEF ---

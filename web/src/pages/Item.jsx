@@ -185,7 +185,7 @@ export default function Item() {
       {/* ---- The shared body ---- */}
       {item.notes_markdown ? (
         <section className="prose-notes mb-5 rounded-lg border border-slate-200 bg-surface p-4">
-          <Markdown>{item.notes_markdown}</Markdown>
+          <Markdown startLevel={3}>{item.notes_markdown}</Markdown>
         </section>
       ) : null}
 
@@ -214,7 +214,7 @@ export default function Item() {
             Static notes — the standing material behind this
           </h2>
           <div className="prose-notes text-sm">
-            <Markdown>{item.static_notes}</Markdown>
+            <Markdown startLevel={3}>{item.static_notes}</Markdown>
           </div>
         </section>
       ) : null}

@@ -1,9 +1,28 @@
 #!/usr/bin/env node
 'use strict';
 
-// Fills `static_notes` on items drafted before the field existed.
+// Fills — or rewrites — `static_notes`, the standing material behind an item.
 //
 //   node server/scripts/backfill-static-notes.js [--date YYYY-MM-DD] [--dry-run]
+//   node server/scripts/backfill-static-notes.js --rewrite [--date YYYY-MM-DD]
+//
+// WHAT --rewrite IS FOR
+//
+// The brief for this field was restructured: five fixed headings, a key-facts
+// table, a section on the near-neighbours an objective paper uses as
+// distractors, and one governing rule — the news chooses the SCOPE, the news is
+// never the CONTENT. The old brief asked for 150-300 words with free-form
+// subheadings, and what came back was a short essay: 'Social and environmental
+// dimensions' is a heading for a paper that no longer exists in this app.
+//
+// Without --rewrite this script only touches items whose static notes are
+// EMPTY, which is right for a backfill and useless for a restructure. With it,
+// items that already have notes are rewritten in the new shape.
+//
+// It is a rewrite of one column and nothing else. A published item stays
+// published, its questions are untouched, and its notes and prelims facts are
+// exactly as they were — so this can be run against live material without
+// putting anything back through review.
 //
 // WHY NOT JUST REDRAFT THEM
 //
@@ -26,34 +45,39 @@ const db = require(path.join(__dirname, '..', 'src', 'db'));
 const args = {
   date: null,
   dryRun: process.argv.includes('--dry-run'),
+  rewrite: process.argv.includes('--rewrite'),
+  limit: 0,
   model: process.env.OPENAI_MODEL || 'gpt-4o',
 };
 const di = process.argv.indexOf('--date');
 if (di !== -1) args.date = process.argv[di + 1];
+// --limit N, so a changed brief can be seen on one item before it is spent on
+// fifty-six. A prompt edit is not verifiable by reading it; the only way to
+// know what a brief produces is to produce something with it, and the cheapest
+// version of that should be one command away.
+const li = process.argv.indexOf('--limit');
+if (li !== -1) args.limit = Math.max(1, Number(process.argv[li + 1]) || 1);
 
-// The same brief the drafting prompt carries, so a backfilled item is
-// indistinguishable from one drafted with the field in place. Kept here rather
-// than imported because prompt-draft.txt describes a whole JSON record and this
-// asks for one field of it.
+// THE BRIEF IS READ, NOT RESTATED.
+//
+// It used to be a copy of the drafting prompt's wording, pasted here and
+// annotated 'the same brief the drafting prompt carries'. It was not the same
+// brief for long. Two copies of an instruction are two instructions, and which
+// one an item got depended on which script had last touched it — invisible in
+// the output and impossible to reason about afterwards.
+//
+// Now both read content-pipeline/ca-daily/prompt-static.txt. The only thing
+// this file adds is the output format, because the drafting lane wants this
+// field inside a whole record and this one wants it alone.
 const SYSTEM = `You are preparing material for the Andhra Pradesh Public Service
-Commission (APPSC) Group-I and Group-II examinations.
+Commission (APPSC) examinations. Every paper this material serves is answered by
+TICKING A BOX: Group-II Screening, Group-II Mains and Group-I Prelims. There is
+no written paper and no argument to construct.
 
-You will be given a current-affairs note. Return the STATIC syllabus material
-that sits underneath it — whatever a candidate must already know for this news
-to be usable in an answer, set out so they need not go anywhere else.
+You will be given a current-affairs note. Return the STATIC material that sits
+underneath it, written to the brief below.
 
-For a news item about judicial review: what judicial review is, its
-constitutional basis (Articles 13, 32, 226, 137), the basic-structure doctrine,
-the landmark cases, the limits of the power, and the standing debate about
-judicial overreach.
-
-Rules:
-- Markdown. 150-300 words. Subheadings where the topic has natural parts.
-- Bold every Article, section, case name, year, body and figure. Those are the
-  recall targets.
-- The settled position ONLY. No "recently", no "currently", no reference to the
-  news item itself — this is the part that does not change with the day.
-- Where the syllabus topic has an Andhra Pradesh dimension, include it.
+${L.readPrompt('prompt-static.txt')}
 
 Return JSON: {"static_notes": "..."} and nothing else. If the news genuinely
 rests on no static syllabus topic, return {"static_notes": ""}.`;
@@ -61,24 +85,42 @@ rests on no static syllabus topic, return {"static_notes": ""}.`;
 async function main() {
   const rows = db
     .prepare(
-      `SELECT i.id, i.headline, i.notes_markdown, i.static_linkage, i.g1_angle, d.date
+      // `prelims_facts` comes along because it is the best statement anywhere
+      // of what this item made EXAMINABLE, and the governing rule of the brief
+      // is that the news chooses the scope. Handing the model the facts the
+      // item will be tested on is how it knows which part of the textbook to
+      // write.
+      //
+      // `g1_angle` used to be selected here too. That column no longer exists —
+      // it went with the Group-I Mains material — and this query had been
+      // throwing 'no such column' ever since, on a script nobody had rerun.
+      `SELECT i.id, i.headline, i.notes_markdown, i.static_linkage,
+              i.prelims_facts, i.static_notes, d.date
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
-        WHERE TRIM(i.static_notes) = ''
+        WHERE ${args.rewrite ? "TRIM(i.static_notes) <> ''" : "TRIM(i.static_notes) = ''"}
           AND i.status <> 'discarded'
           ${args.date ? 'AND d.date = ?' : ''}
         ORDER BY i.id`
     )
-    .all(...(args.date ? [args.date] : []));
+    .all(...(args.date ? [args.date] : []))
+    .slice(0, args.limit || undefined);
 
   if (!rows.length) {
-    console.log('Nothing to backfill.');
+    console.log(args.rewrite ? 'No items have static notes to rewrite.' : 'Nothing to backfill.');
     return;
   }
 
   console.log(
-    `${rows.length} item(s) without static notes${args.date ? ` on ${args.date}` : ''}` +
+    `${rows.length} item(s) ${args.rewrite ? 'to REWRITE in the new shape' : 'without static notes'}` +
+      `${args.date ? ` on ${args.date}` : ''}` +
       `, model ${args.model} — about ${Math.max(1, Math.round((rows.length * 17) / 60))} min`
   );
+  // A rewrite overwrites material that has already been reviewed and
+  // published. Said out loud with the command that gets it back, because the
+  // undo for this is a backup and the time to hear about a backup is before.
+  if (args.rewrite && !args.dryRun) {
+    console.log('REWRITING published static notes. Back up first: node server/scripts/backup.js');
+  }
   if (args.dryRun) {
     rows.forEach((r) => console.log(`   #${r.id} ${r.headline.slice(0, 62)}`));
     console.log('DRY RUN — nothing written.');
@@ -95,10 +137,22 @@ async function main() {
     const user = [
       `HEADLINE: ${r.headline}`,
       r.static_linkage ? `STATIC TOPICS THIS UPDATES: ${r.static_linkage}` : '',
-      r.g1_angle ? `THE ARGUMENT IT SUPPORTS: ${r.g1_angle}` : '',
       '',
       'THE NOTE:',
       r.notes_markdown || '',
+      '',
+      // What the item is actually tested on — the scope-setter.
+      r.prelims_facts ? `WHAT THIS ITEM MADE EXAMINABLE:\n${r.prelims_facts}` : '',
+      // On a rewrite the old block is shown and named as superseded. Withheld,
+      // the model re-researches the topic from the note alone and loses facts
+      // that were correct — a restructure that quietly drops a verified section
+      // number is a regression wearing the clothes of an improvement.
+      args.rewrite && r.static_notes
+        ? '\nTHE EXISTING BLOCK, written to a SUPERSEDED brief. Its structure is\n' +
+          'wrong and its argument-shaped sections do not belong. Keep every fact\n' +
+          'in it that is correct and in scope; restructure the rest:\n\n' +
+          r.static_notes
+        : '',
     ]
       .filter(Boolean)
       .join('\n');

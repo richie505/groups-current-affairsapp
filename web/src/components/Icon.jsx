@@ -253,6 +253,16 @@ export function IconSpinner(props) {
   );
 }
 
+export function IconDownload(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5v11" />
+      <path d="M7.5 10.5L12 15l4.5-4.5" />
+      <path d="M4.5 17.5v1.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-1.5" />
+    </Svg>
+  );
+}
+
 export function IconAlert(props) {
   return (
     <Svg {...props}>

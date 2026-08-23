@@ -896,6 +896,118 @@ try {
 check('and the edition can be run again once the first finishes', lockReopened);
 
 // ---------------------------------------------------------------------------
+// the digest as a markdown file
+//
+// Pure rendering, so it is worth pinning: every fault below was real, and none
+// of them throws. A file with the wrong heading levels, a multi-statement
+// question collapsed into one paragraph, or a draft that lost its DRAFT mark
+// on the way out all produce a plausible file that is wrong.
+// ---------------------------------------------------------------------------
+
+const MD = require(path.join(__dirname, '..', 'src', 'lib', 'digestMarkdown'));
+
+const mdDay = { date: '2026-08-21', title: 'A title: with a colon', intro_markdown: '', status: 'published' };
+const mdItems = [
+  {
+    id: 1,
+    headline: 'National item',
+    event_date: '2026-08-20',
+    bucket: 'national',
+    importance: 2,
+    keywords: ['Committee'],
+    units: [{ unit_code: 'G2-P1-U7', label: 'Union and State government' }],
+    notes_markdown: '# Body heading\n\nBody text.',
+    static_linkage: 'Updates the polity topic.',
+    // Written with `##`, as the brief asks. It must not land at `######`.
+    static_notes: '## What it is\n\nA thing.\n\n### A sub-part\n\nDetail.',
+    prelims_facts: 'Chair — Someone\n* Year — 2026',
+    needs_verify: 0,
+  },
+  {
+    id: 2,
+    headline: 'AP item',
+    event_date: '2026-08-20',
+    bucket: 'ap',
+    importance: 1,
+    keywords: [],
+    units: [],
+    notes_markdown: 'AP body.',
+    static_notes: '',
+    prelims_facts: 'District — Prakasam',
+    needs_verify: 1,
+    verify_note: 'Check the outlay.',
+  },
+];
+const mdMcqs = new Map([
+  [
+    1,
+    [
+      {
+        question: 'Consider the following:\nI. First.\nII. Second.\nWhich is correct?',
+        option_a: 'I only',
+        option_b: 'II only',
+        option_c: 'Both',
+        option_d: 'Neither',
+        correct_option: 'c',
+        explanation: 'Both are correct.',
+        format: 'multi_statement',
+        fact_as_of: '2026-08-20',
+      },
+    ],
+  ],
+  [2, []],
+]);
+
+const md = MD.renderDigest(mdDay, mdItems, mdMcqs, { draft: false });
+const mdLines = md.split('\n');
+const levels = new Set();
+for (const line of mdLines) {
+  const m = /^(#{1,6})\s/.exec(line);
+  if (m) levels.add(m[1].length);
+}
+
+check('the file is named for the date it covers', MD.digestFilename('2026-08-21') === 'appsc-current-affairs-2026-08-21.md');
+// AP first, because AP is roughly half of Papers II and IV. The bucket order
+// is the exam talking and a file that led with 'National' would be wrong in a
+// way nothing would report.
+check('Andhra Pradesh is the first section', md.indexOf('## Andhra Pradesh') < md.indexOf('## National'));
+check('a title containing a colon is quoted in the front matter', md.includes('subtitle: "A title: with a colon"'));
+check("static notes sit UNDER the item's own sections", md.includes('##### What it is'));
+check('and their sub-parts keep their distance', md.includes('###### A sub-part'));
+// Level 6 is the floor markdown has, and a genuine sub-part is entitled to it.
+// What must never happen is a SEVENTH level, which renders as literal hashes.
+check('nothing is pushed past the deepest level markdown has', !/^#{7}/m.test(md));
+// The property `reheading` exists for: one model writes the block with `#` and
+// another with `##`, and the page nesting them cannot depend on which. A fixed
+// offset made the same content land two levels apart on different days.
+const mdHash1 = MD.renderDigest(
+  mdDay,
+  [{ ...mdItems[0], static_notes: '# What it is\n\nA thing.\n\n## A sub-part\n\nDetail.' }],
+  new Map([[1, []]]),
+  { draft: false }
+);
+check(
+  'a block written with # lands where a block written with ## lands',
+  mdHash1.includes('##### What it is') && mdHash1.includes('###### A sub-part')
+);
+check('a bulleted prelims fact is not double-bulleted', md.includes('- Year — 2026') && !md.includes('- * Year'));
+check('an unverified item carries its warning', md.includes('⚠ **Verify:** Check the outlay.'));
+// Two trailing spaces is the markdown hard break. Without it the numbered
+// statements of a multi-statement question render as one run-on paragraph.
+check('statements in a multi-statement question keep their own lines', md.includes('I. First.  \n'));
+check('the answer key is at the end, not beside the question', md.indexOf('## Answer key') > md.indexOf('**Q1.**'));
+check('the key states the option and the date it was true', md.includes('**Q1** — **(c)**') && md.includes('Correct as of 2026-08-20'));
+check('a published export carries no draft warning', !md.includes('DRAFT — not published'));
+
+const mdDraft = MD.renderDigest({ ...mdDay, status: 'draft' }, mdItems, mdMcqs, { draft: true });
+// A file has no status once it is in a folder, so the file has to say it.
+check('a draft export says DRAFT in its first lines', mdDraft.includes('DRAFT — not published'));
+check('and records it in the front matter', mdDraft.includes('status: draft'));
+
+const mdEmpty = MD.renderDigest(mdDay, [], new Map(), { draft: false });
+check('an empty digest renders rather than throwing', mdEmpty.includes('no published items'));
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

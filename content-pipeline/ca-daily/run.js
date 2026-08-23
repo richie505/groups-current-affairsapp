@@ -129,7 +129,11 @@ async function main() {
   const seenHashes = L.existingQuestionHashes(database);
   const outDir = L.ensureOutDir();
 
-  const draftPrompt = L.readPrompt('prompt-draft.txt');
+  // The static-notes brief, appended for the same reason it is appended in
+  // server/scripts/draft-articles.js: it is one file read by every lane that
+  // writes the field, so the web lane and the newspaper lane cannot drift into
+  // producing two different shapes of the same block.
+  const draftPrompt = `${L.readPrompt('prompt-draft.txt')}\n\n${L.readPrompt('prompt-static.txt')}`;
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
 
   // Reference vocabularies and the corrections, appended to the drafting

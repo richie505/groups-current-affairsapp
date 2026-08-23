@@ -3,6 +3,7 @@ const db = require('../db');
 const { requireAuth } = require('../auth');
 const { seedRevisionItem, scheduleOutcome, fmt, addDays } = require('../lib/revision');
 const { buildQuiz } = require('../lib/quiz');
+const { renderDigest, digestFilename } = require('../lib/digestMarkdown');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -304,6 +305,78 @@ router.get('/days/:date', (req, res) => {
   const pacing = P.planFor(db, req.user.id, items, pacingOf(req.user.id));
 
   res.json({ day, items, pacing, prev: prev?.date || null, next: next?.date || null });
+});
+
+// ---- The day as a file ---------------------------------------------------
+
+// Everything the app knows about one digest, as one markdown file.
+//
+// The app is the product and this is not a way around it — it is the answer to
+// the one thing an app cannot do, which is travel. A file works on a phone with
+// no signal, in a vault the student already keeps, and on paper the night
+// before. What it deliberately does not carry is anything per-student: read
+// state, bookmarks, revision schedules. See server/src/lib/digestMarkdown.js.
+//
+// An ADMIN may export an unpublished day; a student may not, and the file says
+// DRAFT across the top when they do. That asymmetry is the whole point of the
+// review gate: the admin needs to read the day as a candidate would before
+// deciding it is fit to publish, and no route may hand unreviewed material to
+// somebody preparing for an exam.
+router.get('/days/:date/export.md', (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const day = db
+    .prepare(
+      `SELECT id, date, title, intro_markdown, status FROM ca_days
+        WHERE date = ?${isAdmin ? '' : " AND status = 'published'"}`
+    )
+    .get(req.params.date);
+  if (!day) return res.status(404).json({ error: 'No digest for that date.' });
+
+  const draft = day.status !== 'published';
+
+  // An admin exporting a draft day gets the day's DRAFT items too — they are
+  // what there is to review. Discarded items stay out of both: they were
+  // looked at and rejected, and putting them in a revision file would undo the
+  // decision.
+  const itemWhere = draft
+    ? `i.day_id = ? AND i.status IN ('draft', 'published')`
+    : `i.day_id = ? AND ${VISIBLE}`;
+  const items = db
+    .prepare(
+      `SELECT ${itemColumns()} FROM ca_items i JOIN ca_days d ON d.id = i.day_id
+        WHERE ${itemWhere}
+        ORDER BY i.importance, i.order_index, i.id`
+    )
+    .all(day.id);
+  attachTags(items, { full: false });
+
+  // Questions in one query for the whole day rather than one per item. Same
+  // reason as attachTags: a digest is a dozen items and this was the shape
+  // that made the Today screen slow.
+  const byItem = new Map(items.map((i) => [i.id, []]));
+  if (items.length) {
+    const holes = items.map(() => '?').join(',');
+    const rows = db
+      .prepare(
+        `SELECT m.item_id, m.question, m.option_a, m.option_b, m.option_c, m.option_d,
+                m.correct_option, m.explanation, m.format, m.fact_as_of
+           FROM ca_mcqs m
+          WHERE m.item_id IN (${holes})${draft ? '' : ` AND ${MCQ_VISIBLE}`}
+          ORDER BY m.item_id, m.id`
+      )
+      .all(...items.map((i) => i.id));
+    for (const r of rows) byItem.get(r.item_id)?.push(r);
+  }
+
+  const markdown = renderDigest(day, items, byItem, { draft });
+  const filename = digestFilename(day.date);
+
+  // `charset=utf-8` is not decoration. Every note in this file carries em
+  // dashes, and the AP material carries rupee signs; served without it, a
+  // browser guesses, and on Windows it guesses wrong.
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(markdown);
 });
 
 // The latest published digest — what "Today" actually resolves to.

@@ -290,7 +290,15 @@ async function main() {
     process.exit(0);
   }
 
-  const prompt = L.readPrompt('prompt-draft.txt');
+  // The static-notes brief is a file of its own and is APPENDED, not inlined.
+  //
+  // Two places produce this field — here, and backfill-static-notes.js for
+  // items drafted before it existed — and while the brief lived in both, they
+  // drifted: the drafting prompt asked for 150-300 words with free-form
+  // subheadings and the backfill asked for something subtly different, so
+  // whether a block came out in the house shape depended on which script had
+  // touched the item. One file, read by both, is the fix.
+  const prompt = `${L.readPrompt('prompt-draft.txt')}\n\n${L.readPrompt('prompt-static.txt')}`;
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
   // Shared across the whole run and across the whole corpus, so a question
   // already asked of another item is not asked again here.

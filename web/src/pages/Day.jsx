@@ -5,6 +5,7 @@ import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
 import ItemCard from '../components/ItemCard';
 import LensToggle from '../components/LensToggle';
+import DownloadDigest from '../components/DownloadDigest';
 import Markdown from '../components/Markdown';
 import { BUCKETS, longDate, readingMinutes } from '../lib/caFormat';
 import { IconCalendar, IconChevronLeft, IconChevronRight, IconLock } from '../components/Icon';
@@ -40,7 +41,14 @@ export default function Day() {
       <header className="mb-5">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-slate-900">{longDate(day.date)}</h1>
-          <LensToggle className="ml-auto" />
+          {/* Both controls travel together in one right-aligned group. Given
+              `ml-auto` each, they would separate on a narrow screen and leave
+              the download stranded against the far edge with the lens toggle in
+              the middle of nothing. */}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <LensToggle />
+            <DownloadDigest date={day.date} />
+          </div>
         </div>
         {day.title ? <p className="mb-2 text-slate-700">{day.title}</p> : null}
         {/* One reading estimate, not two.

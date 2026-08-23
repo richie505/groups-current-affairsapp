@@ -47,19 +47,15 @@ property that matters.
       news updates. This is the field that stops current affairs being a
       separate subject.",
 
-  "static_notes": "The STATIC material itself, not a pointer to it. Whatever a
-      candidate must already know for this news to be usable, set out so they
-      need not go anywhere else.
-      For a news item about judicial review: what judicial review is, its
-      constitutional basis (Articles 13, 32, 226, 137), the basic-structure
-      doctrine, the landmark cases and the limits of the power. Then the news
-      sits on top of it.
-      Rules: markdown, 150-300 words, subheadings where the topic has natural
-      parts. Bold every Article, section, case name, year, body and figure —
-      these are the recall targets. Give the settled position only: no 'recently'
-      or 'currently', because this is the part that does NOT change with the news.
-      Where the syllabus topic has an Andhra Pradesh dimension, include it.
-      Omit this field only where the news genuinely rests on no static topic.",
+  "static_notes": "The STATIC material itself, not a pointer to it — the
+      standing, testable block the news has just made worth revising.
+      THE BRIEF FOR THIS FIELD IS APPENDED IN FULL BELOW, under 'THE STATIC
+      NOTES BRIEF'. It is the longest single instruction you have been given
+      and it is not optional: read it, use its five headings in its order, and
+      hold to its one rule — the news chooses the SCOPE, the news is never the
+      CONTENT.
+      Return it as markdown, inside this string. Omit this field only where the
+      news genuinely rests on no static topic.",
 
   "prelims_facts": "THE MOST IMPORTANT FIELD. The memorise-this block, and the
       examinable residue of the whole item.

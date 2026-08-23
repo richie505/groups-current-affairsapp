@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import { Chip } from '../../components/Badges';
+import DownloadDigest from '../../components/DownloadDigest';
 import { longDate, todayIso } from '../../lib/caFormat';
 import { IconPlus, IconCheck, IconPencil } from '../../components/Icon';
 
@@ -131,6 +132,17 @@ export default function AdminDays() {
             >
               <IconPencil /> Items
             </Link>
+            {/* Exportable BEFORE publishing, and that is the useful half.
+                A draft digest reads very differently as a continuous file than
+                as a queue of cards, and reading it the way a candidate will is
+                the last check before it goes out. The file itself says DRAFT
+                across the top, because a file has no status once it is in a
+                folder. */}
+            <DownloadDigest
+              date={d.date}
+              label={d.status === 'published' ? '.md' : 'Draft .md'}
+              className="!px-2 !py-1 !text-xs !font-semibold"
+            />
             {d.status === 'published' ? (
               <button
                 type="button"
