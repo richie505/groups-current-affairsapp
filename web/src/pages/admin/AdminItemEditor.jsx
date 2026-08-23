@@ -104,9 +104,14 @@ export default function AdminItemEditor() {
       )}
 
       <div className="space-y-4">
+        {/* An anchor per item, so a link from elsewhere can point at ONE item
+            on a day that carries thirty. The review queue links here by
+            #item-<id> — without the target the link opens the right day and
+            leaves the reader to scroll for the row they were sent to. */}
         {items.data.items.map((it) => (
           <ItemRow
             key={it.id}
+            anchorId={`item-${it.id}`}
             item={it}
             meta={meta.data}
             onEdit={() => setEditing(it)}
@@ -118,7 +123,7 @@ export default function AdminItemEditor() {
   );
 }
 
-function ItemRow({ item, meta, onEdit, onChanged }) {
+function ItemRow({ item, meta, onEdit, onChanged, anchorId }) {
   const [showMcqs, setShowMcqs] = useState(false);
 
   async function remove() {
@@ -139,7 +144,7 @@ function ItemRow({ item, meta, onEdit, onChanged }) {
   }
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-surface p-4">
+    <article id={anchorId} className="scroll-mt-20 rounded-lg border border-slate-200 bg-surface p-4">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <Chip
           className={

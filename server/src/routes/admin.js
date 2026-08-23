@@ -226,7 +226,7 @@ router.get('/queue', (req, res) => {
       const holes2 = superIds.map(() => '?').join(',');
       const live = new Map(
         db
-          .prepare(`SELECT id, headline, status FROM ca_items WHERE id IN (${holes2})`)
+          .prepare(`SELECT id, headline, status, day_id FROM ca_items WHERE id IN (${holes2})`)
           .all(...superIds)
           .map((r) => [r.id, r])
       );
@@ -250,7 +250,7 @@ router.get('/queue', (req, res) => {
   // is exactly how unreviewed content reaches a student by accident.
   const questionReview = db
     .prepare(
-      `SELECT i.id, i.headline, i.bucket, i.importance, d.date AS day_date,
+      `SELECT i.id, i.headline, i.bucket, i.importance, i.day_id, d.date AS day_date,
               COUNT(*) AS pending,
               (SELECT COUNT(*) FROM ca_mcqs p
                 WHERE p.item_id = i.id AND p.status = 'published') AS live

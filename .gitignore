@@ -13,3 +13,7 @@ content-pipeline/np-daily/inbox/
 .env.*
 !.env.example
 server/data/uploads/
+
+# Database backups — see server/scripts/backup.js. Keep them off the machine
+# that holds the original, not in the repo that lives on it.
+server/data/backups/

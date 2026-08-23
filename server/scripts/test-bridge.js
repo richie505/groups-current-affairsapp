@@ -31,13 +31,74 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const TMP = path.join(os.tmpdir(), `appsc-bridge-test-${process.pid}.db`);
+// A NAME THAT CANNOT COLLIDE, AND A FILE THAT CANNOT BE INHERITED.
+//
+// This was `appsc-bridge-test-${process.pid}.db`, and the suite failed
+// intermittently with SQLITE_CONSTRAINT_PRIMARYKEY on a fixture insert —
+// which reads as a broken bridge and was a broken harness.
+//
+// Two faults, and it took both to bite. Windows recycles process IDs freely,
+// so a later run can be handed a PID an earlier run used; and `cleanup()`
+// swallows a failed unlink, which is exactly what happens when the file is
+// still locked as the process exits. Put together, a run could open a scratch
+// database that ALREADY HAD the fixtures in it, and inserting them again is a
+// primary-key violation.
+//
+// An intermittent failure with no relation to the change under test is worse
+// than no test: it teaches people to re-run until it passes, and then the real
+// failure gets re-run too.
+//
+// So: a random suffix as well as the pid, and the file is removed BEFORE it is
+// opened rather than only after. Leftovers from previous runs are swept up on
+// the way past, because they are what caused this.
+const TMP = path.join(
+  os.tmpdir(),
+  `appsc-bridge-test-${process.pid}-${Math.random().toString(36).slice(2, 10)}.db`
+);
 process.env.DB_PATH = TMP;
+
+for (const f of [TMP, `${TMP}-wal`, `${TMP}-shm`]) {
+  try {
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  } catch {
+    // If it cannot be removed it is locked by something else, and opening it
+    // would be the bug this block exists to prevent — so fail loudly instead.
+    console.error(`test-bridge: could not clear the scratch database at ${f}`);
+    process.exit(2);
+  }
+}
+
+// Sweep leftovers from runs that could not clean up after themselves. An hour
+// is far past any run of this suite, so anything older is abandoned.
+try {
+  const dir = os.tmpdir();
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  for (const name of fs.readdirSync(dir)) {
+    if (!/^appsc-bridge-test-/.test(name)) continue;
+    const full = path.join(dir, name);
+    try {
+      if (fs.statSync(full).mtimeMs < hourAgo) fs.unlinkSync(full);
+    } catch {
+      // Still locked, or gone already. Neither is this suite's problem.
+    }
+  }
+} catch {
+  // No temp directory listing is not a reason to fail the tests.
+}
 
 const db = require(path.join(__dirname, '..', 'src', 'db'));
 const D = require(path.join(__dirname, '..', 'src', 'lib', 'draft'));
 
 const cleanup = () => {
+  // Closed before unlinking. Windows will not delete a file that is still
+  // open, so without this every run leaves three files behind — which is how
+  // the scratch directory accumulated 47 of them, and how a recycled PID
+  // found one waiting.
+  try {
+    db.close();
+  } catch {
+    // Already closed, or never opened. Either way the unlink below is next.
+  }
   for (const f of [TMP, `${TMP}-wal`, `${TMP}-shm`]) {
     try {
       if (fs.existsSync(f)) fs.unlinkSync(f);

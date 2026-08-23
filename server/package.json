@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed": "node scripts/seed.js",
-    "test": "node scripts/test-bridge.js && node ../scripts/check-rich-text.js"
+    "test": "node scripts/test-bridge.js && node ../scripts/check-rich-text.js && node ../scripts/check-routes.js",
+    "preflight": "node scripts/preflight.js",
+    "backup": "node scripts/backup.js --verify"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

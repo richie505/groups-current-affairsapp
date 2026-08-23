@@ -248,7 +248,10 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
         <div className="mb-2 rounded-md border border-sky-300 bg-sky-50 p-2.5 text-sm text-sky-900">
           <span className="font-semibold">Redraft of a live item.</span> Item #
           {item.supersedes_item.id} is published and says the same thing:{' '}
-          <Link to={`/admin/items/${item.supersedes_item.id}`} className="underline">
+          <Link
+            to={`/admin/days/${item.supersedes_item.day_id}#item-${item.supersedes_item.id}`}
+            className="underline"
+          >
             <RichText>{item.supersedes_item.headline}</RichText>
           </Link>
           . Publishing this without retiring that one shows a student the story twice — the
