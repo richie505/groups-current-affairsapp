@@ -67,18 +67,31 @@ console.log(
 // do not make the news often) or has a vocabulary that never fires.
 const units = db
   .prepare(
-    `SELECT r.unit_code, r.label, r.paper,
+    `SELECT r.unit_code, r.label, r.paper, r.exam, r.format,
             (SELECT COUNT(*) FROM np_article_units u WHERE u.unit_code = r.unit_code) AS n
        FROM ref_units r
-      WHERE r.exam = 'g2' AND r.broad = 0 AND r.unfeedable = 0
-      ORDER BY n DESC, r.unit_code`
+      WHERE r.broad = 0 AND r.unfeedable = 0 AND EXISTS
+            (SELECT 1 FROM ref_unit_aliases a WHERE a.unit_code = r.unit_code)
+      ORDER BY r.exam, n DESC, r.unit_code`
   )
   .all();
 
-console.log('\nUNITS BY HOW MUCH THE PAPER FEEDS THEM');
+// Grouped by exam, because the three papers are not interchangeable: two are
+// answered by ticking a box and one is written, and the same article has to
+// yield different material for each.
+const EXAM_NAME = {
+  g1: 'GROUP-I MAINS — written',
+  g1p: 'GROUP-I PRELIMS — objective, 120 questions',
+  g2: 'GROUP-II — objective, screening and mains',
+};
+let lastExam = null;
 for (const u of units) {
-  const bar = '█'.repeat(Math.min(24, u.n)) || '·';
-  console.log(`  ${String(u.n).padStart(3)} ${u.unit_code.padEnd(10)} ${bar}  ${u.label.slice(0, 46)}`);
+  if (u.exam !== lastExam) {
+    lastExam = u.exam;
+    console.log(`\n${EXAM_NAME[u.exam] || u.exam}`);
+  }
+  const bar = '█'.repeat(Math.min(20, u.n)) || '·';
+  console.log(`  ${String(u.n).padStart(3)} ${u.unit_code.padEnd(10)} ${bar}  ${u.label.slice(0, 44)}`);
 }
 const cold = units.filter((u) => !u.n);
 if (cold.length) {

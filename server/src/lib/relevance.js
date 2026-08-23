@@ -177,28 +177,33 @@ const KEYWORD_STOPLIST = new Set([
   'secretary', 'officer', 'department', 'scheme', 'project', 'meeting',
 ]);
 
-// The Group-II syllabus, as matchable vocabulary.
+// EVERY published syllabus that carries match vocabulary, as one list.
 //
 // Loaded once per scoring pass and reused across every article, because the
 // alternative is compiling 489 regular expressions 121 times for one edition.
 //
-// `broad` and `unfeedable` units are excluded here rather than filtered later,
-// so nothing downstream can accidentally count them. See scripts/g2-syllabus.js:
-// the 30-mark current-affairs paper matches every newspaper article ever
-// printed, which makes it evidence of nothing at all.
-function loadG2Units(db) {
+// Group-II and Group-I PRELIMS both, and any syllabus added later without this
+// function changing: the query asks for units that have aliases, not for an exam
+// by name. The Group-I MAINS map has no aliases — it is reached through the
+// master topics — so it is absent here without being excluded.
+//
+// `broad` and `unfeedable` units are excluded rather than filtered later, so
+// nothing downstream can accidentally count them. See scripts/g2-syllabus.js:
+// a 30-mark current-affairs paper matches every newspaper article ever printed,
+// which makes it evidence of nothing at all.
+function loadSyllabusUnits(db) {
   let rows = [];
   try {
     rows = db
       .prepare(
-        `SELECT a.unit_code, a.alias, a.strict, u.label, u.paper
+        `SELECT a.unit_code, a.alias, a.strict, u.label, u.paper, u.exam, u.format
            FROM ref_unit_aliases a
            JOIN ref_units u ON u.unit_code = a.unit_code
-          WHERE u.exam = 'g2' AND u.broad = 0 AND u.unfeedable = 0`
+          WHERE u.broad = 0 AND u.unfeedable = 0`
       )
       .all();
   } catch {
-    // An older database without the Group-II map still scores, on Group I alone.
+    // An older database without the syllabus map still scores, on topics alone.
     return [];
   }
   return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict) }));
@@ -262,7 +267,7 @@ function loadContext(db) {
   return {
     keywords, pyqCount, topicPapers, topicTier,
     aliases: T.loadAliases(db),
-    g2Units: loadG2Units(db),
+    g2Units: loadSyllabusUnits(db),
   };
 }
 
@@ -421,6 +426,7 @@ function score(article, ctx) {
     } else {
       g2Hits.push({
         unit_code: u.unit_code, label: u.label, paper: u.paper,
+        exam: u.exam, format: u.format,
         hits: 1, in_headline: inHead ? 1 : 0, matched: [u.alias],
       });
     }

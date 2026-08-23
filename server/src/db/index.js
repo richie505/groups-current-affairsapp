@@ -36,6 +36,12 @@ db.exec(schema);
       // reasons, and both are recorded so their absence is a decision.
       ['unfeedable', 'INTEGER NOT NULL DEFAULT 0'],
       ['broad', 'INTEGER NOT NULL DEFAULT 0'],
+      // How this paper is ANSWERED. Three of the four APPSC papers this app
+      // serves are objective and one is descriptive, and the same article has
+      // to yield different material for each — a recognisable fact for a
+      // ticked box, an argument for a written one. Recording it on the unit is
+      // what makes that measurable rather than assumed.
+      ['format', "TEXT NOT NULL DEFAULT 'descriptive'"],
     ],
     // Paced learning. Off for everyone until they choose otherwise, which is why
     // it is a column with a default rather than a settings table: the feature is
