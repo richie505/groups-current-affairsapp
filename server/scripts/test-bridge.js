@@ -771,6 +771,73 @@ check('an objective unit is never offered as a choice', !offered.includes('ZZ-OB
 check('the descriptive units still are', offered.includes('P3-U7'));
 
 // ---------------------------------------------------------------------------
+// WHICH ARTICLES GET DRAFTED — the adaptive, syllabus-led selection.
+//
+// The flat `score >= 45` it replaces was wrong in both directions at once:
+// across 248 scored articles it drafted 10 that feed no syllabus unit and
+// skipped 54 that do.
+// ---------------------------------------------------------------------------
+
+const SEL = require(path.join(__dirname, '..', 'src', 'lib', 'select'));
+
+check('no syllabus unit means no leverage', SEL.leverageOf({ units: 0 }) === 0);
+check('leverage rises with distinct units', SEL.leverageOf({ units: 3 }) > SEL.leverageOf({ units: 1 }));
+check(
+  'and flattens, because a long unit list is a default block',
+  SEL.leverageOf({ units: 7 }) === SEL.leverageOf({ units: 4 })
+);
+// The headline bonus lifts an article above the SAME article without it. It
+// deliberately does not outrank a second unit: one unit in the headline is a
+// clearer signal than one unit buried, but two units is broader ground.
+check(
+  'a unit named in the headline beats the same unit buried in the body',
+  SEL.leverageOf({ units: 1, headlineUnits: 1 }) > SEL.leverageOf({ units: 1 })
+);
+
+// The case the old threshold missed: a mid-score article feeding several units.
+const mixed = [
+  { id: 1, score: 43, units: 4, headlineUnits: 0, headline: 'four units, mid score' },
+  { id: 2, score: 66, units: 0, headlineUnits: 0, headline: 'high score, no unit' },
+  { id: 3, score: 48, units: 0, headlineUnits: 0, headline: 'ok score, no unit' },
+  { id: 4, score: 22, units: 3, headlineUnits: 0, headline: 'three units, junk score' },
+];
+const picked = SEL.selectForDrafting(mixed, { minItems: 0 }).picked.map((r) => r.id);
+check('a mid-score article feeding four units is drafted', picked.includes(1));
+// The score cannot separate a gala dinner (70, no unit) from an AP
+// infrastructure spend (55, no unit) — both score highly for the same reasons.
+// So an unmatched article is never drafted automatically; it is reported as a
+// vocabulary gap instead.
+check('a high score with no syllabus unit is NOT drafted', !picked.includes(2));
+check('nor a middling one', !picked.includes(3));
+check(
+  'but the old behaviour is restorable for one run',
+  SEL.selectForDrafting(mixed, { minItems: 0, unmatchedMinScore: 55 }).picked.some((r) => r.id === 2)
+);
+check('leverage cannot rescue an article the scorer called junk', !picked.includes(4));
+
+// Ordering decides what survives --limit, so it must put leverage first.
+const order = SEL.selectForDrafting(mixed, { minItems: 0 }).picked.map((r) => r.id);
+check('the syllabus-anchored article outranks the unmatched high scorer', order[0] === 1);
+
+// A thin edition must still produce a digest — but never by reaching into
+// articles that connect to nothing, which is how the junk got in before.
+const thin = [
+  { id: 10, score: 40, units: 2, headlineUnits: 0, headline: 'a' },
+  { id: 11, score: 36, units: 1, headlineUnits: 0, headline: 'b' },
+  { id: 12, score: 70, units: 0, headlineUnits: 0, headline: 'no unit at all' },
+];
+const thinPick = SEL.selectForDrafting(thin, { minItems: 3, maxItems: 35 }).picked.map((r) => r.id);
+check('a thin edition reaches further down the ranked list', thinPick.length >= 2);
+check('and never pads with an article that connects to nothing', !thinPick.includes(12));
+
+// The cap keeps a rich paper from producing a digest nobody can read.
+const many = Array.from({ length: 60 }, (_, i) => ({
+  id: 100 + i, score: 50, units: 2, headlineUnits: 0, headline: `x${i}`,
+}));
+check('the cap bounds a rich edition', SEL.selectForDrafting(many).picked.length === 35);
+check('and is overridable', SEL.selectForDrafting(many, { maxItems: 10 }).picked.length === 10);
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

@@ -31,6 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const db = require('../db');
+const SELECT = require('../lib/select');
 const { requireAuth, requireAdmin } = require('../auth');
 const ingest = require('../lib/ingest');
 
@@ -234,20 +235,35 @@ router.post('/:id/draft', (req, res) => {
   // A hand-picked list has already been validated against this edition, so its
   // own length IS the count. Both branches are a number, so the check below
   // reads the same either way.
+  // How many the run will actually take.
+  //
+  // With no explicit threshold this now asks the ADAPTIVE selector rather than
+  // counting rows over a flat score, so the number the admin is shown is the
+  // number that will be drafted. Counting one way and drafting another is how
+  // "24 waiting" turns into 35 items in the queue.
   const waiting = picked.length
     ? picked.length
-    : db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM np_articles
-            WHERE edition_id = ? AND status NOT IN ('duplicate', 'discarded')
-              AND score IS NOT NULL AND score >= ?
-              ${redraft ? '' : 'AND item_id IS NULL'}`
-        )
-        .get(id, Number.isFinite(minScore) ? minScore : 55).n;
+    : Number.isFinite(minScore)
+      ? db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM np_articles
+              WHERE edition_id = ? AND status NOT IN ('duplicate', 'discarded')
+                AND score IS NOT NULL AND score >= ?
+                ${redraft ? '' : 'AND item_id IS NULL'}`
+          )
+          .get(id, minScore).n
+      : SELECT.selectForDrafting(
+          SELECT.candidateRows(db, id).filter(
+            (r) =>
+              redraft ||
+              !db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(r.id).item_id
+          )
+        ).picked.length;
   if (!waiting) {
     return res.status(409).json({
-      error: 'No articles are waiting to be drafted at that score. Lower the threshold, or ' +
-        'use redraft to include ones already drafted.',
+      error:
+        'Nothing is waiting to be drafted — every article either connects to no syllabus ' +
+        'unit or has been drafted already. Pick articles by hand, or use redraft.',
     });
   }
 

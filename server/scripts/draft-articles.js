@@ -6,7 +6,10 @@
 //
 //   node server/scripts/draft-articles.js <editionId> [options]
 //
-//     --min-score N      only articles scoring at or above this (default 45)
+//     --min-score N      flat threshold — only articles scoring at or above
+//                        this. Overrides the adaptive selection below.
+//     --max N            cap on how many the adaptive selection takes (35)
+//     --min N            floor, so a thin edition still yields a digest (12)
 //     --limit N          stop after N articles (default: no limit — draft them all)
 //     --model <id>       override OPENAI_MODEL
 //     --mcqs-per 4       BASE questions per item (default 4). The actual count
@@ -16,7 +19,9 @@
 //     --no-mcqs          draft the notes only, skip question generation
 //     --article ID,ID    redraft these specific articles, whatever they score
 //     --redraft          include articles that already produced an item
-//     --dry-run          print what would be drafted, write nothing
+//     --plan             print the SELECTION and stop — no model calls, no cost
+//     --dry-run          draft everything and print it, but write nothing.
+//                        Note this still pays for every model call.
 //
 // WHY A SEPARATE PROCESS
 //
@@ -42,6 +47,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const L = require(path.join(ROOT, 'content-pipeline', 'ca-daily', 'lib'));
 const D = require(path.join(__dirname, '..', 'src', 'lib', 'draft'));
+const SELECT = require(path.join(__dirname, '..', 'src', 'lib', 'select'));
 
 L.loadEnv();
 
@@ -58,20 +64,23 @@ let openRunId = null;
 function parseArgs(argv) {
   const args = {
     editionId: Number(argv[2]),
-    // 45, not 55.
+    // null means ADAPTIVE — the syllabus-led selection in src/lib/select.js.
     //
-    // At 55 a whole edition yielded six items and the model discarded NONE of
-    // them — and a drafting stage that never discards is one whose input was
-    // pre-filtered so hard it had no judgement left to exercise. The band from
-    // 45 to 54 is where the examinable Andhra Pradesh material was sitting: a
-    // Rs 221-crore medical-infrastructure spend, tenant farmers seeking crop
-    // loans, a Supreme Court comment on MGNREGA, an NGT floodplain case.
+    // The old default was a flat 45, chosen because 55 filtered so hard the
+    // model had no judgement left to exercise and the 45-54 band held the
+    // examinable AP material. That reasoning was right about the SYMPTOM and
+    // wrong about the fix: the problem was never where to put the line, it was
+    // that one line over a five-factor blend cannot separate "examinable" from
+    // "scored well for other reasons". Measured over 248 articles, a flat 45
+    // drafted 10 that feed no syllabus unit and skipped 54 that do.
     //
-    // The score gate is a cheap filter, not a judgement. Below 45 the density of
-    // local crime and features rises sharply; between 45 and 55 the model's own
-    // DISCARD step is a better filter than the score is, and letting it run is
-    // what makes the discard rate mean something.
-    minScore: 45,
+    // Passing --min-score explicitly restores the flat threshold, which is
+    // still the right tool for re-running a known set.
+    minScore: null,
+    // Bounds on the adaptive selection. A thin paper should still yield a
+    // digest; a rich one should not yield ninety items nobody can read.
+    maxItems: null,
+    minItems: null,
     // No cap by default. A run that silently leaves articles behind means the
     // admin has to notice the remainder and click again, and the whole point of
     // the button is that one press finishes the edition. SQLite reads -1 as no
@@ -80,6 +89,11 @@ function parseArgs(argv) {
     model: process.env.OPENAI_MODEL || 'gpt-4o',
     redraft: false,
     dryRun: false,
+    // Print the selection and stop. Unlike --dry-run this makes NO model call:
+    // --dry-run drafts everything and declines to save it, which costs the same
+    // money and the same twenty minutes. When the question is "which articles
+    // would this pick", paying to find out is the wrong answer.
+    plan: false,
     noMcqs: false,
     mcqsPer: 4,
     // Specific articles, by id. For re-drafting a known-bad item after the
@@ -91,12 +105,15 @@ function parseArgs(argv) {
   for (let i = 3; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--min-score') args.minScore = Number(argv[++i]);
+    else if (a === '--max') args.maxItems = Number(argv[++i]);
+    else if (a === '--min') args.minItems = Number(argv[++i]);
     else if (a === '--limit') args.limit = Number(argv[++i]);
     else if (a === '--model') args.model = argv[++i];
     else if (a === '--mcqs-per') args.mcqsPer = Number(argv[++i]);
     else if (a === '--no-mcqs') args.noMcqs = true;
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--plan') args.plan = true;
     else if (a === '--article') args.articleIds = String(argv[++i]).split(',').map(Number).filter(Boolean);
   }
   return args;
@@ -115,9 +132,17 @@ async function main() {
     process.exit(2);
   }
 
-  // Ordered by score so that if --limit bites, it takes the best articles and
-  // not an arbitrary page-order slice. A limit that silently drops the most
-  // examinable story would make the whole score pointless.
+  // WHICH ARTICLES. Three paths, in order of how much the admin asked for.
+  //
+  //   --article ids   hand-picked; the gate is the person, so no rule applies
+  //   --min-score N   the old flat threshold, kept as an explicit override
+  //   (neither)       the adaptive, syllabus-led selection — the default
+  //
+  // The default changed. A flat `score >= 45` is one number over a blend of
+  // five factors, so it was wrong in both directions at once: across 248 scored
+  // articles it drafted 10 that feed no syllabus unit and skipped 54 that do.
+  // See server/src/lib/select.js for the measurement and the rule.
+  let selection = null;
   const articles = args.articleIds
     ? db
         .prepare(
@@ -126,17 +151,38 @@ async function main() {
             .join(',')}) ORDER BY page`
         )
         .all(edition.id, ...args.articleIds)
-    : db
-        .prepare(
-          `SELECT * FROM np_articles
-            WHERE edition_id = ?
-              AND status NOT IN ('duplicate', 'discarded')
-              AND (score IS NOT NULL AND score >= ?)
-              ${args.redraft ? '' : 'AND item_id IS NULL'}
-            ORDER BY score DESC, ap DESC, page
-            LIMIT ?`
-        )
-        .all(edition.id, args.minScore, args.limit);
+    : args.minScore != null
+      ? db
+          .prepare(
+            `SELECT * FROM np_articles
+              WHERE edition_id = ?
+                AND status NOT IN ('duplicate', 'discarded')
+                AND (score IS NOT NULL AND score >= ?)
+                ${args.redraft ? '' : 'AND item_id IS NULL'}
+              ORDER BY score DESC, ap DESC, page
+              LIMIT ?`
+          )
+          .all(edition.id, args.minScore, args.limit)
+      : (() => {
+          const rows = SELECT.candidateRows(db, edition.id).filter(
+            (r) => args.redraft || !db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(r.id).item_id
+          );
+          selection = SELECT.selectForDrafting(rows, {
+            ...(args.maxItems ? { maxItems: args.maxItems } : {}),
+            ...(args.minItems ? { minItems: args.minItems } : {}),
+          });
+          const ids = selection.picked.map((r) => r.id);
+          if (!ids.length) return [];
+          const full = db
+            .prepare(`SELECT * FROM np_articles WHERE id IN (${ids.map(() => '?').join(',')})`)
+            .all(...ids);
+          // Keep the ranked order: if anything is going to be cut short, the
+          // syllabus-anchored ones must be the ones already drafted.
+          const rank = new Map(selection.picked.map((r) => [r.id, r]));
+          return full
+            .sort((a, b) => rank.get(b.id).rank - rank.get(a.id).rank)
+            .slice(0, args.limit > 0 ? args.limit : undefined);
+        })();
 
   const log = [];
   const say = (line) => {
@@ -145,7 +191,11 @@ async function main() {
   };
 
   if (!articles.length) {
-    say(`No articles at or above ${args.minScore} awaiting drafting.`);
+    say(
+      args.minScore != null
+        ? `No articles at or above ${args.minScore} awaiting drafting.`
+        : 'Nothing selected — every article either feeds no syllabus unit or is already drafted.'
+    );
     process.exit(0);
   }
 
@@ -166,6 +216,53 @@ async function main() {
     `${articles.length} article(s) from ${edition.publication} ${edition.date}` +
       `, model ${args.model}${args.dryRun ? ' — DRY RUN' : ''} — about ${eta} min`
   );
+
+  // WHY THESE, AND WHAT IT COST TO LEAVE THE REST.
+  //
+  // An automatic selection that does not explain itself is one nobody can
+  // correct. The two numbers that matter are how many of the chosen articles
+  // actually connect to the syllabus, and — more usefully — which high-scoring
+  // articles were turned down for connecting to nothing. That second list is
+  // not a list of mistakes: it is the vocabulary's to-do list. Four of the ten
+  // it currently rejects are genuinely examinable and unmatched only because
+  // the syllabus map has a gap (a named Act, an inter-state water dispute).
+  if (selection) {
+    const anchored = selection.picked.filter((r) => r.units).length;
+    say(
+      `  selected adaptively: ${anchored} of ${selection.picked.length} feed a syllabus unit` +
+        ` (rank = 55% syllabus leverage + 45% score)`
+    );
+    const nearMiss = selection.rejected
+      .filter((r) => !r.units && r.score >= 45)
+      .slice(0, 6);
+    if (nearMiss.length) {
+      say(`  turned down, scored 45+ but match NO syllabus unit — check the map for gaps:`);
+      for (const r of nearMiss) {
+        say(`    ${String(Math.round(r.score)).padStart(3)}  ${(r.headline || '').slice(0, 58)}`);
+      }
+    }
+  }
+
+  // --plan stops here, before the first model call.
+  if (args.plan) {
+    if (selection) {
+      say('');
+      say('rank  score  units  headline');
+      for (const r of selection.picked) {
+        say(
+          `${String(r.rank).padStart(4)}   ${String(Math.round(r.score)).padStart(3)}` +
+            `    ${String(r.units).padStart(2)}   ${(r.headline || '').slice(0, 62)}`
+        );
+      }
+    } else {
+      for (const a of articles) {
+        say(`  ${String(Math.round(a.score)).padStart(3)}  ${(a.headline || '').slice(0, 66)}`);
+      }
+    }
+    say('');
+    say(`PLAN ONLY — ${articles.length} article(s) would be drafted. Nothing was called or written.`);
+    process.exit(0);
+  }
 
   const prompt = L.readPrompt('prompt-draft.txt');
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
