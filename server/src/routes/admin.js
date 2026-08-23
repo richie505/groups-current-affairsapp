@@ -714,6 +714,124 @@ router.post('/students/:id/reset-link', (req, res) => {
   res.json({ token, expires_at, name: student.name });
 });
 
+// ---- Restore the database from a backup ---------------------------------
+//
+// The other half of server/scripts/backup.js, which has always been able to
+// make a .db snapshot and never had any way to put one back onto a machine
+// you cannot get a shell on.
+//
+// That gap is not theoretical. This app is deployed on a platform with a
+// mounted volume and no SSH, so a database built up over months on a laptop
+// had no route to it at all: no scp, no rsync, no console upload. The content
+// existed and the server could not be given it.
+//
+// SO THIS IS DELIBERATELY NARROW. It is admin-only, it refuses anything that
+// is not a SQLite file carrying this app's own schema, it keeps the database
+// it replaces, and it does not attempt to hot-swap the connection — it exits
+// and lets the supervisor restart the process against the new file. A live
+// better-sqlite3 handle pointed at a replaced inode is a class of bug not
+// worth inventing to save one restart.
+
+const fsp = require('fs');
+const pathp = require('path');
+
+// Every SQLite file on earth starts with this. Checking it costs nothing and
+// rejects the overwhelmingly likely mistake — a PDF, a zip, a .db-wal — before
+// anything touches the filesystem.
+const SQLITE_MAGIC = Buffer.from('SQLite format 3 ', 'latin1');
+
+// A SQLite file is not the same thing as THIS app's database. Restoring some
+// other project's database would leave a server that starts, answers, and is
+// wrong in every particular.
+const REQUIRED_TABLES = ['users', 'ca_items', 'ca_days', 'ca_mcqs', 'ref_units'];
+
+const MAX_DB_BYTES = 512 * 1024 * 1024;
+
+router.post(
+  '/restore',
+  express.raw({ type: ['application/octet-stream', 'application/x-sqlite3'], limit: MAX_DB_BYTES }),
+  (req, res) => {
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || !buf.length) {
+      return res.status(400).json({ error: 'No database received. Send the .db file as the request body.' });
+    }
+    if (!buf.subarray(0, SQLITE_MAGIC.length).equals(SQLITE_MAGIC)) {
+      return res.status(400).json({ error: 'That is not a SQLite database file.' });
+    }
+
+    const live = db.name;
+    const dir = pathp.dirname(live);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const incoming = pathp.join(dir, `incoming-${stamp}.db`);
+
+    try {
+      // Written and inspected as a FILE before anything is replaced. Validating
+      // the buffer in memory cannot tell you whether SQLite can actually open
+      // it; opening it can.
+      fsp.writeFileSync(incoming, buf);
+
+      const Database = require('better-sqlite3');
+      const probe = new Database(incoming, { readonly: true, fileMustExist: true });
+      let counts;
+      try {
+        const names = new Set(
+          probe.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name)
+        );
+        const missing = REQUIRED_TABLES.filter((t) => !names.has(t));
+        if (missing.length) {
+          throw new Error(`Not this application's database — missing ${missing.join(', ')}.`);
+        }
+        counts = {
+          users: probe.prepare('SELECT COUNT(*) AS n FROM users').get().n,
+          items: probe.prepare('SELECT COUNT(*) AS n FROM ca_items').get().n,
+          questions: probe.prepare('SELECT COUNT(*) AS n FROM ca_mcqs').get().n,
+        };
+        // An admin account is what makes the restored database usable. Without
+        // one, a successful restore locks everybody out of a server that is
+        // working perfectly — the failure this whole deployment already hit
+        // once, and not one to walk into a second time.
+        const admins = probe.prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'admin'`).get().n;
+        if (!admins) throw new Error('That database contains no admin account — you would be locked out.');
+      } finally {
+        probe.close();
+      }
+
+      // The database being replaced is KEPT. This is the one operation in the
+      // app that can destroy months of work in a single request.
+      const kept = pathp.join(dir, `replaced-${stamp}.db`);
+      if (fsp.existsSync(live)) {
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        db.close();
+        fsp.copyFileSync(live, kept);
+      }
+
+      fsp.renameSync(incoming, live);
+      // The old WAL and shared-memory files describe the old file. Left behind,
+      // SQLite would try to replay them over the new one.
+      for (const suffix of ['-wal', '-shm']) {
+        try { fsp.unlinkSync(live + suffix); } catch { /* absent is the normal case */ }
+      }
+
+      console.log(`[restore] replaced by admin ${req.user.id}: ${counts.items} items, ` +
+        `${counts.questions} questions, ${counts.users} users. Previous kept at ${kept}`);
+
+      res.json({ ok: true, restored: counts, previous_kept_at: pathp.basename(kept), restarting: true });
+
+      // Restart, so the process reopens the file it now has rather than the
+      // inode it used to have. Deferred past the response so the client is
+      // told what happened instead of seeing a dropped connection.
+      setTimeout(() => {
+        console.log('[restore] exiting so the supervisor restarts against the new database');
+        process.exit(0);
+      }, 250);
+    } catch (e) {
+      try { fsp.unlinkSync(incoming); } catch { /* nothing to clean up */ }
+      console.error('[restore] refused:', e.message);
+      res.status(400).json({ error: e.message });
+    }
+  }
+);
+
 module.exports = router;
 module.exports.validateMcq = validateMcq;
 module.exports.validateItem = validateItem;
