@@ -6,7 +6,101 @@ need one: the load is a few hundred students reading a page a day.
 
 ---
 
-## 1. First deploy
+## 1. First deploy — the short version
+
+**Run `ops/deploy.sh`. It does everything in this section for you.**
+
+This is written out keystroke by keystroke on purpose. If you only do this
+twice a year you will not remember it the second time, and hunting for it in an
+old chat window is not a plan.
+
+### Where the app lives
+
+| | |
+|---|---|
+| Server | `45.129.86.183` |
+| This app | https://ca.45-129-86-183.sslip.io |
+| The Group-2 prep app | https://45-129-86-183.sslip.io — **never touch it** |
+
+There is no registered domain and none is needed. `sslip.io` resolves any name
+shaped like `<anything>.45-129-86-183.sslip.io` back to that IP, which is how
+both apps get a real certificate for free. **Visiting `https://45.129.86.183`
+directly will always show a certificate error** — a certificate is issued to a
+name, and an IP address is not the name. That is expected, not a fault.
+
+### Step 1 — open a terminal
+
+Windows key → type `powershell` → Enter.
+
+### Step 2 — connect
+
+```bash
+ssh root@45.129.86.183
+```
+
+It asks for the password. **Nothing appears on screen as you type it** — no
+dots, no stars. That is normal. Type it and press Enter.
+
+You are on the server when the prompt changes to something like `root@vps:~#`.
+
+### Step 3 — download the script
+
+Right-click to paste in PowerShell; Ctrl+V often does nothing there.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/richie505/groups-current-affairsapp/pyq-extraction-options/ops/deploy.sh -o deploy.sh
+```
+
+Silence means it worked.
+
+To read it first: `less deploy.sh`, then **press `q` to get out**.
+
+### Step 4 — run it
+
+```bash
+bash deploy.sh
+```
+
+Five to ten minutes. Lines beginning `==>` are the stages. A line beginning
+`STOP:` means it refused to continue — that is the script protecting the prep
+app, not a crash. It is safe to run twice; everything already done is skipped.
+
+It finishes by printing the URL, whether the certificate is real, and what is
+still outstanding.
+
+### Step 5 — the three things it will tell you to finish
+
+1. **Change the admin password.** Seeded as `admin@appscca.local` / `Admin@123`.
+   Log in → Profile → Change password. Preflight fails until you do.
+2. **Add the OpenAI key** to `/srv/appsc-ca/.env`, then
+   `systemctl restart appsc-ca`. Drafting does nothing without it; reading and
+   uploading work fine.
+3. **Ship the database, or the app is empty.** From your own laptop — a new
+   PowerShell window, NOT the one logged into the server:
+
+```bash
+node server/scripts/backup.js --verify
+```
+
+```bash
+scp server/data/backups/<newest>.db root@45.129.86.183:/srv/appsc-ca/server/data/ca.db
+```
+
+```bash
+ssh root@45.129.86.183 "chown appsc-ca:appsc-ca /srv/appsc-ca/server/data/ca.db && systemctl restart appsc-ca"
+```
+
+That carries the published items and their questions — and your own reading
+history, which you may prefer to leave behind.
+
+To leave the server: `exit`.
+
+---
+
+## 1b. First deploy — by hand
+
+What `deploy.sh` automates, for when something has gone wrong and you need to
+do a step yourself.
 
 ```bash
 git clone <repo> /srv/appsc-ca && cd /srv/appsc-ca

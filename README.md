@@ -125,6 +125,11 @@ cleanly, so you find out during a restore.
 
 **Deployment, systemd, nginx, restore and a symptom table: [`ops/RUNBOOK.md`](ops/RUNBOOK.md).**
 
+To put this on the server, run [`ops/deploy.sh`](ops/deploy.sh). The step-by-step
+version — which terminal, which keys, what each stage looks like — is
+[section 1 of the runbook](ops/RUNBOOK.md#1-first-deploy--the-short-version).
+It is written out in full because nobody does this often enough to remember it.
+
 ### The checks that run with the tests
 
 `npm --prefix server test` is the bridge suite plus two static gates, both
