@@ -35,8 +35,19 @@ Windows key → type `powershell` → Enter.
 ### Step 2 — connect
 
 ```bash
-ssh root@45.129.86.183
+ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=5 root@45.129.86.183
 ```
+
+`ServerAliveInterval` sends a keepalive every minute. Without it an idle
+session gets dropped by a home router or an ISP's NAT long before anything on
+either end has timed out, and the drop arrives as:
+
+```
+client_loop: send disconnect: Connection reset
+```
+
+That message is the local ssh client reporting the line is gone. It says
+nothing about the server, and it is not caused by anything you typed.
 
 It asks for the password. **Nothing appears on screen as you type it** — no
 dots, no stars. That is normal. Type it and press Enter.
@@ -55,11 +66,35 @@ Silence means it worked.
 
 To read it first: `less deploy.sh`, then **press `q` to get out**.
 
-### Step 4 — run it
+### Step 4 — run it, inside tmux
+
+**Run it in `tmux`, not directly.** When an SSH session dies, everything running
+inside it is killed with it — and a deploy takes long enough that a dropped
+connection during one is an ordinary event, not a rare one. `tmux` keeps the
+script running *on the server*, so a drop costs you the view and not the work.
+
+```bash
+tmux new -s deploy
+```
+
+Then, inside it:
 
 ```bash
 bash deploy.sh
 ```
+
+If the connection drops, reconnect and pick it back up where it was:
+
+```bash
+tmux attach -t deploy
+```
+
+To leave it running on purpose: **Ctrl+B**, then **D**. If tmux is missing,
+`apt-get install -y tmux`.
+
+And if a run did get cut off — **just run it again.** The script is idempotent:
+everything already done is detected and skipped. That property exists for
+exactly this.
 
 Five to ten minutes. Lines beginning `==>` are the stages. A line beginning
 `STOP:` means it refused to continue — that is the script protecting the prep
