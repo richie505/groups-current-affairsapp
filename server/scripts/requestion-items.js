@@ -265,14 +265,21 @@ async function run(args, plan) {
   // replace. Left in, every regenerated question that legitimately re-asks the
   // same fact would be dropped as a duplicate of the row we are deleting, and
   // an item could end the run with fewer questions than it started with.
+  //
+  // Scoped to the items IN THIS RUN, not to every attempt-free question in the
+  // bank. The wider version would have switched the corpus-wide duplicate guard
+  // off for the whole run: a question regenerated on item A could then land as
+  // an exact copy of one on item B that nobody is touching.
+  const ids = plan.map((p) => p.row.id);
   const replacing = new Set(
     db
       .prepare(
         `SELECT question FROM ca_mcqs
-          WHERE NOT EXISTS (SELECT 1 FROM ca_attempts a WHERE a.mcq_id = ca_mcqs.id)
+          WHERE item_id IN (${ids.map(() => '?').join(',')})
+            AND NOT EXISTS (SELECT 1 FROM ca_attempts a WHERE a.mcq_id = ca_mcqs.id)
             AND NOT EXISTS (SELECT 1 FROM ca_mcq_flags f WHERE f.mcq_id = ca_mcqs.id)`
       )
-      .all()
+      .all(...ids)
       .map((r) => L.questionHash(r.question))
   );
   const seenHashes = L.existingQuestionHashes(db);
