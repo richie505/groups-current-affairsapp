@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import useRegistrationOpen from '../hooks/useRegistrationOpen';
 
 // The exam track is asked for at registration rather than left to a default,
 // because it decides what the app shows from the very first screen. Someone
@@ -13,6 +14,7 @@ const TRACKS = [
 
 export default function Register() {
   const { register } = useAuth();
+  const registrationOpen = useRegistrationOpen();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '', exam_track: 'both' });
   const [error, setError] = useState('');
@@ -34,6 +36,29 @@ export default function Register() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // The hook is called above every return, and that is not stylistic — a hook
+  // after an early return is React error #310, which blanks the page. See
+  // scripts/check-hooks.js, which fails the build on it.
+  if (registrationOpen === null) return null;
+
+  // A URL someone bookmarked, or typed, on a deployment that creates accounts
+  // from the admin screen. Filling in a form that is going to be refused is
+  // worse than being told plainly, so this says so before the typing.
+  if (registrationOpen === false) {
+    return (
+      <div className="mx-auto max-w-sm">
+        <h1 className="mb-3 text-2xl font-bold text-slate-900">Sign-up is closed</h1>
+        <p className="mb-4 text-sm text-slate-600">
+          Accounts on this site are created by the administrator, who will send you a link to
+          set your own password. Ask them to add you.
+        </p>
+        <Link to="/login" className="text-sm font-medium text-brand-700 hover:underline">
+          Back to log in
+        </Link>
+      </div>
+    );
   }
 
   return (

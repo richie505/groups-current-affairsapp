@@ -44,6 +44,20 @@ function registrationEnabled(req, res, next) {
   });
 }
 
+// WHAT THE LOGIN SCREEN NEEDS TO KNOW BEFORE ANYONE HAS LOGGED IN.
+//
+// The server has always known registration was closed and the client never
+// asked, so the login page offered a Register link that led to a form that
+// answered 403 on submit. The gate worked; it just looked like a broken app
+// rather than a closed door, and it was the first thing a new student touched.
+//
+// Deliberately the smallest possible public surface: one boolean, no counts,
+// no version, no build information. An unauthenticated endpoint should tell an
+// anonymous caller exactly what it must and nothing else.
+router.get('/config', (req, res) => {
+  res.json({ registration_open: registrationOpen() });
+});
+
 router.post('/register', registrationEnabled, signupRateLimit, (req, res) => {
   const { name, email, password, exam_track } = req.body || {};
   if (!name || !email || !password) {

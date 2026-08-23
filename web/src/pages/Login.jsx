@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import useRegistrationOpen from '../hooks/useRegistrationOpen';
 
 export default function Login() {
   const { login } = useAuth();
+  const registrationOpen = useRegistrationOpen();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,12 +68,23 @@ export default function Login() {
           {busy ? 'Logging in…' : 'Log in'}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-600">
-        No account?{' '}
-        <Link to="/register" className="font-medium text-brand-700 hover:underline">
-          Register
-        </Link>
-      </p>
+      {/* Offered only where it works. With ALLOW_REGISTRATION=0 this link led
+          to a form that answered 403 on submit — the gate was right and the
+          screen made it look like a fault. `null` is still loading, and renders
+          nothing rather than flashing a link that is about to vanish. */}
+      {registrationOpen === true ? (
+        <p className="mt-4 text-center text-sm text-slate-600">
+          No account?{' '}
+          <Link to="/register" className="font-medium text-brand-700 hover:underline">
+            Register
+          </Link>
+        </p>
+      ) : null}
+      {registrationOpen === false ? (
+        <p className="mt-4 text-center text-sm text-slate-600">
+          Accounts are created by your administrator — ask them for an invite link.
+        </p>
+      ) : null}
     </div>
   );
 }
