@@ -125,7 +125,7 @@ export default function QuestionReview({ items, onChanged }) {
 
       <div className="mt-4 space-y-4">
         {items.map((it) => (
-          <article key={it.id} className="rounded-md border border-slate-200 bg-white p-3">
+          <article key={it.id} className="rounded-md border border-slate-200 bg-surface p-3">
             <header className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 {/* The item editor is reached through its DAY — there is no

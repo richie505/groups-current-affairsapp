@@ -25,7 +25,7 @@
 // Block markdown keeps going through <Markdown>. This is for the fields that are
 // a sentence, not a document.
 
-// Ordered: the two-star rule must be tried before the one-star rule, or "**x**"
+// Ordered: the two-star rule must be tried before the one-star rule, or"**x**"
 // parses as an italic containing a starred word.
 const RULES = [
   { re: /\*\*([^*]+)\*\*/, tag: 'strong' },
@@ -34,7 +34,7 @@ const RULES = [
   { re: /`([^`\n]+)`/, tag: 'code' },
 ];
 
-const CODE_CLASS = 'rounded bg-slate-100 px-1 font-mono text-[0.9em] dark:bg-slate-700';
+const CODE_CLASS = 'rounded bg-slate-100 px-1 font-mono text-[0.9em]';
 
 // Splits on the earliest match of any rule, emits it, and recurses on the tail.
 // Recursion rather than a single pass because the tail can hold further
@@ -71,7 +71,7 @@ function parse(text, key = 0) {
  * Renders inline emphasis. Use anywhere a single field of model-written text is
  * shown outside <Markdown>.
  *
- *   <RichText>{item.g1_fact}</RichText>
+ *   <RichText>{item.prelims_facts}</RichText>
  */
 export default function RichText({ children }) {
   return <>{parse(children)}</>;

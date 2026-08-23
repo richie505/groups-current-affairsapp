@@ -11,7 +11,7 @@ import { Chip } from './Badges';
 // The other three tabs are indexed by TOPIC — a vocabulary this project
 // curated. Useful, and not what a candidate revises against. They revise
 // against the syllabus the commission published, unit by unit, and the question
-// they arrive with is "how much have I got for this one, and which ones have I
+// they arrive with is"how much have I got for this one, and which ones have I
 // got nothing for at all".
 //
 // The topic layer could not answer that for Group-II, because all 248 of its
@@ -32,7 +32,7 @@ export default function SyllabusMap() {
 
   return (
     <div className="space-y-6">
-      <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+      <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
         Every unit of the APPSC syllabus, with how much of this app’s material feeds it.{' '}
         <strong>Three of the four papers are answered by ticking a box</strong> — Group-II
         Screening and Mains, and Group-I Prelims — and only Group-I Mains is written, so the same
@@ -41,19 +41,19 @@ export default function SyllabusMap() {
 
       {data.exams.map((exam) => (
         <section key={exam.id}>
-          <header className="mb-2 border-b border-slate-200 pb-2 dark:border-slate-700">
-            <h2 className="font-bold text-slate-900 dark:text-slate-100">{exam.name}</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+          <header className="mb-2 border-b border-slate-200 pb-2">
+            <h2 className="font-bold text-slate-900">{exam.name}</h2>
+            <p className="text-xs text-slate-500">
               {exam.note} · <strong>{exam.covered}</strong> of {exam.feedable} feedable units have
               material · {exam.items} item{exam.items === 1 ? '' : 's'} ·{' '}
               {exam.questions} question{exam.questions === 1 ? '' : 's'}
             </p>
           </header>
 
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="divide-y divide-slate-100">
             {exam.units.map((u) => {
-              // Three states, not two. "Nothing yet" is a gap worth chasing;
-              // "cannot be fed" is a decision already taken and explaining it
+              // Three states, not two."Nothing yet" is a gap worth chasing;
+              //"cannot be fed" is a decision already taken and explaining it
               // here stops it reading as the same thing.
               const cannotFeed = !!u.broad || !!u.unfeedable;
               const empty = !cannotFeed && !u.items;
@@ -68,21 +68,21 @@ export default function SyllabusMap() {
                       className={
                         'mt-0.5 w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold ' +
                         (empty
-                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                          ? 'bg-amber-100 text-amber-800'
                           : cannotFeed
-                            ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                            : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200')
+                            ? 'bg-slate-100 text-slate-500'
+                            : 'bg-green-100 text-green-800')
                       }
                     >
                       {u.unit_code}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <span className="block text-sm font-medium text-slate-900">
                         {u.label}
                       </span>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                         {cannotFeed ? (
-                          <Chip className="border-slate-300 bg-slate-100 text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          <Chip className="border-slate-300 bg-slate-100 text-slate-500">
                             {u.unfeedable ? 'a newspaper cannot feed this' : 'matches everything'}
                           </Chip>
                         ) : u.items ? (
@@ -97,7 +97,7 @@ export default function SyllabusMap() {
                             ) : null}
                           </>
                         ) : (
-                          <span className="font-medium text-amber-700 dark:text-amber-400">
+                          <span className="font-medium text-amber-700">
                             nothing yet
                           </span>
                         )}
@@ -126,7 +126,7 @@ function UnitItems({ code }) {
           label is enough to recognise a unit and not enough to revise against;
           this is the sentence the paper is actually set from. */}
       {data.unit.syllabus_text ? (
-        <p className="mb-2 border-l-2 border-slate-200 pl-2 text-xs italic text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <p className="mb-2 border-l-2 border-slate-200 pl-2 text-xs italic text-slate-500">
           <RichText>{data.unit.syllabus_text}</RichText>
         </p>
       ) : null}
@@ -134,7 +134,7 @@ function UnitItems({ code }) {
         <ul className="space-y-1">
           {data.items.map((it) => (
             <li key={it.id} className="text-sm">
-              <Link to={`/item/${it.id}`} className="text-brand-700 hover:underline dark:text-brand-400">
+              <Link to={`/item/${it.id}`} className="text-brand-700 hover:underline">
                 <RichText>{it.headline}</RichText>
               </Link>
               <span className="ml-1 text-xs text-slate-400">

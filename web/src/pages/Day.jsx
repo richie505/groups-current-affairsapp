@@ -116,14 +116,14 @@ export default function Day() {
             <IconChevronLeft /> {longDate(prev)}
           </Link>
         ) : (
-          <span className="text-slate-400">No earlier digest</span>
+          <span className="text-slate-500">No earlier digest</span>
         )}
         {next ? (
           <Link to={`/day/${next}`} className="flex items-center gap-1 font-medium text-brand-700 hover:underline">
             {longDate(next)} <IconChevronRight />
           </Link>
         ) : (
-          <span className="text-slate-400">Up to date</span>
+          <span className="text-slate-500">Up to date</span>
         )}
       </nav>
     </div>

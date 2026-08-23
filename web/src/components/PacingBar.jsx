@@ -23,7 +23,7 @@ export function formatDuration(seconds) {
 }
 
 // Below a minute the exact seconds are useful — the student is nearly there and
-// a bar that says "1 min" for fifty seconds looks stuck. Above it they are not,
+// a bar that says"1 min" for fifty seconds looks stuck. Above it they are not,
 // and would only invite watching.
 function remainingLabel(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
@@ -51,7 +51,7 @@ export default function PacingBar({ pacing, markedRead, onUnlock, onPractise, mc
   // minutes behind.
   const elapsedNow = () => {
     if (!startedAt) return 0;
-    // SQLite writes "YYYY-MM-DD HH:MM:SS" in UTC with no zone marker, which
+    // SQLite writes"YYYY-MM-DD HH:MM:SS" in UTC with no zone marker, which
     // Date parses as local time — an offset of hours. Naming the zone is the
     // whole fix, and getting it wrong here would unlock everything instantly.
     const started = Date.parse(`${startedAt.replace(' ', 'T')}Z`);
@@ -87,22 +87,22 @@ export default function PacingBar({ pacing, markedRead, onUnlock, onPractise, mc
     <section
       className={`mb-4 rounded-lg border px-3 py-2.5 ${
         unlocked
-          ? 'border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40'
-          : 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-950/40'
+          ? 'border-green-300 bg-green-50'
+          : 'border-brand-200 bg-brand-50'
       }`}
       aria-live="polite"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         {unlocked ? (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-green-800 dark:text-green-300">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-green-800">
             <IconCheck /> Time&rsquo;s up — time to practise
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-brand-800 dark:text-brand-200">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-brand-800">
             <IconLock /> Questions unlock in {remainingLabel(remaining)}
           </span>
         )}
-        <span className="ml-auto text-xs text-slate-600 dark:text-slate-400">
+        <span className="ml-auto text-xs text-slate-600">
           {/* Where the number came from, which matters: a student who set four
               minutes should be told it is their four minutes, not the app's. */}
           {pacing.mode === 'custom'
@@ -112,7 +112,7 @@ export default function PacingBar({ pacing, markedRead, onUnlock, onPractise, mc
       </div>
 
       <div
-        className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        className="h-1.5 overflow-hidden rounded-full bg-slate-200"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -146,12 +146,12 @@ export default function PacingBar({ pacing, markedRead, onUnlock, onPractise, mc
               : 'Open the questions'}
             <span aria-hidden="true">→</span>
           </button>
-          <span className="text-xs text-slate-600 dark:text-slate-400">
+          <span className="text-xs text-slate-600">
             You have read it; now find out whether it stuck.
           </span>
         </div>
       ) : (
-        <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+        <p className="mt-1.5 text-xs text-slate-600">
           The clock is running — leave and come back and it keeps its place. Change or switch off
           your pace in Your account.
         </p>
