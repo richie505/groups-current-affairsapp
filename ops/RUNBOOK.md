@@ -59,7 +59,7 @@ You are on the server when the prompt changes to something like `root@vps:~#`.
 Right-click to paste in PowerShell; Ctrl+V often does nothing there.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/richie505/groups-current-affairsapp/pyq-extraction-options/ops/deploy.sh -o deploy.sh
+curl -fsSL https://raw.githubusercontent.com/richie505/groups-current-affairsapp/master/ops/deploy.sh -o deploy.sh
 ```
 
 Silence means it worked.

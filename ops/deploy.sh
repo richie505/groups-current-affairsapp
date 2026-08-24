@@ -25,7 +25,7 @@ set -euo pipefail
 APP_USER=appsc-ca
 APP_DIR=/srv/appsc-ca
 REPO=https://github.com/richie505/groups-current-affairsapp.git
-BRANCH=pyq-extraction-options
+BRANCH=master
 PORT=4100              # bound to 127.0.0.1 only — nginx is the front door
 SERVICE=appsc-ca
 NGINX_SITE=appsc-ca
