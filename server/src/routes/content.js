@@ -4,6 +4,7 @@ const { requireAuth } = require('../auth');
 const { seedRevisionItem, scheduleOutcome, fmt, addDays } = require('../lib/revision');
 const { buildQuiz } = require('../lib/quiz');
 const { renderDigest, digestFilename } = require('../lib/digestMarkdown');
+const { renderDigestPdf, digestPdfFilename } = require('../lib/digestPdf');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -341,15 +342,16 @@ router.get('/days/:date', (req, res) => {
 // review gate: the admin needs to read the day as a candidate would before
 // deciding it is fit to publish, and no route may hand unreviewed material to
 // somebody preparing for an exam.
-router.get('/days/:date/export.md', (req, res) => {
-  const isAdmin = req.user.role === 'admin';
+// Shared by both export routes below, so a markdown file and a PDF of the
+// same day can never disagree about which items or questions belong in it.
+function loadDigestData(date, isAdmin) {
   const day = db
     .prepare(
       `SELECT id, date, title, intro_markdown, status FROM ca_days
         WHERE date = ?${isAdmin ? '' : " AND status = 'published'"}`
     )
-    .get(req.params.date);
-  if (!day) return res.status(404).json({ error: 'No digest for that date.' });
+    .get(date);
+  if (!day) return null;
 
   const draft = day.status !== 'published';
 
@@ -387,6 +389,14 @@ router.get('/days/:date/export.md', (req, res) => {
     for (const r of rows) byItem.get(r.item_id)?.push(r);
   }
 
+  return { day, items, byItem, draft };
+}
+
+router.get('/days/:date/export.md', (req, res) => {
+  const data = loadDigestData(req.params.date, req.user.role === 'admin');
+  if (!data) return res.status(404).json({ error: 'No digest for that date.' });
+  const { day, items, byItem, draft } = data;
+
   const markdown = renderDigest(day, items, byItem, { draft });
   const filename = digestFilename(day.date);
 
@@ -396,6 +406,22 @@ router.get('/days/:date/export.md', (req, res) => {
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(markdown);
+});
+
+// Same material as export.md, as a file a student can actually open and read
+// without a markdown app — see server/src/lib/digestPdf.js for why this is a
+// second renderer rather than a markdown-to-PDF conversion of the first.
+router.get('/days/:date/export.pdf', (req, res) => {
+  const data = loadDigestData(req.params.date, req.user.role === 'admin');
+  if (!data) return res.status(404).json({ error: 'No digest for that date.' });
+  const { day, items, byItem, draft } = data;
+
+  const filename = digestPdfFilename(day.date);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  const doc = renderDigestPdf(day, items, byItem, { draft });
+  doc.pipe(res);
 });
 
 // The latest published digest — what "Today" actually resolves to.

@@ -140,7 +140,7 @@ export default function AdminDays() {
                 folder. */}
             <DownloadDigest
               date={d.date}
-              label={d.status === 'published' ? '.md' : 'Draft .md'}
+              label={d.status === 'published' ? 'PDF' : 'Draft PDF'}
               className="!px-2 !py-1 !text-xs !font-semibold"
             />
             {d.status === 'published' ? (
