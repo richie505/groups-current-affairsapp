@@ -376,6 +376,44 @@ function subHeader(doc, text, color = ACCENT) {
 }
 
 /**
+ * A tinted, bordered box for Syllabus and Verify — pulled out of the running
+ * text entirely so they read as their own note rather than as another line
+ * the eye has to separate from the item's actual write-up underneath. Height
+ * is measured BEFORE anything is drawn, so ensureRoom can push the whole box
+ * onto a fresh page rather than let its background and border split across
+ * two pages the way a plain text flow legitimately can.
+ */
+function calloutBox(doc, label, text, { bg, accent, textColor = BODY } = {}) {
+  const padX = 10;
+  const padY = 7;
+  const barW = 4;
+  const boxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const contentX = doc.page.margins.left + barW + padX;
+  const contentWidth = boxWidth - barW - padX * 2;
+
+  doc.font('Helvetica-Bold').fontSize(8);
+  const labelH = doc.currentLineHeight();
+  doc.font('Helvetica').fontSize(9.5);
+  const bodyH = doc.heightOfString(text, { width: contentWidth });
+  const boxHeight = padY * 2 + labelH + 3 + bodyH;
+
+  ensureRoom(doc, boxHeight + 12);
+  const bx = doc.page.margins.left;
+  const by = doc.y;
+
+  doc.roundedRect(bx, by, boxWidth, boxHeight, 4).fillColor(bg).fill();
+  doc.rect(bx, by, barW, boxHeight).fillColor(accent).fill();
+
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(accent)
+    .text(label.toUpperCase(), contentX, by + padY, { characterSpacing: 0.6 });
+  doc.font('Helvetica').fontSize(9.5).fillColor(textColor)
+    .text(text, contentX, by + padY + labelH + 3, { width: contentWidth });
+
+  doc.y = by + boxHeight;
+  doc.moveDown(0.45);
+}
+
+/**
  * @param {object}   day
  * @param {object[]} items
  * @param {Map<number, object[]>} mcqsByItem
@@ -479,13 +517,18 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
       if (item.units?.length) {
         const units = item.units.map((u) => `${u.unit_code}${u.label ? ` — ${u.label}` : ''}`);
-        paragraph(doc, `**Syllabus:** ${units.join(' · ')}`, { size: 9.5, color: MUTED });
+        calloutBox(doc, 'Syllabus', units.join('  ·  '), {
+          bg: '#eff6ff',
+          accent: ACCENT,
+          textColor: BODY,
+        });
       }
       if (Number(item.needs_verify) === 1) {
-        paragraph(
+        calloutBox(
           doc,
-          `**Verify:** ${tidy(item.verify_note) || 'A figure or name in this item is unconfirmed.'}`,
-          { size: 9.5, color: '#b45309' }
+          'Verify',
+          tidy(item.verify_note) || 'A figure or name in this item is unconfirmed.',
+          { bg: '#fffbeb', accent: '#b45309', textColor: '#92400e' }
         );
       }
 
