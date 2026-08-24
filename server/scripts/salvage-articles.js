@@ -38,7 +38,7 @@ const L = require(path.join(ROOT, 'content-pipeline', 'ca-daily', 'lib'));
 L.loadEnv();
 const db = require(path.join(__dirname, '..', 'src', 'db'));
 const D = require(path.join(__dirname, '..', 'src', 'lib', 'draft'));
-const SEL = require(path.join(__dirname, '..', 'src', 'lib', 'select'));
+const SALVAGE = require(path.join(__dirname, '..', 'src', 'lib', 'salvage'));
 
 const editionId = Number(process.argv[2]);
 if (!editionId) {
@@ -49,52 +49,25 @@ const arg = (n, d = null) => {
   const i = process.argv.indexOf(`--${n}`);
   return i === -1 ? d : process.argv[i + 1];
 };
+// The run row this process is responsible for closing. A row left at 'running'
+// IS the lock, so whatever kills this process, it is closed on the way out —
+// otherwise every later salvage on this edition is refused with 'already in
+// progress' and the admin screen has no way to say otherwise.
+let openRunId = null;
+
 const args = {
   plan: process.argv.includes('--plan'),
+  runId: Number(arg('run-id', 0)) || null,
   limit: Number(arg('limit', 0)) || 0,
   model: process.env.OPENAI_MODEL || 'gpt-4o',
 };
 
 const say = (m) => console.log(`[salvage ${editionId}] ${m}`);
 
-/**
- * Everything this edition holds that drafting did not take.
- *
- * Deliberately NOT "everything below the rank cut": an article already drafted
- * into an item must not be salvaged as well, or the same fact arrives twice —
- * once inside a note and once as a card — and the duplicate is invisible until
- * a student meets both.
- */
-function leftovers() {
-  const picked = new Set(
-    SEL.selectForDrafting(SEL.candidateRows(db, editionId)).picked.map((r) => r.id)
-  );
-  return db
-    .prepare(
-      // `status = 'discarded'` means two different things, and only one of them
-      // should be skipped.
-      //
-      // Processing discards it before scoring — sport match reports, local
-      // crime, from-the-archives — and those carry score 0. The DRAFTER
-      // discards it after reading the whole article, and those keep the score
-      // they earned: today 54, 51 and 32. The second group is the best salvage
-      // material in the edition, because a human-scale judgement has already
-      // said "this article is not examinable" without being asked whether it
-      // CARRIES anything examinable.
-      //
-      // Score is the discriminator, not the status: a processing discard has
-      // never been scored, so 0 separates the two exactly.
-      `SELECT a.id, a.headline, a.body, a.dateline, a.score, a.page
-         FROM np_articles a
-        WHERE a.edition_id = ?
-          AND a.item_id IS NULL
-          AND a.status <> 'duplicate'
-          AND (a.status <> 'discarded' OR a.score > 0)
-        ORDER BY a.score DESC`
-    )
-    .all(editionId)
-    .filter((a) => !picked.has(a.id));
-}
+// The definition lives in src/lib/salvage.js because the admin route needs the
+// same one to show a count. Two queries that agree today is not the same thing
+// as one query.
+const leftovers = () => SALVAGE.leftovers(db, editionId);
 
 async function main() {
   const edition = db.prepare('SELECT id, date, publication FROM np_editions WHERE id = ?').get(editionId);
@@ -105,6 +78,21 @@ async function main() {
 
   say(`${rows.length} article(s) drafting did not take, from ${edition.publication} ${edition.date}`);
   if (!rows.length) return;
+
+  // The route claims the lock BEFORE spawning, for the same reason the drafting
+  // route does: a row inserted seconds later leaves a window in which a second
+  // click starts a second run. When run from the command line there is no route,
+  // so the lock is taken here instead.
+  if (!args.plan) {
+    openRunId =
+      args.runId ||
+      L.startRun(db, {
+        windowStart: edition.date,
+        windowEnd: edition.date,
+        mode: `salvage-${editionId}`,
+        model: args.model,
+      });
+  }
 
   if (args.plan) {
     for (const a of rows.slice(0, 30)) {
@@ -226,9 +214,34 @@ async function main() {
   // means it has stopped discriminating and is writing cards about meetings.
   // Both are worth seeing rather than inferring from the review queue.
   if (examined) say(`Salvage rate ${Math.round((kept.length / examined) * 100)}%`);
+
+  if (openRunId != null) {
+    L.finishRun(db, openRunId, {
+      status: 'done',
+      candidates: examined,
+      drafted: kept.length,
+      discarded: empty,
+      log: `Salvaged ${kept.length} of ${examined}; nothing in ${empty}; ${failed} failed.`,
+    });
+    openRunId = null;
+  }
+  say('Nothing is visible to students until you approve it in Admin → Review queue.');
 }
 
 main().catch((e) => {
   console.error(e);
+  if (openRunId != null) {
+    try {
+      L.finishRun(db, openRunId, {
+        status: 'failed',
+        candidates: 0,
+        drafted: 0,
+        discarded: 0,
+        log: String(e && e.stack ? e.stack : e).slice(0, 8000),
+      });
+    } catch {
+      // The original error is what matters and has already been printed.
+    }
+  }
   process.exit(1);
 });

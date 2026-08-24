@@ -7,6 +7,7 @@ import useConfirm from '../../components/useConfirm';
 import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
+import { IconSpinner } from '../../components/Icon';
 
 // Section 1 — Source Intelligence.
 //
@@ -561,6 +562,8 @@ function OneEdition({ id }) {
         />
       ) : null}
 
+      {e.status === 'processed' ? <SalvagePanel editionId={id} onFinished={reload} /> : null}
+
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
         Articles ({live.length})
       </h2>
@@ -607,6 +610,129 @@ function OneEdition({ id }) {
 // bottom of the HIGH band; the counts below the slider say exactly how many
 // articles each choice would send, so the decision is made with the number in
 // view rather than after the bill.
+// THE SECOND PASS: the facts inside the articles drafting turned down.
+//
+// A button of its own rather than something drafting does on the way out. It
+// costs money per article and the paper decides how many articles there are —
+// the same reason drafting is a button and not a consequence of uploading.
+//
+// It deliberately sits BELOW the drafting panel, because that is the order it
+// has to run in: salvage reads what drafting leaves behind, so running it first
+// would take the good material out of the notes.
+function SalvagePanel({ editionId, onFinished }) {
+  const [state, setState] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const running = state?.run?.status === 'running';
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get(`/admin/editions/${editionId}/salvage`);
+      setState(res);
+      return res.run?.status === 'running';
+    } catch {
+      return false;
+    }
+  }, [editionId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const t = setInterval(async () => {
+      const still = await load();
+      if (!still) onFinished?.();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [running, load, onFinished]);
+
+  async function start() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.post(`/admin/editions/${editionId}/salvage`, {});
+      const now = new Date();
+      // Roughly 12s an article — a short prompt and a short answer, against the
+      // ~33s the full drafter takes. Stated as a finishing time rather than a
+      // duration, because that is the thing a person actually wants to know.
+      const done = new Date(now.getTime() + (state?.waiting || 0) * 12 * 1000);
+      const hhmm = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setMsg({
+        kind: 'ok',
+        text:
+          `Started at ${hhmm(now)} — ${state?.waiting || 0} article(s), expected to finish about ` +
+          `${hhmm(done)}. Most will yield nothing, which is normal. You can leave this page.`,
+      });
+      await load();
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+
+  const last = state.run;
+  return (
+    <section className="mb-5 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-violet-800">
+        Salvage the rest
+      </h2>
+      <p className="mt-0.5 text-xs text-slate-600">
+        Reads the articles drafting turned down and keeps only the examinable facts inside them —
+        a named project with its cost, a body with its Act, a rank with its index. No notes, no
+        background. They arrive as <strong>Miscellaneous</strong> cards in the review queue.
+      </p>
+
+      <p className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-700">
+        <span>
+          <strong>{state.waiting}</strong> article(s) left to examine
+        </span>
+        {state.salvaged ? (
+          <span>
+            <strong>{state.salvaged}</strong> card(s) already salvaged from this edition
+          </span>
+        ) : null}
+        {last && last.status !== 'running' ? (
+          <span className="text-slate-500">
+            last run: {last.status}
+            {last.drafted != null ? ` — kept ${last.drafted} of ${last.candidates}` : ''}
+          </span>
+        ) : null}
+      </p>
+
+      {msg ? (
+        <p
+          className={`mt-2 rounded-md px-2.5 py-1.5 text-xs ${
+            msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'
+          }`}
+          role={msg.kind === 'error' ? 'alert' : undefined}
+        >
+          {msg.text}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={start}
+        disabled={busy || running || !state.waiting}
+        className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+      >
+        {running ? <IconSpinner className="animate-spin" /> : null}
+        {running
+          ? 'Salvaging…'
+          : state.waiting
+            ? `Salvage ${state.waiting} article(s)`
+            : 'Nothing left to salvage'}
+      </button>
+    </section>
+  );
+}
+
 function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelection, onFinished }) {
   // THE SCREEN SHOWS THE DECISION INSTEAD OF ASKING FOR A NUMBER.
   //

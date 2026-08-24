@@ -145,6 +145,8 @@ router.post('/:id/process', (req, res) => {
 // than a new column.
 
 const DRAFTER = path.join(__dirname, '..', '..', 'scripts', 'draft-articles.js');
+const SALVAGER = path.join(__dirname, '..', '..', 'scripts', 'salvage-articles.js');
+const SALVAGE = require('../lib/salvage');
 
 // A LOCK THAT CAN BE HELD BY A PROCESS THAT NO LONGER EXISTS.
 //
@@ -455,6 +457,98 @@ router.post('/:id/draft', (req, res) => {
   child.unref();
 
   res.status(202).json({ started: true, id, waiting, runId });
+});
+
+// ---------------------------------------------------------------------------
+// salvage — the facts inside the articles drafting turned down
+// ---------------------------------------------------------------------------
+//
+// A button rather than something drafting does automatically, for the same
+// reason drafting is a button: it costs money per article, and the number of
+// articles is decided by the paper rather than by anyone here.
+router.post('/:id/salvage', (req, res) => {
+  const id = Number(req.params.id);
+  const ed = db.prepare('SELECT id, status, date FROM np_editions WHERE id = ?').get(id);
+  if (!ed) return res.status(404).json({ error: 'No such edition.' });
+  if (ed.status !== 'processed') {
+    return res.status(409).json({ error: 'Process the edition first — there are no articles to read.' });
+  }
+
+  // REFUSES WHILE DRAFTING IS RUNNING, and that is not politeness.
+  //
+  // Salvage works on the articles drafting did NOT take, which it computes from
+  // which articles currently have items. Drafting is changing exactly that while
+  // it runs, so the two together are a race: an article could be drafted AND
+  // salvaged, and the same fact would reach a student twice — once inside a note
+  // and once as a card — with nothing to show it had happened.
+  const drafting = runningDraft(id);
+  if (drafting) {
+    return res.status(409).json({
+      error: 'Drafting is still running. Salvage reads what drafting leaves behind, so it has to wait.',
+      run: drafting,
+    });
+  }
+
+  const waiting = SALVAGE.leftoverCount(db, id);
+  if (!waiting) {
+    return res.status(409).json({
+      error: 'Nothing left to salvage — every article in this edition has been drafted or already examined.',
+    });
+  }
+
+  let runId;
+  try {
+    runId = L.startRun(db, {
+      windowStart: ed.date,
+      windowEnd: ed.date,
+      mode: `salvage-${id}`,
+      model: String(req.query.model || process.env.OPENAI_MODEL || ''),
+    });
+  } catch (e) {
+    if (/UNIQUE constraint failed/i.test(e.message)) {
+      return res.status(409).json({ error: 'A salvage run is already in progress.' });
+    }
+    throw e;
+  }
+
+  const argv = [SALVAGER, String(id), '--run-id', String(runId)];
+  if (req.query.limit) argv.push('--limit', String(Number(req.query.limit) || 0));
+  if (req.query.model) argv.push('--model', String(req.query.model));
+
+  const child = spawn(process.execPath, argv, {
+    detached: true,
+    stdio: 'ignore',
+    cwd: path.join(__dirname, '..', '..', '..'),
+  });
+  child.on('error', (e) => {
+    db.prepare(
+      `UPDATE ca_runs SET status = 'failed', finished_at = datetime('now'), log = ?
+        WHERE id = ? AND status = 'running'`
+    ).run(`The salvage pass could not be started: ${e.message}`, runId);
+    console.error(`Could not start salvage for edition ${id}: ${e.message}`);
+  });
+  child.unref();
+
+  res.status(202).json({ started: true, id, waiting, runId });
+});
+
+// How much this edition still has to salvage, and the last run's outcome. Same
+// shape as the drafting poll so the client needs one code path.
+router.get('/:id/salvage', (req, res) => {
+  const id = Number(req.params.id);
+  const run = db
+    .prepare(`SELECT * FROM ca_runs WHERE mode = ? ORDER BY id DESC LIMIT 1`)
+    .get(`salvage-${id}`);
+  res.json({
+    waiting: SALVAGE.leftoverCount(db, id),
+    salvaged: db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM ca_items i JOIN np_articles a ON a.item_id = i.id
+          WHERE a.edition_id = ? AND i.salvaged = 1`
+      )
+      .get(id).n,
+    run: run || null,
+  });
 });
 
 // Poll target while a run is in flight, and the record of the last one after it
