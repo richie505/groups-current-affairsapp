@@ -114,6 +114,7 @@ function parseArgs(argv) {
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--plan') args.plan = true;
+    else if (a === '--no-salvage') args.noSalvage = true;
     // The run row the API already opened. See the lock comment below.
     else if (a === '--run-id') args.runId = Number(argv[++i]);
     else if (a === '--article') args.articleIds = String(argv[++i]).split(',').map(Number).filter(Boolean);
@@ -606,6 +607,39 @@ async function main() {
     `Done: ${itemIds.length} item(s) into the review queue for ${edition.date}, ` +
       `${discarded.length} discarded.`
   );
+
+  // THE SALVAGE PASS FOLLOWS, AUTOMATICALLY.
+  //
+  // Chained here rather than from the route so it happens however drafting was
+  // started — the admin button, the command line, a future cron. A step that
+  // only runs when a particular caller remembers to ask is a step that stops
+  // running.
+  //
+  // AFTER finishRun, not before: this process holds the `edition-N` lock until
+  // then, and although salvage takes a different one (`salvage-N`), starting a
+  // second worker while the first still looks live is the shape of bug that
+  // took seven drafting runs in three minutes.
+  //
+  // Detached and unref'd, so this process can exit immediately. Its failures are
+  // its own: the salvage worker closes its own run row however it dies, and the
+  // items already drafted are on disk and unaffected either way.
+  if (!args.noSalvage) {
+    try {
+      const { spawn } = require('child_process');
+      const child = spawn(
+        process.execPath,
+        [path.join(__dirname, 'salvage-articles.js'), String(edition.id), '--model', args.model],
+        { detached: true, stdio: 'ignore', cwd: ROOT }
+      );
+      child.unref();
+      say('Salvage pass started on the articles this run did not take (--no-salvage to skip).');
+    } catch (e) {
+      // Worth a line and not worth failing the drafting run for. Seventeen items
+      // are already in the queue; the cards can be started from the button.
+      say(`Could not start the salvage pass: ${e.message}. Start it from the edition screen.`);
+    }
+  }
+
   say('Nothing is visible to students until you approve it in Admin → Review queue.');
   process.exit(0);
 }

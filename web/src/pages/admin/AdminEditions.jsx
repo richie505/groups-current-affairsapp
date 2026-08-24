@@ -687,6 +687,10 @@ function SalvagePanel({ editionId, onFinished }) {
         a named project with its cost, a body with its Act, a rank with its index. No notes, no
         background. They arrive as <strong>Miscellaneous</strong> cards in the review queue.
       </p>
+      <p className="mt-1 text-xs text-slate-500">
+        This runs automatically after drafting. The button is here for when you want to run it
+        again, or on an edition drafted before the pass existed.
+      </p>
 
       <p className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-700">
         <span>
@@ -871,6 +875,13 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
       <p className="mt-0.5 text-xs text-slate-600">
         Turns scored articles into drafted items in the review queue. Nothing reaches students
         until you approve it there.
+      </p>
+      {/* Said here, on the button that starts it, rather than left to be
+          discovered. The salvage pass costs money too, and a spend that begins
+          without having been mentioned is the kind a person finds on a bill. */}
+      <p className="mt-1 text-xs text-violet-800">
+        When this finishes, the <strong>salvage pass</strong> starts by itself on the articles this
+        run did not take — keeping only the examinable facts inside them, as Miscellaneous cards.
       </p>
 
       {picking ? (
