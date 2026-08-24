@@ -13,6 +13,15 @@
 
 /var/log/appsc-ca-backup.log
 /var/log/certbot-deploy.log {
+    # ROTATE AS ROOT, EXPLICITLY.
+    #
+    # /var/log on Ubuntu is root:syslog and group-writable, and logrotate
+    # refuses to touch a file whose parent directory is writable by a group
+    # other than root unless told whose authority to use. Without this it
+    # silently skips both files with:
+    #   error: skipping "..." because parent directory has insecure permissions
+    # — a rotation that is configured, enabled, and does nothing.
+    su root root
     weekly
     rotate 8
     compress

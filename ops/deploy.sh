@@ -326,9 +326,14 @@ fi
 # database is fine for a year and then is not.
 say "Installing log rotation"
 install -m 644 "$APP_DIR/ops/logrotate-appsc-ca" /etc/logrotate.d/appsc-ca
-logrotate --debug /etc/logrotate.d/appsc-ca >/dev/null 2>&1 \
-  && echo "    /etc/logrotate.d/appsc-ca (config parses)" \
-  || warn "logrotate config did not parse — check /etc/logrotate.d/appsc-ca"
+# `logrotate --debug` exits non-zero whenever it SKIPS a file, which it does
+# for a log that does not exist yet — so the exit code says nothing about
+# whether the config is valid. Grep for a real error instead.
+if logrotate --debug /etc/logrotate.d/appsc-ca 2>&1 | grep -q '^error:'; then
+  warn "logrotate reported an error — run: logrotate --debug /etc/logrotate.d/appsc-ca"
+else
+  echo "    /etc/logrotate.d/appsc-ca"
+fi
 
 say "Installing the renewal reload hook"
 mkdir -p /etc/letsencrypt/renewal-hooks/deploy
