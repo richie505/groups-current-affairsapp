@@ -27,7 +27,13 @@ proper noun with a number, a date, a rank or an authority attached:
 
   - a named project, scheme or mission — with its cost, length, capacity,
     location or implementing body
-  - a person with the post they were appointed to, and by whom
+  - a person with the PUBLIC OFFICE they were appointed to, and by whom —
+    a constitutional post, a ministry, a commission, a regulator, a court, a
+    public body. NOT an office inside a political party. "Nitin Nabin — BJP
+    president" is a party matter and belongs nowhere near this file; "Mohsen
+    Rezaei — Supreme National Security Council of Iran" is a state institution
+    and belongs in it. If the post exists only because the party exists, leave
+    it out.
   - a body, committee or tribunal with its parent Act, year, seat or chairperson
   - a report or index with its publisher, and India's or AP's rank in it
   - a figure with its unit, its year and what it measures
