@@ -1,18 +1,22 @@
-# Log rotation for the two files this app writes outside journald.
+# Log rotation for the files this app writes outside journald.
 #
 # Installed to /etc/logrotate.d/appsc-ca by ops/deploy.sh.
 #
-# Neither grows fast — the backup log is two lines a night and the certbot hook
-# writes one line every sixty days. Both are also unbounded, and an unbounded
-# file on the same disk as the database is the kind of thing that is fine for a
-# year and then is not.
+# None of the three grow fast — the backup log is a couple of lines a night,
+# the certbot hook writes one line every sixty days, and the watchdog log
+# (ops/watchdog.sh) writes nothing at all in the common case, only when it had
+# to act. All three are unbounded left alone, and an unbounded file on the
+# same disk as the database is the kind of thing that is fine for a year and
+# then is not.
 #
-# `missingok` because the certbot log does not exist until the first renewal,
-# and logrotate treating that as an error would put a failure in the daily mail
+# `missingok` because the certbot log does not exist until the first renewal
+# and the watchdog log does not exist until it first has something to say —
+# logrotate treating either as an error would put a failure in the daily mail
 # for something entirely normal.
 
 /var/log/appsc-ca-backup.log
-/var/log/certbot-deploy.log {
+/var/log/certbot-deploy.log
+/var/log/appsc-ca-watchdog.log {
     # ROTATE AS ROOT, EXPLICITLY.
     #
     # /var/log on Ubuntu is root:syslog and group-writable, and logrotate
