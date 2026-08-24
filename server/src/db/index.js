@@ -119,6 +119,21 @@ db.exec(schema);
     // shipped with a single angle field, so existing rows keep their fact and
     // angle and simply have the new sections empty until edited or redrafted.
     ca_items: [
+      // A FACT SALVAGED FROM AN ARTICLE THAT WAS NOT ITSELF EXAMINABLE.
+      //
+      // "Adani calls on Karnataka CM" is a routine political statement and the
+      // scorer is right to rank it low. But paragraph nine names a twin-tube
+      // tunnel road with a length and a cost, and that is a question. The
+      // article is not worth an item; the fact is.
+      //
+      // A flag rather than a fifth value in the bucket CHECK, for two reasons.
+      // Changing a CHECK constraint in SQLite means rebuilding the table, which
+      // is not something to do to 180 live rows for a display grouping. And the
+      // bucket stays TRUE: a salvaged fact about a Karnataka tunnel really is
+      // national and a salvaged AP fact really is AP, so filtering by bucket
+      // keeps working. The digest groups on this flag; the data does not lose
+      // anything.
+      ['salvaged', 'INTEGER NOT NULL DEFAULT 0'],
       // What KIND of source this item was drafted from — 'report', 'oped',
       // 'editorial', 'interview'. Copied onto the item rather than read through
       // np_articles because it has to survive the article: an item outlives the

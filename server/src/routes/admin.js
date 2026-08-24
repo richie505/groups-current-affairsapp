@@ -50,7 +50,19 @@ function validateItem(body, { forPublish = false } = {}) {
     errors.push('Importance must be 1, 2 or 3.');
   }
   if (forPublish) {
-    if (!String(body.notes_markdown || '').trim()) errors.push('Notes are required to publish.');
+    // A SALVAGED CARD HAS NO NOTES, AND THAT IS THE POINT.
+    //
+    // It came from an article with no theme worth writing about — a tunnel
+    // length inside a story about a political meeting. Requiring 200 words of
+    // notes would force exactly the padding the salvage pass exists to avoid.
+    // What it must have instead is the facts, and that is checked below for
+    // every item regardless.
+    if (!Number(body.salvaged) && !String(body.notes_markdown || '').trim()) {
+      errors.push('Notes are required to publish.');
+    }
+    if (Number(body.salvaged) && !String(body.prelims_facts || '').trim()) {
+      errors.push('A salvaged card is only its facts — it cannot publish without them.');
+    }
     if (Number(body.relevance_g2) === 1 && !String(body.prelims_facts || '').trim()) {
       errors.push('Group-II lane needs a prelims-facts block.');
     }

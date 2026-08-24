@@ -7,7 +7,7 @@ import ItemCard from '../components/ItemCard';
 import LensToggle from '../components/LensToggle';
 import DownloadDigest from '../components/DownloadDigest';
 import Markdown from '../components/Markdown';
-import { BUCKETS, longDate, readingMinutes } from '../lib/caFormat';
+import { BUCKETS, MISC, longDate, readingMinutes } from '../lib/caFormat';
 import { IconCalendar, IconChevronLeft, IconChevronRight, IconLock } from '../components/Icon';
 import { formatDuration } from '../components/PacingBar';
 
@@ -28,9 +28,17 @@ export default function Day() {
   if (error) return <ErrorState error={error} onRetry={reload} />;
 
   const { day, items, pacing, prev, next } = data;
+  // Salvaged cards come out of the bucket grouping and go to the bottom.
+  //
+  // They are a different kind of thing: a fact lifted from a story that was not
+  // itself exam material, with no note and no background. Mixed into Andhra
+  // Pradesh or National they would read as thin items rather than as what they
+  // are, and the reader would rightly wonder why half of them have no notes.
+  const salvaged = items.filter((i) => Number(i.salvaged) === 1);
+  const main = items.filter((i) => Number(i.salvaged) !== 1);
   const grouped = BUCKET_ORDER.map((bucket) => ({
     bucket,
-    items: items.filter((i) => i.bucket === bucket),
+    items: main.filter((i) => i.bucket === bucket),
   })).filter((g) => g.items.length);
 
   const readCount = items.filter((i) => i.marked_read).length;
@@ -115,6 +123,23 @@ export default function Day() {
               </div>
             </section>
           ))}
+
+          {salvaged.length ? (
+            <section>
+              <h2 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-600">
+                {MISC.label}
+                <span className="rounded-full bg-slate-200 px-1.5 text-xs font-semibold text-slate-700">
+                  {salvaged.length}
+                </span>
+              </h2>
+              <p className="mb-2 text-xs text-slate-500">{MISC.blurb}</p>
+              <div className="space-y-3">
+                {salvaged.map((item) => (
+                  <ItemCard key={item.id} item={item} />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
 

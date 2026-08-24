@@ -25,6 +25,7 @@ const BUCKET_LABELS = {
   national: 'National',
   international: 'International',
   dynamic: 'Syllabus update',
+  misc: 'Miscellaneous',
 };
 
 const FORMAT_LABELS = {
@@ -176,10 +177,17 @@ function metaLine(item) {
  * @returns {string} the whole file
  */
 function renderDigest(day, items, mcqsByItem, { draft = false } = {}) {
+  // Salvaged cards are pulled out of the bucket grouping and given their own
+  // section at the end, exactly as the digest screen shows them. They carry no
+  // note and no static background — filed under National they would read as
+  // broken items rather than as the facts they are.
+  const salvaged = items.filter((i) => Number(i.salvaged) === 1);
+  const main = items.filter((i) => Number(i.salvaged) !== 1);
   const grouped = BUCKET_ORDER.map((bucket) => ({
     bucket,
-    items: items.filter((i) => i.bucket === bucket),
+    items: main.filter((i) => i.bucket === bucket),
   })).filter((g) => g.items.length);
+  if (salvaged.length) grouped.push({ bucket: 'misc', items: salvaged });
 
   const totalQuestions = items.reduce((n, i) => n + (mcqsByItem.get(i.id) || []).length, 0);
 

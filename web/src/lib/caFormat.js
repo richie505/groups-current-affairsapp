@@ -16,6 +16,16 @@ export const BUCKETS = {
   dynamic: { label: 'Syllabus update', short: 'Update', cls: 'bg-green-100 text-green-800 border-green-300' },
 };
 
+// Not a bucket in the database — a salvaged item keeps its real bucket, so a
+// tunnel in Karnataka is still `national` and filtering by bucket still works.
+// This is the label for the group the digest shows them in.
+export const MISC = {
+  label: 'Miscellaneous',
+  short: 'Misc',
+  cls: 'bg-violet-100 text-violet-800 border-violet-300',
+  blurb: 'Facts worth knowing, lifted from stories that were not themselves exam material.',
+};
+
 export const FORMATS = {
   direct_recall: 'Direct recall',
   negative_statement: 'Incorrect-statement',

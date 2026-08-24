@@ -837,11 +837,11 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       `INSERT INTO ca_items (day_id, headline, event_date, bucket, subject_tag,
          notes_markdown, static_linkage, static_notes, prelims_facts,
          importance, relevance_g2, needs_verify, verify_note,
-         source_genre, source_author, order_index, status)
+         source_genre, source_author, order_index, salvaged, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
          @notes_markdown, @static_linkage, @static_notes, @prelims_facts,
          @importance, @relevance_g2, @needs_verify, @verify_note,
-         @source_genre, @source_author, @order_index, 'draft')`
+         @source_genre, @source_author, @order_index, @salvaged, 'draft')`
     );
     const insKeyword = db.prepare(
       'INSERT OR IGNORE INTO ca_item_keywords (item_id, keyword) VALUES (?, ?)'
@@ -917,6 +917,9 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         relevance_g2: Number(r.relevance_g2) === 0 ? 0 : 1,
         needs_verify: Number(r.needs_verify) ? 1 : 0,
         verify_note: r.verify_note || '',
+        // Set by the salvage pass, which writes a fact card rather than a note.
+        // Everything else that reaches here is a full item.
+        salvaged: Number(r.salvaged) ? 1 : 0,
         // What KIND of source this came from, carried onto the item rather than
         // read back through np_articles. An item outlives the edition row that
         // produced it, and "is this a fact or a columnist's claim" has to stay

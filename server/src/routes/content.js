@@ -53,7 +53,7 @@ function itemColumns(alias = 'i') {
           ${alias}.subject_tag, ${alias}.notes_markdown, ${alias}.static_linkage,
           ${alias}.static_notes,
           ${alias}.prelims_facts,
-          ${alias}.importance, ${alias}.relevance_g2,
+          ${alias}.importance, ${alias}.relevance_g2, ${alias}.salvaged,
           ${alias}.needs_verify, ${alias}.verify_note,
           ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
@@ -77,7 +77,7 @@ function itemColumns(alias = 'i') {
 function listColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
           ${alias}.subject_tag, ${alias}.prelims_facts,
-          ${alias}.importance, ${alias}.relevance_g2,
+          ${alias}.importance, ${alias}.relevance_g2, ${alias}.salvaged,
           ${alias}.needs_verify, ${alias}.verify_note,
           ${alias}.source_genre, ${alias}.source_author, ${alias}.order_index`;
 }
