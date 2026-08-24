@@ -380,9 +380,6 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
       doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(metaLine(item));
       doc.moveDown(0.35);
 
-      if (item.keywords?.length) {
-        paragraph(doc, `**Blueprint angles:** ${item.keywords.join(' · ')}`, { size: 9.5, color: MUTED });
-      }
       if (item.units?.length) {
         const units = item.units.map((u) => `${u.unit_code}${u.label ? ` — ${u.label}` : ''}`);
         paragraph(doc, `**Syllabus:** ${units.join(' · ')}`, { size: 9.5, color: MUTED });
