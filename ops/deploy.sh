@@ -324,6 +324,15 @@ fi
 # Rotation for the two logs this app writes outside journald. Neither grows
 # fast; both are unbounded, and an unbounded file on the same disk as the
 # database is fine for a year and then is not.
+# The off-site backup script is INSTALLED but not scheduled here, and not
+# pointed at a remote. It needs a private repo and a deploy key with write
+# access — two things that live in somebody's GitHub account, not in a script.
+# Installing it silently and leaving it broken would be worse than not
+# installing it, so the closing banner asks for the two steps instead.
+say "Installing the off-site backup script"
+install -m 755 "$APP_DIR/ops/backup-offsite.sh" /opt/backup-offsite-ca.sh
+echo "    /opt/backup-offsite-ca.sh (needs a repo + deploy key — see the notes below)"
+
 say "Installing log rotation"
 install -m 644 "$APP_DIR/ops/logrotate-appsc-ca" /etc/logrotate.d/appsc-ca
 # `logrotate --debug` exits non-zero whenever it SKIPS a file, which it does
