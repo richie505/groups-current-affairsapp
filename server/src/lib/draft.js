@@ -821,6 +821,33 @@ function canonicaliser(valid) {
 // back to the item it produced and marked 'drafted'. That link is the whole
 // point of Section 3, and it is set inside the same transaction as the insert so
 // an article can never be marked drafted against an item that was rolled back.
+/**
+ * The provenance of a print item: publication, edition, date and page.
+ *
+ * Built here rather than at each call site because two lanes now write it —
+ * the drafter and the salvage pass — and two copies of a citation format is
+ * how an archive ends up with 'The Hindu (Vijayawada), 2026-08-21, p.9' beside
+ * 'The Hindu 21 Aug p9' and no way to sort or match them.
+ *
+ * The edition row knows all of it exactly, so nothing here is asked of a model.
+ * A fabricated URL on a print item is worse than no citation, which is why the
+ * url is empty by construction rather than optional.
+ */
+function printCitation(edition, article) {
+  return {
+    url: '',
+    publisher:
+      `${edition.publication}` +
+      `${edition.edition ? ` (${edition.edition})` : ''}` +
+      `, ${edition.date}, p.${article?.page ?? '?'}`,
+    // A newspaper report is secondary. PIB, PRS, RBI and department portals are
+    // primary, and conflating them would quietly weaken every 'rests only on
+    // secondary reporting' warning the review queue shows.
+    is_primary: 0,
+    fetched_at: edition.date,
+  };
+}
+
 function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {} }) {
   const offVocabKeywords = new Set();
   const droppedUnits = [];
@@ -1343,6 +1370,7 @@ async function generateMcqs(
 }
 
 module.exports = {
+  printCitation,
   PRINT_ADDENDUM,
   SYLLABUS_ADDENDUM,
   OPINION_ADDENDUM,

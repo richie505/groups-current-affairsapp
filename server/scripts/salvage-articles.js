@@ -182,6 +182,12 @@ async function main() {
     }
 
     record.salvaged = 1;
+    // A salvaged card cited nothing, which made 24 of the 25 'published item
+    // cites no source' warnings on the first real day. The provenance was known
+    // all along — the edition and the page are right here — and a fact card is
+    // exactly the kind of item whose source a reviewer will want, because there
+    // is no note around it to judge it by.
+    record.sources = [D.printCitation(edition, a)];
     record._articleId = a.id;
     record.notes_markdown = '';
     record.static_linkage = '';

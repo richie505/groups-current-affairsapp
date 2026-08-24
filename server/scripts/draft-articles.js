@@ -423,20 +423,11 @@ async function main() {
     // model is told to return no sources at all; anything it returns anyway is
     // dropped here rather than trusted, because a fabricated URL on a print item
     // is worse than no citation.
-    record.sources = [
-      {
-        url: '',
-        publisher:
-          `${edition.publication}` +
-          `${edition.edition ? ` (${edition.edition})` : ''}` +
-          `, ${edition.date}, p.${article.page ?? '?'}`,
-        // A newspaper report is secondary. PIB, PRS, RBI and department portals
-        // are primary, and conflating them would quietly weaken every "rests
-        // only on secondary reporting" warning the review queue shows.
-        is_primary: 0,
-        fetched_at: edition.date,
-      },
-    ];
+    // The article is the provenance and the edition row knows it exactly. The
+    // model is told to return no sources at all; anything it returns anyway is
+    // dropped here rather than trusted. See printCitation in src/lib/draft.js,
+    // shared with the salvage pass so both lanes cite in one format.
+    record.sources = [D.printCitation(edition, article)];
     record._articleId = article.id;
 
     // What KIND of piece this came from, and whose claims these therefore are.
