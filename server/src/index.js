@@ -24,6 +24,7 @@ const adminRoutes = require('./routes/admin');
 const topicRoutes = require('./routes/topics');
 const editionRoutes = require('./routes/editions');
 
+const compression = require('compression');
 const app = express();
 
 // nginx terminates TLS and proxies to this process, so without this every
@@ -102,6 +103,35 @@ const CSP = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join('; ');
+
+// COMPRESSION, AND WHY IT IS DONE HERE RATHER THAN IN NGINX.
+//
+// Measured on the live server: the JavaScript bundle went over the wire at
+// 525,890 bytes when it gzips to 153,021, and a month of revision at 284,464
+// when it gzips to 69,263. Nothing was compressed except HTML.
+//
+// The cause was nginx's own default: Ubuntu ships nginx.conf with `gzip on`
+// and `gzip_types` COMMENTED OUT, and with no types listed nginx compresses
+// text/html and nothing else. So every student's first load pulled 3.4x more
+// JavaScript than it needed to, on mobile data.
+//
+// That file is shared with the Group-2 prep app, and this app does not get to
+// change how the neighbour's responses are served. Compressing here fixes this
+// app wherever it runs — behind that nginx, behind a different one, or on a
+// laptop with no proxy at all — and nginx passes an already-encoded response
+// through rather than compressing it twice.
+//
+// Before the CSP and the routes, because it has to see the response body on
+// the way out, and after nothing that matters: it only sets headers when there
+// is a body to encode.
+app.use(
+  compression({
+    // The default is 1 KB. Below that the gzip header costs more than the
+    // saving, and most of this API's small replies — /today, a poll, an error
+    // — are well under it.
+    threshold: 1024,
+  })
+);
 
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', CSP);
