@@ -439,7 +439,7 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
             });
           }
           doc.moveDown(0.3);
-          key.push({ number: questionNumber, mcq, itemNumber });
+          key.push({ number: questionNumber, mcq, itemNumber, headline: item.headline });
         }
       }
 
@@ -456,21 +456,59 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
     doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text('Answer key');
     doc.moveDown(0.3);
     sectionRule(doc);
+    doc.moveDown(0.3);
 
-    for (const { number, mcq, itemNumber: n } of key) {
+    // Grouped by item, with the headline repeated as a running header — "Q71
+    // (item 11)" on its own told a student nothing about what item 11 was,
+    // a hundred entries deep with no way to scan back to page 3 and check.
+    // Answer letters get a filled badge rather than plain "(b)" text, and a
+    // rule closes each entry, so a page of a hundred questions reads as a
+    // list rather than one continuous run of paragraphs.
+    let lastItem = null;
+    const badge = 15;
+    const textX = doc.page.margins.left + badge + 8;
+    const textWidth = doc.page.width - textX - doc.page.margins.right;
+
+    for (const { number, mcq, itemNumber: n, headline } of key) {
+      if (n !== lastItem) {
+        ensureRoom(doc, 36);
+        if (lastItem !== null) doc.moveDown(0.35);
+        doc.font('Helvetica-Bold').fontSize(11).fillColor(ACCENT)
+          .text(`${n}. ${tidy(headline)}`);
+        doc.moveDown(0.25);
+        lastItem = n;
+      }
+
       ensureRoom(doc, 40);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(BODY)
-        .text(`Q${number} — (${mcq.correct_option})`, { continued: true });
-      doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(`   (item ${n})`);
+      const y0 = doc.y;
+      doc.roundedRect(doc.page.margins.left, y0, badge, badge, 3).fillColor(ACCENT).fill();
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+        .text(mcq.correct_option.toUpperCase(), doc.page.margins.left, y0 + 3.5, { width: badge, align: 'center' });
+
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BODY)
+        .text(`Q${number}`, textX, y0, { continued: true, width: textWidth });
       if (mcq.explanation) {
-        doc.moveDown(0.1);
-        paragraph(doc, tidy(mcq.explanation), { size: 9.5, color: BODY });
+        doc.font('Helvetica').fillColor(BODY).text(`  ${tidy(mcq.explanation)}`, { continued: false });
+      } else {
+        doc.text('', { continued: false });
       }
+
+      // doc.y is only comparable to y0 if the explanation stayed on the same
+      // page as the badge — a long one can wrap onto a new page, where doc.y
+      // resets near the top and is naturally SMALLER than y0. Applying the
+      // badge-height floor across that boundary put "Correct as of" near the
+      // bottom of the new page with a huge blank gap above it, because it was
+      // really y0 (a bottom-of-the-previous-page value) plus a few points.
+      if (doc.y >= y0) doc.y = Math.max(doc.y, y0 + badge);
       if (mcq.fact_as_of) {
+        doc.x = textX;
         doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(MUTED)
-          .text(`Correct as of ${mcq.fact_as_of}.`);
+          .text(`Correct as of ${mcq.fact_as_of}.`, textX, doc.y, { width: textWidth });
       }
-      doc.moveDown(0.35);
+      doc.moveDown(0.2);
+      doc.moveTo(textX, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y)
+        .lineWidth(0.4).strokeColor(RULE).stroke();
+      doc.moveDown(0.25);
     }
   }
 
