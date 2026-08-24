@@ -114,6 +114,37 @@ function registerUpload({ buffer, filename, publication, edition, date, language
   };
 }
 
+/**
+ * Deletes the uploaded PDF once the edition's per-edition pipeline (draft,
+ * then salvage) has actually finished with it — not right after extraction,
+ * because a botched OCR pass is easiest to notice by re-running extraction on
+ * the original file, and that window needs to stay open through drafting.
+ *
+ * By the time draft+salvage are done, everything the PDF could still be worth
+ * is already in np_articles / np_units in the database; the file itself is
+ * just bytes on disk that a year of daily uploads would otherwise pile into
+ * gigabytes. The DB row survives untouched — citations, `file_present`, and
+ * the admin edition screen all already treat a missing file as normal.
+ *
+ * Set KEEP_UPLOADED_PDFS=1 to opt out and keep every original on disk.
+ */
+function cleanupUploadedFile(editionId, { onLog } = {}) {
+  const log = onLog || (() => {});
+  if (process.env.KEEP_UPLOADED_PDFS === '1') return;
+  const ed = db.prepare('SELECT stored_path FROM np_editions WHERE id = ?').get(editionId);
+  if (!ed || !ed.stored_path) return;
+  try {
+    if (fs.existsSync(ed.stored_path)) {
+      const bytes = fs.statSync(ed.stored_path).size;
+      fs.unlinkSync(ed.stored_path);
+      log(`Uploaded PDF removed (${Math.round(bytes / 1024 / 1024)} MB freed) — already extracted into the database.`);
+    }
+  } catch (e) {
+    // Untidy, not incorrect: the edition and everything it produced are unaffected.
+    log(`Could not remove the uploaded PDF: ${e.message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // extract + segment + merge + persist
 // ---------------------------------------------------------------------------
@@ -528,6 +559,7 @@ function scoreEdition(editionId, { log } = {}) {
 module.exports = {
   UPLOAD_DIR,
   registerUpload,
+  cleanupUploadedFile,
   processEdition,
   scoreEdition,
   extractLayout,

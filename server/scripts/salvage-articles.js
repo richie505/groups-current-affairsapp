@@ -224,6 +224,12 @@ async function main() {
       log: `Salvaged ${kept.length} of ${examined}; nothing in ${empty}; ${failed} failed.`,
     });
     openRunId = null;
+
+    // Salvage is the last stage of the per-edition pipeline (draft, then
+    // salvage) in the normal flow, so this is where the uploaded PDF's job is
+    // actually done — everything it had to offer is in np_articles by now.
+    const ING = require(path.join(__dirname, '..', 'src', 'lib', 'ingest'));
+    ING.cleanupUploadedFile(editionId, { onLog: say });
   }
   say('Nothing is visible to students until you approve it in Admin → Review queue.');
 }

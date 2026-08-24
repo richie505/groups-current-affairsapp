@@ -638,6 +638,13 @@ async function main() {
       // are already in the queue; the cards can be started from the button.
       say(`Could not start the salvage pass: ${e.message}. Start it from the edition screen.`);
     }
+  } else {
+    // Salvage isn't coming, so this run is the end of the pipeline for this
+    // edition — clean up the PDF here instead of leaving it to a stage that
+    // was deliberately skipped.
+    require(path.join(__dirname, '..', 'src', 'lib', 'ingest')).cleanupUploadedFile(edition.id, {
+      onLog: say,
+    });
   }
 
   say('Nothing is visible to students until you approve it in Admin → Review queue.');
