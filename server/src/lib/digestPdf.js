@@ -45,6 +45,17 @@ const FORMAT_LABELS = {
 
 const IMPORTANCE_LABELS = { 1: 'Tier 1', 2: 'Tier 2', 3: 'Tier 3' };
 
+// Same palette as the section headers on the day screen in the app itself —
+// a student flipping between the app and a printout should not have to learn
+// a second colour language for the same five buckets.
+const BUCKET_COLORS = {
+  ap: '#b45309',
+  national: '#475569',
+  international: '#2563eb',
+  dynamic: '#15803d',
+  misc: '#7c3aed',
+};
+
 const INK = '#0f172a';
 const BODY = '#1e293b';
 const MUTED = '#64748b';
@@ -216,7 +227,7 @@ function renderTable(doc, lines) {
  * Scanning line-by-line and switching mode on what the CURRENT line looks
  * like — independent of blank lines — catches a table wherever it sits.
  */
-function markdownBlock(doc, markdown, { headingSize = 11 } = {}) {
+function markdownBlock(doc, markdown, { headingSize = 11, accent = RULE } = {}) {
   const lines = tidy(markdown).split('\n');
   let i = 0;
 
@@ -233,8 +244,12 @@ function markdownBlock(doc, markdown, { headingSize = 11 } = {}) {
       const level = headingMatch[1].length;
       const size = Math.max(9, headingSize - (level - 1));
       ensureRoom(doc, size + 10);
+      const hy = doc.y;
+      doc.moveTo(doc.page.margins.left, hy + 1)
+        .lineTo(doc.page.margins.left, hy + size - 1)
+        .lineWidth(2).strokeColor(accent).stroke();
       doc.font('Helvetica-Bold').fontSize(size).fillColor(INK)
-        .text(headingMatch[2], { continued: false });
+        .text(headingMatch[2], doc.page.margins.left + 8, hy, { continued: false });
       doc.moveDown(0.25);
       i += 1;
       continue;
@@ -294,7 +309,7 @@ function markdownBlock(doc, markdown, { headingSize = 11 } = {}) {
 }
 
 function metaLine(item) {
-  const bits = [BUCKET_LABELS[item.bucket] || item.bucket];
+  const bits = [];
   if (item.bucket === 'dynamic' && item.subject_tag) bits.push(item.subject_tag);
   bits.push(IMPORTANCE_LABELS[item.importance] || 'Tier 2');
   if (item.event_date) bits.push(`Event: ${item.event_date}`);
@@ -311,6 +326,53 @@ function sectionRule(doc) {
     .lineTo(doc.page.width - doc.page.margins.right, doc.y)
     .lineWidth(0.75).strokeColor(RULE).stroke();
   doc.moveDown(0.5);
+}
+
+/** A small filled pill with a label — the bucket tag on an item, drawn to
+ *  match the coloured badge the app itself shows, not left as plain text
+ *  competing with everything else on the meta line. Returns its width, so
+ *  the caller can place what comes after it. */
+function pill(doc, x, y, text, color) {
+  doc.font('Helvetica-Bold').fontSize(8);
+  const w = doc.widthOfString(text) + 12;
+  doc.roundedRect(x, y, w, 14, 7).fillColor(color).fill();
+  doc.fillColor('#ffffff').text(text, x, y + 3.5, { width: w, align: 'center' });
+  return w;
+}
+
+/** A small filled circle holding a number or short label — used for the
+ *  running item number against the headline, and echoed in the answer key
+ *  for the correct-option letter, so the two visually reference each other. */
+function badge(doc, x, y, text, color, size = 15) {
+  doc.roundedRect(x, y, size, size, 3).fillColor(color).fill();
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(size >= 15 ? 9 : 8)
+    .text(text, x, y + (size - 9) / 2 + 1, { width: size, align: 'center' });
+}
+
+/**
+ * Sets doc.y to at least `before + minHeight` — UNLESS a page break happened
+ * during whatever was just drawn, in which case doc.y already reset to the
+ * top of the new page and is naturally smaller than `before`. Comparing
+ * across that boundary is how the answer key's "Correct as of" line once
+ * ended up floating near the bottom of a page with a blank gap above it;
+ * every fixed-height element placed after a variable-height text flow in
+ * this file goes through this rather than a bare Math.max.
+ */
+function afterFlow(doc, before, minHeight) {
+  if (doc.y >= before) doc.y = Math.max(doc.y, before + minHeight);
+}
+
+/** A left-hand colour tick plus a bold label — the recurring sub-section
+ *  marker (Static background, Prelims facts, Questions) so those read as
+ *  structure rather than as bold text sitting in the middle of a paragraph. */
+function subHeader(doc, text, color = ACCENT) {
+  ensureRoom(doc, 26);
+  const y = doc.y;
+  doc.moveTo(doc.page.margins.left, y + 1)
+    .lineTo(doc.page.margins.left, y + 11)
+    .lineWidth(2.5).strokeColor(color).stroke();
+  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(INK).text(text, doc.page.margins.left + 8, y);
+  doc.moveDown(0.2);
 }
 
 /**
@@ -333,11 +395,17 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
   const totalQuestions = items.reduce((n, i) => n + (mcqsByItem.get(i.id) || []).length, 0);
 
-  // Header
+  // Header. A coloured rule under the eyebrow rather than a plain black block
+  // of text at the top — the same weight given to the cover of the standalone
+  // "how to read this" guide, so the two feel like one product's output
+  // rather than a styled page followed by a plain-text dump.
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(ACCENT)
+    .text('APPSC CURRENT AFFAIRS', { characterSpacing: 0.5 });
+  doc.moveDown(0.2);
   doc.font('Helvetica-Bold').fontSize(20).fillColor(INK)
-    .text(`Current Affairs — ${longDate(day.date)}`);
+    .text(longDate(day.date));
   if (day.title) {
-    doc.moveDown(0.15);
+    doc.moveDown(0.1);
     doc.font('Helvetica-Bold').fontSize(12).fillColor(BODY).text(tidy(day.title));
   }
   doc.moveDown(0.2);
@@ -351,8 +419,11 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
     doc.font('Helvetica-Bold').fontSize(10).fillColor('#b91c1c')
       .text('DRAFT — not published. These items have not been reviewed. Do not circulate.');
   }
+  doc.moveDown(0.5);
+  doc.moveTo(doc.page.margins.left, doc.y)
+    .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+    .lineWidth(2).strokeColor(ACCENT).stroke();
   doc.moveDown(0.6);
-  sectionRule(doc);
 
   if (!items.length) {
     doc.font('Helvetica-Oblique').fontSize(11).fillColor(MUTED)
@@ -366,18 +437,44 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
   const key = [];
 
   for (const group of grouped) {
-    ensureRoom(doc, 40);
-    doc.font('Helvetica-Bold').fontSize(15).fillColor(ACCENT).text(BUCKET_LABELS[group.bucket]);
-    doc.moveDown(0.3);
+    ensureRoom(doc, 46);
+    const bucketColor = BUCKET_COLORS[group.bucket] || ACCENT;
+    const gy = doc.y;
+    doc.roundedRect(doc.page.margins.left, gy + 1, 6, 17, 2).fillColor(bucketColor).fill();
+    doc.font('Helvetica-Bold').fontSize(15).fillColor(INK)
+      .text(BUCKET_LABELS[group.bucket], doc.page.margins.left + 15, gy, { continued: true });
+    doc.font('Helvetica').fontSize(10).fillColor(MUTED)
+      .text(`   ${group.items.length} item${group.items.length === 1 ? '' : 's'}`);
+    doc.moveDown(0.35);
 
     for (const item of group.items) {
       itemNumber += 1;
-      ensureRoom(doc, 60);
+      ensureRoom(doc, 70);
 
+      // A numbered badge against the headline, and the bucket repeated as a
+      // coloured pill on the meta row below it — the same colour a student
+      // sees on this item in the app, rather than a plain-text label that
+      // reads no differently from the sentence next to it.
+      const badgeSize = 18;
+      const ix = doc.page.margins.left;
+      const headX = ix + badgeSize + 8;
+      const headWidth = doc.page.width - headX - doc.page.margins.right;
+      const iy = doc.y;
+
+      badge(doc, ix, iy, String(itemNumber), bucketColor, badgeSize);
       doc.font('Helvetica-Bold').fontSize(12.5).fillColor(INK)
-        .text(`${itemNumber}. ${tidy(item.headline)}`);
+        .text(tidy(item.headline), headX, iy, { width: headWidth });
+      afterFlow(doc, iy, badgeSize);
       doc.moveDown(0.15);
-      doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(metaLine(item));
+
+      const py = doc.y;
+      const pw = pill(doc, headX, py, BUCKET_LABELS[group.bucket], bucketColor);
+      const meta = metaLine(item);
+      if (meta) {
+        doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+          .text(meta, headX + pw + 8, py + 3, { width: headWidth - pw - 8 });
+      }
+      afterFlow(doc, py, 16);
       doc.moveDown(0.35);
 
       if (item.units?.length) {
@@ -392,20 +489,16 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
         );
       }
 
-      if (item.notes_markdown) markdownBlock(doc, item.notes_markdown, { headingSize: 11 });
+      if (item.notes_markdown) markdownBlock(doc, item.notes_markdown, { headingSize: 11, accent: bucketColor });
 
       if (item.static_linkage || item.static_notes) {
-        ensureRoom(doc, 30);
-        doc.font('Helvetica-Bold').fontSize(10.5).fillColor(INK).text('Static background');
-        doc.moveDown(0.2);
+        subHeader(doc, 'Static background', bucketColor);
         if (item.static_linkage) paragraph(doc, `_${tidy(item.static_linkage)}_`, { size: 9.5, color: MUTED });
-        if (item.static_notes) markdownBlock(doc, item.static_notes, { headingSize: 10 });
+        if (item.static_notes) markdownBlock(doc, item.static_notes, { headingSize: 10, accent: bucketColor });
       }
 
       if (item.prelims_facts) {
-        ensureRoom(doc, 30);
-        doc.font('Helvetica-Bold').fontSize(10.5).fillColor(INK).text('Prelims facts');
-        doc.moveDown(0.2);
+        subHeader(doc, 'Prelims facts', bucketColor);
         for (const line of factLines(item.prelims_facts)) {
           doc.fontSize(10).fillColor(BODY);
           const bx = doc.page.margins.left + 10;
@@ -419,9 +512,7 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
       const mcqs = mcqsByItem.get(item.id) || [];
       if (mcqs.length) {
-        ensureRoom(doc, 30);
-        doc.font('Helvetica-Bold').fontSize(10.5).fillColor(INK).text('Questions');
-        doc.moveDown(0.2);
+        subHeader(doc, 'Questions', bucketColor);
         for (const mcq of mcqs) {
           questionNumber += 1;
           ensureRoom(doc, 70);
@@ -447,7 +538,14 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
         doc.font('Helvetica-Oblique').fontSize(9).fillColor(MUTED)
           .text(`Source: The Hindu${item.source_genre ? ` (${item.source_genre})` : ''} — ${tidy(item.source_author)}`);
       }
-      doc.moveDown(0.5);
+      doc.moveDown(0.4);
+      // A visible boundary between one item and the next — moveDown alone
+      // left 58 items reading as one continuous flow with no fixed point
+      // to tell where one ended and the next began.
+      doc.moveTo(doc.page.margins.left, doc.y)
+        .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+        .lineWidth(0.5).strokeColor(RULE).stroke();
+      doc.moveDown(0.4);
     }
   }
 
@@ -465,8 +563,8 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
     // rule closes each entry, so a page of a hundred questions reads as a
     // list rather than one continuous run of paragraphs.
     let lastItem = null;
-    const badge = 15;
-    const textX = doc.page.margins.left + badge + 8;
+    const badgeSize = 15;
+    const textX = doc.page.margins.left + badgeSize + 8;
     const textWidth = doc.page.width - textX - doc.page.margins.right;
 
     for (const { number, mcq, itemNumber: n, headline } of key) {
@@ -481,9 +579,7 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
       ensureRoom(doc, 40);
       const y0 = doc.y;
-      doc.roundedRect(doc.page.margins.left, y0, badge, badge, 3).fillColor(ACCENT).fill();
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
-        .text(mcq.correct_option.toUpperCase(), doc.page.margins.left, y0 + 3.5, { width: badge, align: 'center' });
+      badge(doc, doc.page.margins.left, y0, mcq.correct_option.toUpperCase(), ACCENT, badgeSize);
 
       doc.font('Helvetica-Bold').fontSize(9.5).fillColor(BODY)
         .text(`Q${number}`, textX, y0, { continued: true, width: textWidth });
@@ -493,13 +589,11 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
         doc.text('', { continued: false });
       }
 
-      // doc.y is only comparable to y0 if the explanation stayed on the same
-      // page as the badge — a long one can wrap onto a new page, where doc.y
-      // resets near the top and is naturally SMALLER than y0. Applying the
-      // badge-height floor across that boundary put "Correct as of" near the
-      // bottom of the new page with a huge blank gap above it, because it was
-      // really y0 (a bottom-of-the-previous-page value) plus a few points.
-      if (doc.y >= y0) doc.y = Math.max(doc.y, y0 + badge);
+      // See afterFlow's own comment: a long explanation can wrap onto a new
+      // page, where doc.y resets near the top and is naturally smaller than
+      // y0 — that boundary is exactly what once put "Correct as of" near the
+      // bottom of the new page with a blank gap above it.
+      afterFlow(doc, y0, badgeSize);
       if (mcq.fact_as_of) {
         doc.x = textX;
         doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(MUTED)
@@ -520,8 +614,45 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
       'dates shown and are superseded by later events.'
   );
 
+  numberPages(doc, day);
   doc.end();
   return doc;
+}
+
+/**
+ * A footer on every page — date and "Page N of M" — added last, after every
+ * page already exists, using pdfkit's buffered-page mode: switch to each
+ * page in turn and draw into its bottom margin, which an explicit-position
+ * call can do regardless of where the page's own text cursor stopped.
+ *
+ * A document this long (a heavy day is 150+ pages) with no page numbers at
+ * all was the single thing that made it feel like an undifferentiated dump
+ * rather than a document — nothing to cite, nothing to find your way back to.
+ */
+function numberPages(doc, day) {
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(i);
+    // The footer sits BELOW margins.bottom, in the margin itself — and
+    // pdfkit's own overflow check for .text() compares the y it's given
+    // against that same margins.bottom, whatever the actual page content
+    // does. On a page already full to the bottom, that silently added a
+    // brand new page to hold "the overflowing" footer, which then needed
+    // its own footer, on every page whose content ran close to the edge —
+    // doubling the page count with blanks and leaving the footers on those
+    // pages numbered for a total that no longer matched. Zeroing the bottom
+    // margin for just this one draw call is the standard way to tell pdfkit
+    // "this is deliberately in the margin, don't paginate for it."
+    const savedBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(
+      `${longDate(day.date)}   ·   Page ${i + 1} of ${range.count}`,
+      doc.page.margins.left,
+      doc.page.height - savedBottom + 16,
+      { width: doc.page.width - doc.page.margins.left - doc.page.margins.right, align: 'center' }
+    );
+    doc.page.margins.bottom = savedBottom;
+  }
 }
 
 /** `appsc-current-affairs-2026-08-21.pdf` — sorts by date in any file list. */
