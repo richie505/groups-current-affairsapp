@@ -350,6 +350,27 @@ install -m 755 "$APP_DIR/ops/reload-nginx-after-renewal.sh" \
   /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
 echo "    /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
 
+# Catches what Restart=always structurally cannot: the unit stopped for a
+# reason unrelated to a crash, or the process alive but wedged and not
+# actually answering. See ops/watchdog.sh's own header for what was tested
+# and what was ruled out.
+say "Installing the watchdog"
+install -m 755 "$APP_DIR/ops/watchdog.sh" /opt/appsc-ca-watchdog.sh
+CRON_LINE="*/5 * * * * /opt/appsc-ca-watchdog.sh"
+( crontab -l 2>/dev/null | grep -vF "appsc-ca-watchdog.sh" ; echo "$CRON_LINE" ) | crontab -
+echo "    /opt/appsc-ca-watchdog.sh, cron: every 5 minutes"
+
+# journald is unbounded by default, and on the same disk as the database. Cap
+# it so a noisy week can't fill the disk out from under either app.
+say "Capping journald log size"
+if grep -q '^SystemMaxUse=' /etc/systemd/journald.conf; then
+  sed -i 's/^SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+else
+  sed -i 's/^#SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+fi
+systemctl restart systemd-journald
+echo "    journald capped at 500M"
+
 say "Enabling HTTPS for ${PUBLIC_HOST}"
 cat > /etc/nginx/sites-available/${NGINX_SITE} <<NGINXEOF
 # APPSC Current Affairs — shares 443 with the Group-2 prep app by server_name.
