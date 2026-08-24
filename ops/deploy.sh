@@ -310,6 +310,32 @@ else
   SSL_KEY="$CERT/self.key"
 fi
 
+# A RENEWAL THAT NOBODY TELLS NGINX ABOUT IS A SITE THAT BREAKS ON A DATE.
+#
+# `certonly --webroot` gets a certificate and installs nothing, so the renewal
+# config carries no `installer` and nginx keeps serving the expired certificate
+# out of memory while a valid one sits on disk beside it. Nothing warns you: the
+# renewal succeeds, the timer reports success, and the browser says expired.
+#
+# Installed for every certificate on the box rather than just this one. The prep
+# app uses the nginx installer and reloads itself, so it gets a second reload it
+# does not need — cheaper than a hook that has to work out which certificate it
+# was called for and is wrong about it once.
+# Rotation for the two logs this app writes outside journald. Neither grows
+# fast; both are unbounded, and an unbounded file on the same disk as the
+# database is fine for a year and then is not.
+say "Installing log rotation"
+install -m 644 "$APP_DIR/ops/logrotate-appsc-ca" /etc/logrotate.d/appsc-ca
+logrotate --debug /etc/logrotate.d/appsc-ca >/dev/null 2>&1 \
+  && echo "    /etc/logrotate.d/appsc-ca (config parses)" \
+  || warn "logrotate config did not parse — check /etc/logrotate.d/appsc-ca"
+
+say "Installing the renewal reload hook"
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+install -m 755 "$APP_DIR/ops/reload-nginx-after-renewal.sh" \
+  /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+echo "    /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
+
 say "Enabling HTTPS for ${PUBLIC_HOST}"
 cat > /etc/nginx/sites-available/${NGINX_SITE} <<NGINXEOF
 # APPSC Current Affairs — shares 443 with the Group-2 prep app by server_name.

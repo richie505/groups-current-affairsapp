@@ -274,10 +274,34 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4100;
-const server = app.listen(PORT, () => {
+
+// BIND TO LOCALHOST, BECAUSE NGINX MUST BE THE ONLY DOOR.
+//
+// This listened on every interface, which on the live server meant
+// http://<ip>:4100 answered from the open internet — the whole app, over plain
+// HTTP, with nginx and TLS bypassed. Login credentials on that URL would cross
+// the network in clear text.
+//
+// And it is worse than unencrypted, because `trust proxy` is set above. That
+// tells Express to believe X-Forwarded-For, which is correct for a request
+// arriving through nginx and a gift to one that does not: a caller reaching
+// this port directly can put any value in that header and get a FRESH login
+// throttle bucket for every attempt. The brute-force protection was bypassable
+// by choosing a different port.
+//
+// nginx already proxies to 127.0.0.1, so nothing legitimate changes.
+//
+// BIND_HOST exists for the one case where localhost is wrong: a container
+// platform routes to the container's external interface, so Railway or Docker
+// needs 0.0.0.0 or the health check never connects. It is opt-in rather than
+// the default, because the default should be the safe answer and the exception
+// should have to say so.
+const HOST = process.env.BIND_HOST || '127.0.0.1';
+const server = app.listen(PORT, HOST, () => {
   console.log(
-    `APPSC Current Affairs API listening on http://localhost:${PORT}` +
-      ` (${process.env.NODE_ENV || 'development'})`
+    `APPSC Current Affairs API listening on http://${HOST}:${PORT}` +
+      ` (${process.env.NODE_ENV || 'development'})` +
+      (HOST === '127.0.0.1' ? '' : ' — REACHABLE FROM OFF-HOST, ensure a proxy or firewall fronts it')
   );
 });
 

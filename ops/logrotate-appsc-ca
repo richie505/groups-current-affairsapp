@@ -1,0 +1,26 @@
+# Log rotation for the two files this app writes outside journald.
+#
+# Installed to /etc/logrotate.d/appsc-ca by ops/deploy.sh.
+#
+# Neither grows fast — the backup log is two lines a night and the certbot hook
+# writes one line every sixty days. Both are also unbounded, and an unbounded
+# file on the same disk as the database is the kind of thing that is fine for a
+# year and then is not.
+#
+# `missingok` because the certbot log does not exist until the first renewal,
+# and logrotate treating that as an error would put a failure in the daily mail
+# for something entirely normal.
+
+/var/log/appsc-ca-backup.log
+/var/log/certbot-deploy.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # The writers append and never hold the file open, so there is no signal to
+    # send and nothing to reopen. copytruncate would risk losing lines written
+    # between the copy and the truncate, for no benefit here.
+    create 0640 appsc-ca appsc-ca
+}
