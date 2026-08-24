@@ -271,8 +271,13 @@ function markdownBlock(doc, markdown, { headingSize = 11, accent = RULE } = {}) 
           doc.fontSize(10).fillColor(BODY);
           const bx = doc.page.margins.left + 10;
           ensureRoom(doc, 14);
-          doc.text('•', bx, doc.y, { continued: false, width: 10 });
-          doc.text(' ', { continued: true });
+          // continued: true on the bullet itself, matching the prelims-facts
+          // bullet loop below — continued: false here closed the "paragraph"
+          // right after the dot, so the text that followed started on its
+          // OWN new line instead of next to it. Present in every bulleted
+          // list this renderer has ever produced ("Easily confused with",
+          // "The provisions that get asked") until caught here.
+          doc.text('• ', bx, doc.y, { continued: true });
           const segs = inlineSegments(item);
           segs.forEach((seg, k) => {
             doc.font(fontFor(seg)).text(seg.text, {
@@ -394,7 +399,10 @@ function calloutBox(doc, label, text, { bg, accent, textColor = BODY } = {}) {
   doc.font('Helvetica-Bold').fontSize(8);
   const labelH = doc.currentLineHeight();
   doc.font('Helvetica').fontSize(9.5);
-  const bodyH = doc.heightOfString(text, { width: contentWidth });
+  // Measured on the markup STRIPPED, not the raw text — the model sometimes
+  // writes **bold** into a verify note, and counting the asterisks toward
+  // the wrap width would under-fill the box relative to what actually draws.
+  const bodyH = doc.heightOfString(stripInline(text), { width: contentWidth });
   const boxHeight = padY * 2 + labelH + 3 + bodyH;
 
   ensureRoom(doc, boxHeight + 12);
@@ -406,8 +414,17 @@ function calloutBox(doc, label, text, { bg, accent, textColor = BODY } = {}) {
 
   doc.font('Helvetica-Bold').fontSize(8).fillColor(accent)
     .text(label.toUpperCase(), contentX, by + padY, { characterSpacing: 0.6 });
-  doc.font('Helvetica').fontSize(9.5).fillColor(textColor)
-    .text(text, contentX, by + padY + labelH + 3, { width: contentWidth });
+
+  // Rendered through inlineSegments rather than a bare .text() call — a
+  // verify note that happened to say "**21 August 2026**" was printing the
+  // asterisks literally instead of bolding the date, the one part of this
+  // box a student most needs to actually notice.
+  doc.fontSize(9.5).fillColor(textColor);
+  doc.text('', contentX, by + padY + labelH + 3, { continued: false });
+  const segs = inlineSegments(text);
+  segs.forEach((seg, i) => {
+    doc.font(fontFor(seg)).text(seg.text, { continued: i < segs.length - 1, width: contentWidth });
+  });
 
   doc.y = by + boxHeight;
   doc.moveDown(0.45);
@@ -462,6 +479,14 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
     .lineTo(doc.page.width - doc.page.margins.right, doc.y)
     .lineWidth(2).strokeColor(ACCENT).stroke();
   doc.moveDown(0.6);
+
+  // Present in the markdown export and silently dropped here until now — an
+  // admin-written intro for the day would just never have appeared in the
+  // PDF at all, not even as plain text.
+  if (day.intro_markdown) {
+    markdownBlock(doc, day.intro_markdown, { headingSize: 12, accent: ACCENT });
+    doc.moveDown(0.2);
+  }
 
   if (!items.length) {
     doc.font('Helvetica-Oblique').fontSize(11).fillColor(MUTED)
