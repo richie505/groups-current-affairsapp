@@ -83,6 +83,12 @@ Return ONLY a JSON array. No preamble, no code fence.
 Rules:
   - Vary which letter is correct. Do not put the key on (a) every time.
   - All four options must be distinct.
+  - For assertion_reason and list_matching, "question" ends at the stem —
+    "Choose the correct answer:" or "Select the correct code:" — and must NOT
+    go on to list the four lettered choices itself. Those belong ONLY in
+    option_a through option_d. An option button renders right under the
+    question for each one; writing "(a) ... (b) ... (c) ... (d) ..." into the
+    question text as well prints the same four choices twice on the page.
   - "unit_code" must be one of the codes in the SYLLABUS UNITS block, copied
     exactly. If that block is absent, leave it as "". Do not invent a code and
     do not guess one that looks plausible: a question filed under a unit it does

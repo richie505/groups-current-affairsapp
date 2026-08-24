@@ -848,6 +848,42 @@ function printCitation(edition, article) {
   };
 }
 
+/**
+ * Strips a trailing "(a) ... (b) ... (c) ... (d) ..." block from a question's
+ * stem when it just repeats option_a-d — a habit the model falls into on
+ * list_matching and assertion_reason questions maybe one time in ten, echoing
+ * the exam-paper phrasing it was shown for what those options look like. The
+ * prompt now says not to, but this is the backstop for whenever it slips
+ * anyway, and the one place shared by every caller: draft insertion (new
+ * questions) and the one-time backfill (server/scripts/dedupe-mcq-codes.js,
+ * questions already in the database from before the prompt was fixed).
+ *
+ * Deliberately conservative: only strips when the four bracketed values at
+ * the very end of the text match the actual options, normalised for case and
+ * whitespace. A trailing "(a)...(d)..." that does NOT match option_a-d is
+ * left alone rather than guessed at — it is either a different, legitimate
+ * use of that shape, or a question the drafter got wrong in some other way,
+ * and this function's only job is the one specific, verifiable duplication.
+ */
+function stripEmbeddedOptionCodes(question, options) {
+  const text = String(question || '');
+  const opts = (options || []).map((o) => String(o || '').trim());
+  if (opts.length !== 4 || opts.some((o) => !o)) return text;
+
+  const m =
+    /\n{1,3}(?:[^\n:]{0,40}:\s*\n)?\(a\)\s*([^\n]+)\n\(b\)\s*([^\n]+)\n\(c\)\s*([^\n]+)\n\(d\)\s*([^\n]+)\s*$/i.exec(
+      text
+    );
+  if (!m) return text;
+
+  const norm = (s) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+  const found = [m[1], m[2], m[3], m[4]].map(norm);
+  const expected = opts.map(norm);
+  if (found.some((f, i) => f !== expected[i])) return text;
+
+  return text.slice(0, m.index).replace(/\s+$/, '');
+}
+
 function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {} }) {
   const offVocabKeywords = new Set();
   const droppedUnits = [];
@@ -998,7 +1034,7 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       for (const m of r.mcqs || []) {
         insMcq.run({
           item_id: itemId,
-          question: m.question,
+          question: stripEmbeddedOptionCodes(m.question, [m.option_a, m.option_b, m.option_c, m.option_d]),
           option_a: m.option_a,
           option_b: m.option_b,
           option_c: m.option_c,
@@ -1371,6 +1407,7 @@ async function generateMcqs(
 
 module.exports = {
   printCitation,
+  stripEmbeddedOptionCodes,
   PRINT_ADDENDUM,
   SYLLABUS_ADDENDUM,
   OPINION_ADDENDUM,
