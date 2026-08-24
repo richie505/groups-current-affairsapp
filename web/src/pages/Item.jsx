@@ -21,7 +21,13 @@ import {
   Chip,
 } from '../components/Badges';
 import { longDate, shortDate } from '../lib/caFormat';
-import { IconBookmark, IconCheck, IconLock } from '../components/Icon';
+import {
+  IconBookmark,
+  IconCheck,
+  IconLock,
+  IconChevronLeft,
+  IconChevronRight,
+} from '../components/Icon';
 
 // The prelims-facts block is line-per-fact, so it needs hard breaks. The notes
 // body deliberately does not — there, single newlines inside a paragraph should
@@ -107,10 +113,17 @@ export default function Item() {
 
   return (
     <article>
-      <nav className="mb-3 text-sm text-slate-600">
+      <nav className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
         <Link to={`/day/${item.day_date}`} className="font-medium text-brand-700 hover:underline">
           {longDate(item.day_date)}
         </Link>
+        {/* Where you are in the day. Without it, 'Next' is a button into the
+            dark — there is no way to tell a second item from a second-to-last. */}
+        {item.position?.total ? (
+          <span className="text-slate-500">
+            {item.position.index} of {item.position.total}
+          </span>
+        ) : null}
       </nav>
 
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -367,6 +380,70 @@ export default function Item() {
           )}
         </section>
       ) : null}
+
+      {/* KEEP READING, WITHOUT GOING BACK.
+
+          Finishing an item used to leave the reader on a page whose only exit
+          was a breadcrumb to the digest — where they then had to remember which
+          items they had already opened. A twelve-item day cost twenty-three
+          navigations to read straight through.
+
+          The order here is the same one the digest lists, defined once on the
+          server, so Next always lands on whatever was underneath. And at the end
+          of a day it offers the next day rather than stopping, because that is
+          what the reader was going to do anyway. */}
+      <nav className="mt-8 flex flex-wrap items-stretch gap-2 border-t border-slate-200 pt-4">
+        {item.prev ? (
+          <Link
+            to={`/item/${item.prev.id}`}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-surface p-3 hover:border-brand-300 hover:bg-brand-50/40"
+          >
+            <IconChevronLeft className="shrink-0 text-slate-400" />
+            <span className="min-w-0">
+              <span className="block text-xs uppercase tracking-wide text-slate-500">Previous</span>
+              <span className="block truncate text-sm font-medium text-slate-800">
+                {item.prev.headline}
+              </span>
+            </span>
+          </Link>
+        ) : (
+          <span className="hidden flex-1 sm:block" />
+        )}
+
+        {item.next ? (
+          <Link
+            to={`/item/${item.next.id}`}
+            className="flex min-w-0 flex-1 items-center justify-end gap-2 rounded-lg border border-brand-300 bg-brand-50 p-3 text-right hover:bg-brand-100"
+          >
+            <span className="min-w-0">
+              <span className="block text-xs uppercase tracking-wide text-brand-700">Next</span>
+              <span className="block truncate text-sm font-semibold text-brand-900">
+                {item.next.headline}
+              </span>
+            </span>
+            <IconChevronRight className="shrink-0 text-brand-600" />
+          </Link>
+        ) : item.next_day ? (
+          <Link
+            to={`/day/${item.next_day}`}
+            className="flex min-w-0 flex-1 items-center justify-end gap-2 rounded-lg border border-brand-300 bg-brand-50 p-3 text-right hover:bg-brand-100"
+          >
+            <span className="min-w-0">
+              <span className="block text-xs uppercase tracking-wide text-brand-700">
+                Day finished
+              </span>
+              <span className="block truncate text-sm font-semibold text-brand-900">
+                On to {longDate(item.next_day)}
+              </span>
+            </span>
+            <IconChevronRight className="shrink-0 text-brand-600" />
+          </Link>
+        ) : (
+          <span className="flex flex-1 items-center justify-end p-3 text-sm text-slate-500">
+            Last item of the day — you are up to date.
+          </span>
+        )}
+      </nav>
     </article>
   );
 }

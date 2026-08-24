@@ -47,6 +47,25 @@ function pacingOf(userId) {
   return { mode: row?.pacing || 'off', minutes: row?.pacing_minutes ?? 4 };
 }
 
+// THE ORDER A STUDENT READS A DAY IN.
+//
+// It has to be defined in ONE place, because two things depend on it: the
+// digest screen, which groups items into sections, and the Next button on an
+// item, which has to land on whatever the digest showed underneath it. A Next
+// that disagrees with the list is worse than no Next — it silently skips items
+// and the reader has no way to notice.
+//
+// Andhra Pradesh first: it is roughly half of Papers II and IV and the material
+// no national source covers properly, so on a day when there are ten minutes,
+// the AP block is the one that should get them. Salvaged cards last, because
+// they are facts without notes and reading them first would set the wrong
+// expectation of the day.
+const READING_ORDER = `
+  i.salvaged ASC,
+  CASE i.bucket WHEN 'ap' THEN 0 WHEN 'national' THEN 1
+                WHEN 'international' THEN 2 ELSE 3 END,
+  i.importance, i.order_index, i.id`;
+
 // THE FULL ITEM, for the item page. Everything a student can read.
 function itemColumns(alias = 'i') {
   return `${alias}.id, ${alias}.day_id, ${alias}.headline, ${alias}.event_date, ${alias}.bucket,
@@ -282,7 +301,7 @@ router.get('/days/:date', (req, res) => {
     .prepare(
       `SELECT ${listColumns()} FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE i.day_id = ? AND ${VISIBLE}
-        ORDER BY i.importance, i.order_index, i.id`
+        ORDER BY ${READING_ORDER}`
     )
     .all(day.id);
   attachTags(items, { full: false });
@@ -419,6 +438,36 @@ router.get('/items/:id', (req, res) => {
 
   attachTags([item]);
   attachUserState([item], req.user.id);
+
+  // WHERE THIS ITEM SITS IN THE DAY, so the reader can keep going.
+  //
+  // Before this, finishing an item left you on a page whose only exit was a
+  // breadcrumb back to the digest, where you then had to remember which ones you
+  // had already read. Twelve items meant twenty-three navigations.
+  //
+  // Ids and headlines only — the next item is fetched when it is opened, not
+  // prefetched here. A day is a dozen rows, so this costs SQLite nothing.
+  const order = db
+    .prepare(
+      `SELECT i.id, i.headline FROM ca_items i JOIN ca_days d ON d.id = i.day_id
+        WHERE i.day_id = ? AND ${VISIBLE} ORDER BY ${READING_ORDER}`
+    )
+    .all(item.day_id);
+  const at = order.findIndex((r) => r.id === item.id);
+  item.position = { index: at + 1, total: order.length };
+  item.prev = at > 0 ? order[at - 1] : null;
+  item.next = at >= 0 && at < order.length - 1 ? order[at + 1] : null;
+  // At the end of a day, the useful move is the next day rather than a dead
+  // stop — but only a day that exists and is published, so the button cannot
+  // dead-end on a draft the student may not see.
+  item.next_day = item.next
+    ? null
+    : db
+        .prepare(
+          `SELECT date FROM ca_days WHERE date > ? AND status = 'published'
+            ORDER BY date ASC LIMIT 1`
+        )
+        .get(item.day_date)?.date || null;
 
   // Opening the item starts its reading clock, once. Re-opening does not restart
   // it: reading is not a single sitting, and a feature that assumed it was would
