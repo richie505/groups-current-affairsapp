@@ -399,7 +399,7 @@ function EditionList() {
                       </span>
                     ) : null}
                     {e.high ? (
-                      <span className="font-semibold text-orange-600 dark:text-orange-400">
+                      <span className="font-semibold text-orange-700 dark:text-orange-400">
                         {e.high} high
                       </span>
                     ) : null}

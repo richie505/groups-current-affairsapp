@@ -67,10 +67,14 @@ export default function SyllabusMap() {
                     <span
                       className={
                         'mt-0.5 w-14 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold ' +
+                        // slate-600, not slate-500. On slate-100 the lighter
+                        // one measures 4.34:1 and this text is 10px — the
+                        // smallest in the app, and the place a 0.16 shortfall
+                        // is least affordable. slate-600 gives 6.4:1.
                         (empty
                           ? 'bg-amber-100 text-amber-800'
                           : cannotFeed
-                            ? 'bg-slate-100 text-slate-500'
+                            ? 'bg-slate-100 text-slate-600'
                             : 'bg-green-100 text-green-800')
                       }
                     >
@@ -82,7 +86,7 @@ export default function SyllabusMap() {
                       </span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                         {cannotFeed ? (
-                          <Chip className="border-slate-300 bg-slate-100 text-slate-500">
+                          <Chip className="border-slate-300 bg-slate-100 text-slate-600">
                             {u.unfeedable ? 'a newspaper cannot feed this' : 'matches everything'}
                           </Chip>
                         ) : u.items ? (
