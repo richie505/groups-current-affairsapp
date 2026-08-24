@@ -71,11 +71,25 @@ function leftovers() {
   );
   return db
     .prepare(
+      // `status = 'discarded'` means two different things, and only one of them
+      // should be skipped.
+      //
+      // Processing discards it before scoring — sport match reports, local
+      // crime, from-the-archives — and those carry score 0. The DRAFTER
+      // discards it after reading the whole article, and those keep the score
+      // they earned: today 54, 51 and 32. The second group is the best salvage
+      // material in the edition, because a human-scale judgement has already
+      // said "this article is not examinable" without being asked whether it
+      // CARRIES anything examinable.
+      //
+      // Score is the discriminator, not the status: a processing discard has
+      // never been scored, so 0 separates the two exactly.
       `SELECT a.id, a.headline, a.body, a.dateline, a.score, a.page
          FROM np_articles a
         WHERE a.edition_id = ?
           AND a.item_id IS NULL
-          AND a.status NOT IN ('duplicate', 'discarded')
+          AND a.status <> 'duplicate'
+          AND (a.status <> 'discarded' OR a.score > 0)
         ORDER BY a.score DESC`
     )
     .all(editionId)
