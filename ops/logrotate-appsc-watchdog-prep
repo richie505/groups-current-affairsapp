@@ -1,0 +1,23 @@
+# Log rotation for ops/watchdog-prep.sh's own log — a new file this repo is
+# introducing, so it gets its own rotation from the start rather than joining
+# the "fine for a year, not fine after two" list.
+#
+# Installed to /etc/logrotate.d/appsc-watchdog-prep. Kept separate from
+# /etc/logrotate.d/appsc-ca (which covers only this app's own logs) so the two
+# stay easy to tell apart.
+#
+# `missingok` because the file does not exist until the watchdog first has
+# something to say. `su root root` for the same reason as appsc-ca's config:
+# /var/log is group-writable on Ubuntu and logrotate silently skips files
+# there without being told whose authority to rotate under.
+
+/var/log/appsc-watchdog.log {
+    su root root
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
