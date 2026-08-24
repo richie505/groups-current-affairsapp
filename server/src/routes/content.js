@@ -666,6 +666,26 @@ router.post('/sessions', (req, res) => {
   if (nCorrect > nAnswered) {
     return res.status(400).json({ error: 'More correct than answered.' });
   }
+
+  // THE SCOPE IS A VOCABULARY, AND IT WAS THE ONE FIELD NOT CHECKED.
+  //
+  // Every number above is validated because the Progress screen divides by
+  // them. The scope is what that screen GROUPS by, and it was written straight
+  // through as `scope || 'range'` — so any string became a permanent grouping.
+  // A functional sweep posted `scope: 'nonsense'` and it is now a row in
+  // ca_sessions that nothing can remove, because a session is written once and
+  // never edited.
+  //
+  // The vocabulary was already documented, on the column, in schema.sql. It was
+  // simply never enforced — which is the least useful place for a rule to live.
+  const SCOPES = ['day', 'range', 'month', 'bucket', 'keyword', 'revision'];
+  // Absent means 'range', matching the old default: a client that never sent one
+  // is not suddenly broken. Present-but-unknown is refused, because that is a
+  // client bug and swallowing it stores the bug.
+  const scopeValue = scope == null || scope === '' ? 'range' : String(scope);
+  if (!SCOPES.includes(scopeValue)) {
+    return res.status(400).json({ error: `Unknown session scope. Expected one of: ${SCOPES.join(', ')}.` });
+  }
   const info = db
     .prepare(
       `INSERT INTO ca_sessions (user_id, scope, scope_ref, label, total, answered, correct, timed, duration_seconds)
@@ -673,7 +693,7 @@ router.post('/sessions', (req, res) => {
     )
     .run(
       req.user.id,
-      scope || 'range',
+      scopeValue,
       String(scope_ref || ''),
       String(label || ''),
       nTotal,
