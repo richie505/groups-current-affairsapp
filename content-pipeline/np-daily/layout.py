@@ -41,11 +41,24 @@ import sys
 import tempfile
 from collections import Counter
 
+# `pymupdf` FIRST, and the reason is that this script's stdout is a JSON
+# contract.
+#
+# PyMuPDF 1.28 prints "warning: The `fitz` API is deprecated" on IMPORT, and it
+# goes to stdout rather than stderr. The Node caller runs JSON.parse over
+# stdout, so on any machine with a current PyMuPDF every extraction failed with
+# `Unexpected token 'w'` — a message that says nothing whatever about the cause.
+#
+# The package has been importable as `pymupdf` since 1.24.3. `fitz` stays as the
+# fallback so an older install still works.
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz
 except ImportError:
-    sys.stderr.write("PyMuPDF is required: pip install pymupdf\n")
-    raise SystemExit(2)
+    try:
+        import fitz  # PyMuPDF < 1.24.3
+    except ImportError:
+        sys.stderr.write("PyMuPDF is required: pip install pymupdf\n")
+        raise SystemExit(2)
 
 
 # ---------------------------------------------------------------------------

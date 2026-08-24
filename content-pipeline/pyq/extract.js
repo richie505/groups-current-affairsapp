@@ -37,6 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { pythonBin, parseJsonStdout } = require(require('path').join(__dirname, '..', 'python-bin'));
 
 const L = require(path.join(__dirname, '..', 'ca-daily', 'lib'));
 const PYQ_DIR = process.env.PYQ_DIR ||
@@ -125,7 +126,8 @@ if (args.list || (!args.paper && !args.all)) {
 // stage 1-2: OCR, then keep the English
 // ---------------------------------------------------------------------------
 
-const PYTHON = process.env.NP_PYTHON || 'python';
+// Resolved, not assumed. See content-pipeline/python-bin.js.
+const PYTHON = pythonBin();
 const LAYOUT = path.join(L.ROOT, 'content-pipeline', 'np-daily', 'layout.py');
 
 function ocrPages(pdf, { pages, dpi }) {
@@ -140,7 +142,7 @@ function ocrPages(pdf, { pages, dpi }) {
   if (res.status !== 0) {
     throw new Error(`layout.py failed (${res.status}): ${(res.stderr || '').slice(0, 1200)}`);
   }
-  return JSON.parse(res.stdout);
+  return parseJsonStdout(res.stdout, { label: 'the PYQ extractor' });
 }
 
 // A run of characters that belongs to a real word or a real number. Single

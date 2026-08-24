@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { pythonBin, parseJsonStdout } = require(require('path').join(__dirname, '..', '..', '..', 'content-pipeline', 'python-bin'));
 
 const db = require('../db');
 
@@ -42,7 +43,8 @@ try {
   AP_TERMS = ['andhra', 'amaravati', 'visakhapatnam', 'vijayawada', 'tirupati'];
 }
 
-const PYTHON = process.env.NP_PYTHON || 'python';
+// Resolved, not assumed. See content-pipeline/python-bin.js.
+const PYTHON = pythonBin();
 const LAYOUT = path.join(NP_DIR, 'layout.py');
 
 // ---------------------------------------------------------------------------
@@ -130,7 +132,7 @@ function extractLayout(pdf, { dpi = 300, lang = 'eng', pages = null } = {}) {
   if (res.status !== 0) {
     throw new Error(`layout.py failed (${res.status}): ${(res.stderr || '').slice(0, 1500)}`);
   }
-  return JSON.parse(res.stdout);
+  return parseJsonStdout(res.stdout, { label: 'layout.py' });
 }
 
 function isAp(article) {

@@ -38,6 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { pythonBin, parseJsonStdout } = require(require('path').join(__dirname, '..', 'python-bin'));
 
 const L = require(path.join(__dirname, '..', 'ca-daily', 'lib'));
 const { AP_TERMS } = require(path.join(__dirname, '..', 'ca-daily', 'sweep'));
@@ -113,7 +114,8 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(String(args.date || ''))) {
 // ---------------------------------------------------------------------------
 
 // Which python. A venv on PATH wins; otherwise the plain interpreter.
-const PYTHON = process.env.NP_PYTHON || 'python';
+// Resolved, not assumed. See content-pipeline/python-bin.js.
+const PYTHON = pythonBin();
 
 function extract(pdf, opts) {
   const script = path.join(__dirname, 'layout.py');
@@ -132,7 +134,7 @@ function extract(pdf, opts) {
   if (res.status !== 0) {
     throw new Error(`layout.py failed (${res.status}):\n${(res.stderr || '').slice(0, 2000)}`);
   }
-  return JSON.parse(res.stdout);
+  return parseJsonStdout(res.stdout, { label: 'layout.py' });
 }
 
 // ---------------------------------------------------------------------------
