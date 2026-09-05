@@ -140,6 +140,18 @@ const FOREIGN_NAME =
 const INDIA_TERM =
   /\b(?:India|Indian|Bharat|Andhra|Telangana|Amaravati|Vijayawada|Visakhapatnam|Tirupati|Delhi|Mumbai|Chennai|Kolkata|Bengaluru|Kerala|Karnataka|Tamil Nadu|Maharashtra|Gujarat|Rajasthan|Bihar|Odisha|Jharkhand|Assam|Punjab|Haryana|Centre|Union Government|Parliament|Lok Sabha|Rajya Sabha|RBI|NITI Aayog|Supreme Court of India)\b/i;
 
+// How much more foreign than Indian the body must be before the guard fires.
+// 1.0 (bare majority) fired on "Rashtrapati Bhavan withdraws email on Bangladesh
+// PM visit" at 4-3 and on an India-Sri Lanka cricket preview at 7-6, both of
+// which are domestic stories. 1.5 spares both and still catches every case the
+// guard was built for. It is one number, deliberately, so it can be moved.
+const FOREIGN_MARGIN = 1.5;
+
+// What a foreign-heavy story is still allowed to be tagged. Group-I's foreign
+// policy unit is the whole list: Group-II has no international-relations unit,
+// only the broad G2-S5, which is excluded from tagging everywhere.
+const IR_UNITS = new Set(['G1P-B6']);
+
 function bucketOf({ text, ap }) {
   // AP wins over everything else. A story that is both national and about Andhra
   // Pradesh belongs in the AP bucket, because AP is the axis this exam turns on
@@ -213,7 +225,9 @@ function loadSyllabusUnits(db) {
     // An older database without the syllabus map still scores, on topics alone.
     return [];
   }
-  return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict) }));
+  // Plural-tolerant: `fertilizer` must also see "the fertilizers sector".
+  // T.stemmable decides which aliases qualify; acronyms and phrases do not.
+  return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict, true) }));
 }
 
 /**
@@ -655,7 +669,7 @@ function score(article, ctx) {
   // school-bus accident there too. Both cleared the clause on two words that
   // appear in 1-2% of the corpus apiece. At least one term must now be
   // non-weak — see ref_unit_aliases.weak.
-  const solid = g2Hits.filter(
+  let solid = g2Hits.filter(
     (h) => h.in_headline || h.standalone || (h.matched.length >= 2 && h.strongTerms >= 1)
   );
 
@@ -675,6 +689,47 @@ function score(article, ctx) {
           `${headUnit ? ' (in the headline)' : ''}`
       );
     }
+  }
+
+  // A FOREIGN STORY HAS ONE INDIAN PAPER LINE, AND IT IS FOREIGN POLICY.
+  //
+  // `foreignDomestic` above damps the topic score, but it demands NO Indian
+  // term anywhere in the article, and an op-ed comparing China's party system
+  // with India's names India constantly. So it fires on nothing that matters,
+  // and Xi Jinping's doctrine for a self-governing party went out tagged to six
+  // units — the Constitution, Centre-State relations, political parties.
+  //
+  // This test is proportional instead. A foreign name in the headline, and the
+  // body is more than half again as foreign as it is Indian. The margin is what
+  // separates "China's party congress, which India watched" from "India and
+  // China signed": at parity, or anywhere near it, the story is domestic with a
+  // foreign subject and keeps its units. It is deliberately a ratio over raw
+  // counts and not a rate over length — a long article about Bangladesh names
+  // Bangladesh more often, and that is the signal, not a confound.
+  //
+  // When it fires, the article keeps foreign-policy units and drops the rest.
+  // Group-II ends up with nothing, and that is correct rather than a gap: its
+  // only international unit is G2-S5, "Current affairs — international, national
+  // and Andhra Pradesh", which is broad by design and excluded from tagging
+  // everywhere. A foreign story genuinely has no Group-II paper line.
+  //
+  // Placed AFTER the syllabus scoring above so the guard changes what an
+  // article is TAGGED, not what it scores. Re-ranking the drafts is a different
+  // question from mapping them, and mixing the two would make neither
+  // measurable.
+  const foreignBody = countOf(FOREIGN_NAME, body);
+  const indianBody = countOf(INDIA_TERM, body);
+  const foreignHeavy =
+    !ap && FOREIGN_NAME.test(head) && foreignBody > FOREIGN_MARGIN * indianBody;
+  if (foreignHeavy && solid.length) {
+    const kept = solid.filter((h) => IR_UNITS.has(h.unit_code));
+    if (kept.length !== solid.length) {
+      notes.push(
+        `foreign-heavy (${foreignBody} foreign vs ${indianBody} Indian): dropped ` +
+          `${solid.length - kept.length} non-IR unit(s)`
+      );
+    }
+    solid = kept;
   }
 
   // THE ANSWER THE ADMIN ACTUALLY WANTS.
@@ -828,4 +883,19 @@ function extractEntities(article) {
   return [...found.values()];
 }
 
-module.exports = { score, bandFor, bucketOf, subjectsOf, loadContext, extractEntities, WEIGHTS, BANDS };
+module.exports = {
+  score,
+  bandFor,
+  bucketOf,
+  subjectsOf,
+  loadContext,
+  extractEntities,
+  WEIGHTS,
+  BANDS,
+  // Exposed for the audit scripts under docs/audits — the foreign-domestic
+  // guard's vocabulary is the thing most likely to need widening, so it has to
+  // be inspectable from outside without being copied and drifting.
+  FOREIGN_NAME,
+  INDIA_TERM,
+  FOREIGN_MARGIN,
+};
