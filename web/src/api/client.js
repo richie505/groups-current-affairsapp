@@ -8,6 +8,38 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+// WHAT HAPPENS WHEN A SESSION ENDS WHILE THE APP IS OPEN.
+//
+// Nothing did. The session was checked once, on mount, and every request after
+// that threw its 401 into whichever screen made it — so an expired token (they
+// last thirty days), a deleted account, or a password changed on another
+// device all produced the same thing: an error card reading "Session expired,
+// please log in again" with no login button on it, on a page that would keep
+// saying that until the user thought to reload.
+//
+// One place, because a 401 means the same thing wherever it arrives. The token
+// is dropped, the cached API responses go with it (they are this account's
+// notes and progress, and the next person to open the app must not be served
+// them), and the app is sent to the login screen with a note saying why.
+//
+// A hard location change rather than a router navigate: this module has no
+// router, and every piece of in-memory state — half-answered quizzes,
+// half-loaded screens — belongs to a session that no longer exists.
+let signingOut = false;
+
+function onSessionEnded(message) {
+  if (signingOut) return; // several in-flight requests will all 401 at once
+  signingOut = true;
+  setToken(null);
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_API_CACHE' });
+  } catch {
+    /* no service worker — nothing cached to clear */
+  }
+  const reason = encodeURIComponent(message || 'Your session ended. Please sign in again.');
+  window.location.assign(`/login?ended=${reason}`);
+}
+
 async function request(path, { method = 'GET', body, headers = {} } = {}) {
   const token = getToken();
   const res = await fetch(`/api${path}`, {
@@ -34,6 +66,12 @@ async function request(path, { method = 'GET', body, headers = {} } = {}) {
     const error = new Error((data && data.error) || `Request failed (${res.status})`);
     error.status = res.status;
     error.data = data;
+    // Everything except the sign-in call itself: a 401 from /auth/login means
+    // "wrong password" and belongs on the login form, not in a redirect loop
+    // back to the page the user is already on.
+    if (res.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/reset')) {
+      onSessionEnded(error.message);
+    }
     throw error;
   }
   return data;

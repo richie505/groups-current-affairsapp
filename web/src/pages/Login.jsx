@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useRegistrationOpen from '../hooks/useRegistrationOpen';
 
@@ -7,10 +7,16 @@ export default function Login() {
   const { login } = useAuth();
   const registrationOpen = useRegistrationOpen();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Why the app sent you here, when it did rather than you. Set by the 401
+  // handler in api/client.js — without it, being bounced to a login screen
+  // mid-session is indistinguishable from the app having crashed.
+  const ended = params.get('ended');
 
   async function submit(e) {
     e.preventDefault();
@@ -32,6 +38,11 @@ export default function Login() {
       <p className="mb-6 text-sm text-slate-600">
         Daily current affairs, routed for Group I and Group II.
       </p>
+      {ended && !error ? (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          {ended}
+        </p>
+      ) : null}
       <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-surface p-5">
         {error ? (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">

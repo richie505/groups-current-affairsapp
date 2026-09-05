@@ -66,22 +66,61 @@ function signToken(user) {
       // after the notes.
       pacing: user.pacing || 'off',
       pacing_minutes: user.pacing_minutes ?? 4,
+      // The revocation counter — see users.token_version in db/index.js.
+      // Short name because it is checked on every single request.
+      tv: user.token_version ?? 0,
     },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL }
   );
 }
 
+/**
+ * Verifies the signature, then verifies the session is still one this account
+ * recognises.
+ *
+ * THE SECOND HALF IS THE POINT. A valid signature only proves the token was
+ * issued by this server at some time in the last thirty days — not that the
+ * account still exists, still has the role it was signed with, or has not had
+ * its password changed since. All three were unanswerable before this, and
+ * the middle one is the sharp edge: an admin demoted to student kept full
+ * admin access for a month.
+ *
+ * The cost is one primary-key lookup per request against a database in this
+ * same process. That is the right trade for being able to say "no" at all.
+ */
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Not logged in.' });
+
+  let claims;
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    claims = jwt.verify(token, JWT_SECRET);
   } catch {
     return res.status(401).json({ error: 'Session expired, please log in again.' });
   }
+
+  // Required lazily: this module is loaded by scripts that never open the
+  // database, and a top-level require would make every one of them open it.
+  const db = require('./db');
+  const row = db.prepare('SELECT role, token_version FROM users WHERE id = ?').get(claims.id);
+  if (!row) return res.status(401).json({ error: 'Account no longer exists.' });
+  if ((row.token_version ?? 0) !== (claims.tv ?? 0)) {
+    return res.status(401).json({ error: 'Signed out because the password on this account changed.' });
+  }
+
+  // The ROLE comes from the row, not the token. Everything else may safely be
+  // a month stale — a display name in a header is not a permission.
+  req.user = { ...claims, role: row.role };
+  next();
+}
+
+/** Invalidates every token ever issued for this account. Returns the new
+ *  version, so the caller can mint a replacement for the device in hand. */
+function bumpTokenVersion(db, userId) {
+  db.prepare('UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(userId);
+  return db.prepare('SELECT token_version FROM users WHERE id = ?').get(userId)?.token_version ?? 0;
 }
 
 function requireAdmin(req, res, next) {
@@ -91,4 +130,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { signToken, requireAuth, requireAdmin, JWT_SECRET };
+module.exports = { signToken, requireAuth, requireAdmin, bumpTokenVersion, JWT_SECRET };

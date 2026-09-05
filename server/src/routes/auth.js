@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { signToken, requireAuth } = require('../auth');
+const { signToken, requireAuth, bumpTokenVersion } = require('../auth');
 const {
   loginRateLimit, signupRateLimit, recordFailure, recordSuccess, clearForEmail,
 } = require('../lib/rateLimit');
@@ -90,6 +90,7 @@ router.post('/register', registrationEnabled, signupRateLimit, (req, res) => {
     exam_track: track,
     pacing: 'off',
     pacing_minutes: 4,
+    token_version: 0,
   };
   res.json({ token: signToken(user), user });
 });
@@ -145,7 +146,7 @@ router.post('/reset/:token', (req, res) => {
   });
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes, token_version FROM users WHERE id = ?')
     .get(reset.user_id);
 
   // A reset is the recovery path for someone locked out, so it clears that
@@ -168,7 +169,7 @@ router.post('/reset/:token', (req, res) => {
 // endpoint whose whole job is to be current.
 router.get('/me', requireAuth, (req, res) => {
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes, token_version FROM users WHERE id = ?')
     .get(req.user.id);
   if (!user) return res.status(401).json({ error: 'Account no longer exists.' });
   res.json({ user });
@@ -185,6 +186,7 @@ router.put('/me', requireAuth, (req, res) => {
   const { name, exam_track, pacing, pacing_minutes, current_password, new_password } = req.body || {};
   const updates = [];
   const values = [];
+  let changedPassword = false;
 
   if (name !== undefined) {
     const trimmed = String(name).trim();
@@ -239,15 +241,21 @@ router.put('/me', requireAuth, (req, res) => {
     }
     updates.push('password_hash = ?');
     values.push(bcrypt.hashSync(String(new_password), 10));
+    // Every OTHER session for this account ends here. Changing a password is
+    // the one action that means "whoever else has this account, stop" — and
+    // until token_version existed, it meant nothing of the kind. The response
+    // below re-signs for the device in hand, so this browser stays in.
+    changedPassword = true;
   }
 
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update.' });
 
   values.push(req.user.id);
   db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  if (changedPassword) bumpTokenVersion(db, req.user.id);
 
   const user = db
-    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes FROM users WHERE id = ?')
+    .prepare('SELECT id, name, email, role, exam_track, pacing, pacing_minutes, token_version FROM users WHERE id = ?')
     .get(req.user.id);
   // Both the name and the track are baked into the JWT (the navbar and the
   // lens read them from there), so a save has to hand back a fresh token or

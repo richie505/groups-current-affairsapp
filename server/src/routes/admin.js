@@ -776,6 +776,22 @@ router.post(
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const incoming = pathp.join(dir, `incoming-${stamp}.db`);
 
+    // ONCE THE HANDLE IS CLOSED, THERE IS NO SAFE WAY BACK INTO THE REQUEST.
+    //
+    // Everything before db.close() is recoverable — refuse, delete the
+    // incoming file, carry on serving. Everything after it is not: the
+    // process is still listening, still routing, and every query it runs
+    // will now throw "The database connection is not open". The old catch
+    // treated both halves the same, answered 400, and left a server that
+    // looks healthy to the load balancer and 500s on every single request
+    // until somebody notices and restarts it by hand.
+    //
+    // So the point of no return is recorded, and a failure past it exits
+    // instead of replying. The supervisor restarts against whichever file is
+    // in place, which is the same recovery path the success case already
+    // uses deliberately.
+    let handleClosed = false;
+
     try {
       // Written and inspected as a FILE before anything is replaced. Validating
       // the buffer in memory cannot tell you whether SQLite can actually open
@@ -814,6 +830,7 @@ router.post(
       if (fsp.existsSync(live)) {
         db.pragma('wal_checkpoint(TRUNCATE)');
         db.close();
+        handleClosed = true;
         fsp.copyFileSync(live, kept);
       }
 
@@ -838,6 +855,23 @@ router.post(
       }, 250);
     } catch (e) {
       try { fsp.unlinkSync(incoming); } catch { /* nothing to clean up */ }
+
+      if (handleClosed) {
+        // Past the point of no return. Say so, then leave — a 500 that is
+        // followed by a restart is honest; a 400 followed by a process that
+        // answers nothing is not.
+        console.error(
+          '[restore] FAILED AFTER THE DATABASE WAS CLOSED:',
+          e.message,
+          `\n         The live file may be the original or the replacement — check ${dir}.`,
+          '\n         Exiting so the supervisor restarts against whatever is on disk.'
+        );
+        res.status(500).json({
+          error: 'The restore failed midway and the server is restarting. Check the database files on disk.',
+        });
+        return setTimeout(() => process.exit(1), 250);
+      }
+
       console.error('[restore] refused:', e.message);
       res.status(400).json({ error: e.message });
     }

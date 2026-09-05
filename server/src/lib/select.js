@@ -106,6 +106,34 @@ const DEFAULTS = {
   // twenty to thirty.
   minItems: 12,
   maxItems: 35,
+  // A FLOOR PER BUCKET, BECAUSE PURE RANK ORDER DRAFTS NO INTERNATIONAL NEWS.
+  //
+  // Measured across the four editions in this database:
+  //
+  //   date        international in pool   international drafted
+  //   2026-08-10            3                      0
+  //   2026-08-21            6                      1
+  //   2026-08-22            1                      0
+  //   2026-08-23            3                      3
+  //
+  // Two of the four days produced a digest with no international item in it at
+  // all, and the stories were sitting in the pool. Nothing downstream can fix
+  // that — a circulated file cannot carry an item nobody drafted.
+  //
+  // The cause is not a bug in the ranking, it is what the ranking measures.
+  // Twenty of the hundred relevance points are for Andhra Pradesh and the
+  // syllabus leverage of a foreign-policy story is usually one or two units,
+  // so international news loses on merit to routine State material almost
+  // every day. But APPSC examines it — "Current events of regional, NATIONAL
+  // AND INTERNATIONAL importance" is the syllabus's own wording — so a day
+  // without it is a gap in coverage rather than an accurate reflection of the
+  // paper.
+  //
+  // The floor is small and conditional: it applies only to buckets the edition
+  // actually has, and only reaches down to articles that still connect to a
+  // syllabus unit. A quiet day for foreign news still yields a short digest;
+  // it just stops yielding an empty one.
+  bucketFloors: { ap: 3, national: 3, international: 2, dynamic: 1 },
 };
 
 /**
@@ -153,6 +181,37 @@ function selectForDrafting(rows, opts = {}) {
     picked.sort((a, b) => b.rank - a.rank);
   }
 
+  // THE BUCKET FLOORS, APPLIED LAST — see DEFAULTS.bucketFloors for the
+  // measurements that made them necessary.
+  //
+  // Added rather than substituted. Taking an item out to make room would mean
+  // the floor decides what is dropped, and the ranking is a better judge of
+  // that than a quota is; a day that gains two international items and runs to
+  // 37 rather than 35 is the right trade, and the circulated file caps itself
+  // separately anyway.
+  //
+  // Reaches below the eligibility bar, because that is the entire point — the
+  // international stories this exists to rescue are precisely the ones the
+  // composite scored too low. It does NOT reach into rows with no syllabus
+  // unit, which is the one rule that has held throughout: an article that
+  // connects to nothing is not drafted for any reason.
+  if (cfg.bucketFloors) {
+    const have = new Set(picked.map((r) => r.id));
+    for (const [bucket, floor] of Object.entries(cfg.bucketFloors)) {
+      const inBucket = ranked.filter((r) => r.bucket === bucket && r.units);
+      if (!inBucket.length) continue; // the edition simply has none
+      let count = picked.filter((r) => r.bucket === bucket).length;
+      for (const r of inBucket) {
+        if (count >= floor) break;
+        if (have.has(r.id)) continue;
+        picked.push(r);
+        have.add(r.id);
+        count += 1;
+      }
+    }
+    picked.sort((a, b) => b.rank - a.rank);
+  }
+
   return {
     picked,
     // Everything the rule turned down, kept so a dry run can show what it cost
@@ -173,7 +232,10 @@ function selectForDrafting(rows, opts = {}) {
 function candidateRows(db, editionId) {
   return db
     .prepare(
-      `SELECT a.id, a.score, a.headline, a.page, a.band,
+      // `bucket` comes along for the floors above. It is written by the
+      // scorer onto the article, so this is a read of a settled finding
+      // rather than a second opinion about where an event happened.
+      `SELECT a.id, a.score, a.headline, a.page, a.band, a.bucket,
               COUNT(DISTINCT au.unit_code) AS units,
               COALESCE(SUM(DISTINCT CASE WHEN au.in_headline THEN 1 ELSE 0 END), 0) AS headlineUnits
          FROM np_articles a

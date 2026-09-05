@@ -1008,6 +1008,73 @@ const mdEmpty = MD.renderDigest(mdDay, [], new Map(), { draft: false });
 check('an empty digest renders rather than throwing', mdEmpty.includes('no published items'));
 
 // ---------------------------------------------------------------------------
+// The compendium's two-column flow
+// ---------------------------------------------------------------------------
+//
+// WHY THIS IS TESTED HERE AND NOT BY READING THE PDF
+//
+// The bug is that leaving column flow left the cursor at the CURRENT column's
+// y, so a full-width section banner printed over the taller column — a page of
+// a section heading, a topic and a whole WHY IN NEWS block drawn on top of the
+// previous section's questions, every character of both still legible.
+//
+// Nothing observable in the finished file catches it. The text is all there,
+// it extracts in reading order, the question numbers still run 1..N with no
+// gaps. Re-breaking the renderer on purpose and re-running a structural check
+// over the output confirmed it: the broken file passed. The only thing that
+// separates the two is geometry, so the geometry is what gets asserted.
+
+const COL = require('../src/lib/compendiumPdf').__columns;
+
+// A stand-in for a pdfkit document — just the fields the column helpers read.
+const fakeDoc = () => ({
+  page: { width: 595.28, height: 841.89, margins: { top: 52, bottom: 52, left: 52, right: 52 } },
+  x: 52,
+  y: 52,
+  addPage() {
+    this.y = this.page.margins.top;
+    this.added = (this.added || 0) + 1;
+  },
+});
+
+{
+  const doc = fakeDoc();
+  COL.beginColumns(doc, 2);
+  const colWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  check('two columns are narrower than the page', colWidth < 595.28 - 104 + 1 && colWidth > 200);
+
+  const leftEdge = doc.page.margins.left;
+  doc.y = 700; // fill the first column nearly to the foot
+  COL.nextColumn(doc);
+  check('the second column starts further right', doc.page.margins.left > leftEdge);
+  check('and at the top of the measure again', doc.y < 200);
+
+  doc.y = 300; // the second column ends only a third of the way down
+  COL.endColumns(doc);
+  check(
+    'leaving column flow drops BELOW the deepest column, not the current one',
+    doc.y >= 700
+  );
+  check('and restores the full measure', doc.page.margins.left === 52 && doc.page.margins.right === 52);
+}
+
+{
+  // A fresh page is a clean sheet: the previous page's depth must not push the
+  // next section banner most of a page down for no reason.
+  const doc = fakeDoc();
+  COL.beginColumns(doc, 2);
+  doc.y = 780;
+  COL.nextColumn(doc); // into column 2
+  doc.y = 780;
+  COL.nextColumn(doc); // past the last column — a new page
+  check('running out of columns adds a page', doc.added === 1);
+  COL.columnState(doc).maxY = doc.page.margins.top; // what the pageAdded hook does
+  doc.y = 120;
+  COL.endColumns(doc);
+  check('a new page does not inherit the previous page depth', doc.y < 200);
+}
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

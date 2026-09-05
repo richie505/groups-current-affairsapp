@@ -80,6 +80,23 @@ db.exec(schema);
     // a discipline, and a discipline nobody opted into is an obstacle.
     // See server/src/lib/pacing.js.
     users: [
+      // WHAT MAKES A SESSION REVOCABLE.
+      //
+      // A JWT is valid until it expires, and this app's expire in thirty days.
+      // So changing a password did nothing to the sessions already out there:
+      // the token on a lost phone, or on the machine the password was changed
+      // *because of*, kept working for up to a month. There was no jti, no
+      // deny-list and no version — nothing in the system could say "not that
+      // one".
+      //
+      // A counter on the row is the smallest thing that can. It rides in the
+      // token as `tv` and is compared against this column on every
+      // authenticated request; bumping it invalidates every token ever issued
+      // for that account at once, which is exactly what "I changed my
+      // password" should mean. The device doing the changing is handed a
+      // fresh token in the same response, so it stays signed in and every
+      // other device does not.
+      ['token_version', 'INTEGER NOT NULL DEFAULT 0'],
       ['pacing', "TEXT NOT NULL DEFAULT 'off'"],
       // The student's own reading time, in minutes, used when pacing is set to
       // 'custom'. Stored even while another mode is selected, so switching to
