@@ -260,6 +260,46 @@ Schema changes need no migration step. `server/src/db/index.js` adds missing
 columns on boot, guarded by reading the table's actual shape, so it is a no-op
 after the first run.
 
+### 3a. Deploying a VOCABULARY change
+
+A change to the alias vocabulary or the evidence filter needs four more steps,
+and the sequence above will silently not apply it. The unit tag on an item is
+DERIVED — alias match, evidence filter, article units, item units — and every
+one of those lives in the database. `git pull` changes the code that would
+produce them; it does not change the ones already stored.
+
+Run this after the restart, and read the diff it prints:
+
+```bash
+cd /srv/appsc-ca
+node server/scripts/backup.js --verify           # again — this one writes data
+
+node server/scripts/seed-g2-syllabus.js          # rebuild ref_unit_aliases from the files
+node server/scripts/backfill-alias-standalone.js # re-derive standalone / weak
+node server/scripts/backfill-alias-provenance.js # stamp who added what
+node server/scripts/rescore-editions.js          # re-score, rebuild item units
+
+# only when the alias change moved item units, which it usually does
+node server/scripts/backfill-mcq-units.js --include-mismatched --blank-unresolved --apply
+
+sudo systemctl restart appsc-ca
+```
+
+The order matters. `seed-g2-syllabus.js` clears and rewrites each unit's aliases
+from `g1-prelims-syllabus.js` and `g2-syllabus.js`, carrying `standalone_override`,
+`provenance` and `first_hit_at` across the rebuild; the two backfills then set
+what it could not. Re-scoring before the seed re-derives tags from the OLD
+vocabulary and looks like it worked.
+
+The MCQ step goes last because it reads `ca_item_units`, which the re-score has
+just rewritten. It moves a question onto a unit its item actually carries, and
+blanks the ones no evidence can place — keeping the old value in
+`unit_code_prior`, so it is reversible with one UPDATE.
+
+**This rewrites derived rows in the live database.** Not articles, not items, not
+their text or status or questions — but `np_article_units`, `ca_item_units` and
+`ca_mcqs.unit_code`. Take the backup first and mean it.
+
 ---
 
 ## 4. Backups
