@@ -505,7 +505,8 @@ function scoreEdition(editionId, { log } = {}) {
   // feed?" and a blank answer is the useful one.
   const insUnit = db.prepare(
     `INSERT OR REPLACE INTO np_article_units
-       (article_id, unit_code, hits, in_headline, matched) VALUES (?, ?, ?, ?, ?)`
+       (article_id, unit_code, hits, in_headline, in_standfirst, matched)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
 
   const bands = {};
@@ -544,7 +545,11 @@ function scoreEdition(editionId, { log } = {}) {
       for (const k of r.keywords) insKw.run(a.id, k.term, k.subject || '', k.in_headline || 0, k.pyq || 0);
       for (const t of r.topics) insTop.run(a.id, t.topic_id, t.hits, t.in_headline || 0, t.matched || '');
       for (const u of r.g2_units || []) {
-        insUnit.run(a.id, u.unit_code, u.hits, u.in_headline || 0, (u.matched || []).join(', '));
+        insUnit.run(
+          a.id, u.unit_code, u.hits,
+          u.in_headline || 0, u.in_standfirst || 0,
+          (u.matched || []).join(', ')
+        );
       }
     }
   })();

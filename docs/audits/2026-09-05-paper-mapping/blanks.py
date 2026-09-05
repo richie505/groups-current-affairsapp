@@ -14,21 +14,26 @@ import sys
 c = sqlite3.connect(sys.argv[1])
 q = lambda s, *a: list(c.execute(s, a))
 
+# Reads the real `standalone` column now that one exists.
+#
+# The first run of this script approximated it with a regex over the alias
+# text, and the approximation over-counted: it treated `CPI` as an unambiguous
+# acronym and so credited two blank items (125, 130) to a recovery that will
+# not happen, because in this corpus CPI is usually the Communist Party of
+# India rather than the Consumer Price Index. Reading the column means the
+# script and the matcher cannot disagree about what counts as specific.
 aliases = q(
-    """SELECT a.alias, a.unit_code FROM ref_unit_aliases a
+    """SELECT a.alias, a.unit_code, COALESCE(a.standalone, 0) FROM ref_unit_aliases a
          JOIN ref_units u ON u.unit_code = a.unit_code
         WHERE u.broad = 0 AND u.unfeedable = 0"""
 )
-compiled = [(al, uc, re.compile(r'\b' + re.escape(al) + r'\b', re.I)) for al, uc in aliases]
+STANDALONE = {(al, uc) for al, uc, sa in aliases if sa}
+compiled = [(al, uc, re.compile(r'\b' + re.escape(al) + r'\b', re.I)) for al, uc, _ in aliases]
 
-ACRONYM = re.compile(r'^[A-Z][A-Z0-9&.-]{2,}$')
 
-
-def standalone(alias):
-    """An alias specific enough to carry a unit on one mention."""
-    if ACRONYM.match(alias):
-        return True
-    return ' ' in alias and len(alias.split()) >= 2 and any(w[:1].isupper() for w in alias.split())
+def standalone(alias, unit):
+    """Does one mention of this alias carry this unit?"""
+    return (alias, unit) in STANDALONE
 
 
 blanks = q(
@@ -57,7 +62,7 @@ for item, aid, head, sf, body in blanks:
         for uc, terms in hits.items()
         if len(terms) >= 2
         or any(rx.search(headtext) for al, u2, rx in compiled if u2 == uc)
-        or any(standalone(t) for t in terms)
+        or any(standalone(t, uc) for t in terms)
     }
     if kept:
         recovered.append((item, head, kept))

@@ -13,7 +13,7 @@ random.seed(20260905)
 
 tags = q(
     """SELECT i.id, a.headline, au.unit_code, ru.paper, ru.label,
-              au.in_headline, au.hits, au.matched
+              au.in_headline, COALESCE(au.in_standfirst, 0), au.hits, au.matched
          FROM ca_items i
          JOIN np_articles a ON a.item_id = i.id
          JOIN np_article_units au ON au.article_id = a.id
@@ -27,11 +27,16 @@ sample = random.sample(tags, 40)
 print("=" * 100)
 print("A. FORTY RANDOM UNIT TAGS ON PUBLISHED ITEMS  (population: %d)" % len(tags))
 print("=" * 100)
-for n, (iid, head, unit, paper, label, inhead, hits, matched) in enumerate(sample, 1):
+for n, (iid, head, unit, paper, label, inhead, instand, hits, matched) in enumerate(sample, 1):
     print("\n[%02d] item %s   %s  (%s)" % (n, iid, unit, paper))
     print("     ARTICLE:  %s" % textwrap.shorten(head, 92))
     print("     UNIT:     %s" % textwrap.shorten(label, 92))
-    print("     EVIDENCE: matched=%r  in_headline=%s  hits=%s" % (matched, inhead, hits))
+    # in_headline means the headline ALONE from 5 Sep 2026. Before that it also
+    # covered the standfirst, which on this paper is often a whole paragraph —
+    # so a tag showing in_headline=1 in an older database may only have been a
+    # standfirst hit. The two are reported separately now.
+    print("     EVIDENCE: matched=%r  in_headline=%s  in_standfirst=%s  hits=%s"
+          % (matched, inhead, instand, hits))
 
 blanks = q(
     """SELECT i.id, i.headline, i.bucket, substr(i.notes_markdown, 1, 260)

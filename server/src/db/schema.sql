@@ -67,7 +67,23 @@ CREATE TABLE IF NOT EXISTS ref_units (
 CREATE TABLE IF NOT EXISTS ref_unit_aliases (
   unit_code TEXT NOT NULL REFERENCES ref_units(unit_code) ON DELETE CASCADE,
   alias     TEXT NOT NULL,
+  -- Matched case-sensitively, so `ASI` does not fire inside a lowercase word.
   strict    INTEGER NOT NULL DEFAULT 0,
+  -- IS ONE MENTION OF THIS ALIAS ENOUGH TO CARRY THE UNIT?
+  --
+  -- This replaces a heuristic that read "the alias contains a space" as proof
+  -- of specificity. Audited on 40 random tags: that test was wrong in both
+  -- directions. It admitted `human rights`, `good governance`, `stock
+  -- exchange`, `population density`, `renewable energy`, `artificial
+  -- intelligence` and `Legislative Assembly` on a single passing mention —
+  -- seven of the eleven errors it found — while refusing all 415 single-word
+  -- aliases including UPSC, SEBI, IRDAI, NHRC, ASEAN, BRICS, SAARC, AMRUT and
+  -- MGNREGA. A report on the BRICS Youth Ministers' Meeting was left with no
+  -- unit at all because `BRICS` has no space in it.
+  --
+  -- Set by server/scripts/backfill-alias-standalone.js, which is the record of
+  -- what was decided and is re-runnable after any reseed.
+  standalone INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (unit_code, alias)
 );
 CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);
@@ -80,7 +96,18 @@ CREATE TABLE IF NOT EXISTS np_article_units (
   article_id  INTEGER NOT NULL REFERENCES np_articles(id) ON DELETE CASCADE,
   unit_code   TEXT NOT NULL,
   hits        INTEGER NOT NULL DEFAULT 1,
-  in_headline INTEGER NOT NULL DEFAULT 0,
+  -- THE HEADLINE ONLY. It used to mean "headline or standfirst", which on this
+  -- paper is a very different claim: the standfirst regularly runs to a full
+  -- paragraph, and on one advertisement it was the ad copy. That is how
+  -- `stock exchange` came to be recorded as a headline hit on an article
+  -- headed "Trade scam or supply chain play? Profit in transit" — the phrase
+  -- was 200 characters into the standfirst.
+  --
+  -- Only a true headline hit satisfies the headline clause of the evidence
+  -- filter. A standfirst hit is body evidence, and counts towards the
+  -- two-distinct-terms clause like any other body match.
+  in_headline    INTEGER NOT NULL DEFAULT 0,
+  in_standfirst  INTEGER NOT NULL DEFAULT 0,
   matched     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (article_id, unit_code)
 );

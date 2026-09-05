@@ -196,7 +196,13 @@ function loadSyllabusUnits(db) {
   try {
     rows = db
       .prepare(
-        `SELECT a.unit_code, a.alias, a.strict, u.label, u.paper, u.exam, u.format
+        // `standalone` decides whether ONE mention of this alias is enough to
+        // carry the unit — see the third clause of the evidence filter below,
+        // and server/scripts/backfill-alias-standalone.js for how it is set.
+        // COALESCE so a database that predates the column still scores.
+        `SELECT a.unit_code, a.alias, a.strict,
+                COALESCE(a.standalone, 0) AS standalone,
+                u.label, u.paper, u.exam, u.format
            FROM ref_unit_aliases a
            JOIN ref_units u ON u.unit_code = a.unit_code
           WHERE u.broad = 0 AND u.unfeedable = 0`
@@ -430,21 +436,52 @@ function score(article, ctx) {
   // The units matched are recorded whatever the score, because the drafter needs
   // them (it should write to the unit APPSC actually examines) and the admin
   // needs them (a list of articles with no unit between them is a list to skip).
+  // THE HEADLINE AND THE STANDFIRST ARE SEPARATED HERE, and only here.
+  //
+  // `head` above is headline + standfirst, which is right for keyword and
+  // topic matching — a standfirst is prominent text and a term in it is worth
+  // more than one buried in paragraph nine. It is wrong for the unit filter,
+  // whose strongest clause is "named in the headline". On this paper the
+  // standfirst is frequently a whole paragraph and on one advertisement it was
+  // the ad copy, so that clause was being satisfied by 200 characters of prose
+  // — which is how `stock exchange` came to be a headline hit on an article
+  // headed "Trade scam or supply chain play? Profit in transit".
+  //
+  // So the unit loop reads the headline alone as the headline, and treats the
+  // standfirst as body evidence: it still contributes a distinct term to the
+  // two-terms clause, it simply cannot carry a unit by itself.
+  //
+  // Kept local rather than changing `head`, because `head` is also what the
+  // keyword and topic matchers read and their flags mean something different.
+  // np_article_keywords.in_headline has the same conflation and is a separate
+  // decision.
+  const unitHead = String(article.headline || '');
+  const unitStand = String(article.standfirst || '');
+
   const g2Hits = [];
   for (const u of ctx.g2Units || []) {
-    const inHead = u.matcher.test(head, T.norm(head));
-    const inBody = inHead || u.matcher.test(body, T.norm(body));
-    if (!inHead && !inBody) continue;
+    const inHead = u.matcher.test(unitHead, T.norm(unitHead));
+    const inStand = u.matcher.test(unitStand, T.norm(unitStand));
+    const inBody = u.matcher.test(body, T.norm(body));
+    if (!inHead && !inStand && !inBody) continue;
     const found = g2Hits.find((h) => h.unit_code === u.unit_code);
     if (found) {
       found.hits += 1;
       found.in_headline = found.in_headline || (inHead ? 1 : 0);
+      found.in_standfirst = found.in_standfirst || (inStand ? 1 : 0);
+      // Tracked on every alias regardless of the four-term display cap: a
+      // standalone alias that happens to be the fifth match still counts.
+      found.standalone = found.standalone || !!u.standalone;
       if (found.matched.length < 4) found.matched.push(u.alias);
     } else {
       g2Hits.push({
         unit_code: u.unit_code, label: u.label, paper: u.paper,
         exam: u.exam, format: u.format,
-        hits: 1, in_headline: inHead ? 1 : 0, matched: [u.alias],
+        hits: 1,
+        in_headline: inHead ? 1 : 0,
+        in_standfirst: inStand ? 1 : 0,
+        standalone: !!u.standalone,
+        matched: [u.alias],
       });
     }
   }
@@ -469,14 +506,26 @@ function score(article, ctx) {
   // read "YSRCP disrupts proceedings in Council" as off-syllabus, because the
   // body says "Legislative Council" once and says it exactly right. The
   // distinction that matters is not how often a term appears but how much work
-  // it does: every alias that misfired — hospital, women, missile, Gandhi — is a
-  // single common word, and every phrase — "Legislative Council", "Right to
-  // Education", "minimum support price" — names its unit on sight.
+  // it does.
   //
-  // A space is a crude test for that and a good one here: a newspaper does not
-  // write "minimum support price" about anything else.
-  const specific = (h) => h.matched.some((m) => m.includes(' '));
-  const solid = g2Hits.filter((h) => h.in_headline || h.matched.length >= 2 || specific(h));
+  // A SPACE WAS THE WRONG TEST FOR THAT, measured on 40 random tags in
+  // docs/audits/2026-09-05-paper-mapping/. Precision came out at 72.5%, and
+  // this clause was seven of the eleven errors: `human rights` from a quote
+  // about an extradition, `good governance` on a SEBI framework, `stock
+  // exchange` from "New York Stock Exchange", `population density` on a
+  // highway land dispute, `renewable energy` on industrial parks, `artificial
+  // intelligence` on a robotic dog, `Legislative Assembly` on the place a
+  // fertiliser figure was read out. Every one of them contains a space.
+  //
+  // It failed in the other direction at the same time, which is what makes it
+  // one fault rather than two. 415 aliases have no space and so could never
+  // qualify — UPSC, SEBI, IRDAI, NHRC, ASEAN, BRICS, SAARC, AMRUT, MGNREGA. A
+  // report on the BRICS Youth Ministers' Meeting was left with no unit at all.
+  //
+  // So specificity is now recorded per alias rather than inferred from its
+  // punctuation. See server/scripts/backfill-alias-standalone.js, which holds
+  // the decision and can be re-run after a reseed.
+  const solid = g2Hits.filter((h) => h.in_headline || h.matched.length >= 2 || h.standalone);
 
   // The same foreign-domestic guard factor A already applies. A war report
   // naming a missile is not Indian defence technology, and letting the Group-II

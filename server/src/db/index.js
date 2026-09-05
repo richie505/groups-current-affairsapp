@@ -202,6 +202,10 @@ db.exec(schema);
     // trusts, and the first question an admin asks about "62 / HIGH" is which
     // part of it came from where. Keeping the breakdown also means a change to
     // the weights can be evaluated against past articles instead of guessed at.
+    // The evidence flags the syllabus matcher writes — see schema.sql for what
+    // each one is and why the old single flag was two claims in a trench coat.
+    ref_unit_aliases: [['standalone', 'INTEGER NOT NULL DEFAULT 0']],
+    np_article_units: [['in_standfirst', 'INTEGER NOT NULL DEFAULT 0']],
     np_articles: [
       ['score', 'REAL'],
       ['band', "TEXT NOT NULL DEFAULT ''"],
