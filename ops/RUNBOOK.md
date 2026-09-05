@@ -265,7 +265,27 @@ npm --prefix server exec -- playwright install chromium
 
 `npm run build` at the repo root does it for you. It downloads ~150 MB once and
 is a no-op afterwards; on a bare server add `--with-deps` the first time to pull
-the shared libraries Chromium needs. Nothing else on the server uses it, and if
+the shared libraries Chromium needs.
+
+**Install it where the service user can read it.** Run as root, `playwright
+install` puts the browser in `/root/.cache/ms-playwright`, and the unit runs as
+`appsc-ca`, which cannot read that. The symptom is a 500 on the digest route
+with every other route healthy — the worst kind, because the service looks fine.
+This server keeps the browser in `/opt/ms-playwright` and points the unit at it
+with a drop-in:
+
+```ini
+# /etc/systemd/system/appsc-ca.service.d/playwright.conf
+[Service]
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+```
+
+After changing it: `systemctl daemon-reload && systemctl restart appsc-ca`. To
+check the browser is reachable by the right user rather than by you:
+
+```bash
+sudo -u appsc-ca -E node -e "require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('ok'))"
+``` Nothing else on the server uses it, and if
 it is missing every route still works except `GET /days/:date/digest.pdf`, which
 answers 500 with the install command in the message rather than failing
 silently.
