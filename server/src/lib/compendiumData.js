@@ -51,14 +51,83 @@ const factsOf = (item) =>
       return m ? `${m[1].trim()} — ${m[2].trim()}` : f;
     });
 
-// notes_markdown is prose with **bold** already in it. Split to paragraphs and
-// drop anything that is a markdown heading or table — the template escapes
-// everything except **bold**, so a leaked pipe table would print as pipes.
-const parasOf = (text) =>
-  clean(text)
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
-    .filter((p) => p && !p.startsWith('#') && !p.startsWith('|'));
+// MARKDOWN TABLES ARE THE POINT OF THE NOTE, NOT NOISE IN IT.
+//
+// 111 of 127 published items carry one, because the drafter is told to use a
+// table wherever there is a natural pairing — award to recipient, scheme to
+// ministry, Bill to provision — and those pairings are what become list-match
+// questions later. The first version of this file dropped every line beginning
+// with a pipe, on the reasoning that the template escapes everything except
+// **bold** and a leaked table would print as pipes. That is true of a table
+// left in prose and false as a way of handling one: it threw the pairing away.
+//
+// So the note is parsed into blocks. Prose before the first table is the
+// "why in news" paragraph; the tables and whatever follows them are
+// "key details", which is the order the template's own anatomy asks for.
+//
+// The template's table takes exactly two columns. A wider one is folded — the
+// first column stays the key and the rest are joined into the value with " · ",
+// which keeps the pairing readable instead of dropping columns 3 and 4.
+const TABLE_ROW = /^\s*\|(.+)\|\s*$/;
+const TABLE_RULE = /^\s*\|[\s:|-]+\|\s*$/;
+
+function splitRow(line) {
+  return line
+    .replace(/^\s*\|/, '')
+    .replace(/\|\s*$/, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
+function foldTo2(cells) {
+  if (cells.length <= 2) return [cells[0] || '', cells[1] || ''];
+  return [cells[0], cells.slice(1).filter(Boolean).join(' · ')];
+}
+
+/**
+ * Splits markdown into paragraphs and tables, in document order.
+ * @returns {{type:'p',text:string}|{type:'table',header:string[],rows:string[][]}}[]
+ */
+function parseBlocks(text) {
+  const lines = clean(text).split(/\n/);
+  const out = [];
+  let para = [];
+  const flush = () => {
+    const t = para.join(' ').replace(/\s+/g, ' ').trim();
+    if (t) out.push({ type: 'p', text: t });
+    para = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isRow = TABLE_ROW.test(line) && !TABLE_RULE.test(line);
+    // A table starts on a row whose NEXT line is the |---|---| rule. Without
+    // that check a sentence containing a pipe would open a table.
+    if (isRow && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1])) {
+      flush();
+      const header = foldTo2(splitRow(line));
+      const rows = [];
+      i += 2;
+      for (; i < lines.length; i++) {
+        if (!TABLE_ROW.test(lines[i]) || TABLE_RULE.test(lines[i])) break;
+        const cells = foldTo2(splitRow(lines[i]));
+        if (cells.some(Boolean)) rows.push(cells);
+      }
+      i -= 1;
+      if (rows.length) out.push({ type: 'table', header, rows });
+      continue;
+    }
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    // A heading inside the note is a section marker the template has no place
+    // for; keep its words, drop the hashes.
+    para.push(line.replace(/^#+\s*/, '').trim());
+  }
+  flush();
+  return out;
+}
 
 // static_notes arrives as "## What it is … ## Key facts …". The schema only
 // admits five block titles, so anything else is folded into the nearest one it
@@ -90,6 +159,17 @@ function blocksOf(text) {
       .split(/\n+/)
       .map((l) => l.trim())
       .filter(Boolean);
+    // A "## Key facts" section is normally a two-column table, and the schema
+    // has a table type for exactly this. Parsing it means the attribute/value
+    // pairing survives into the static box instead of arriving as pipes.
+    const parsed = parseBlocks(body);
+    const tbl = parsed.find((x) => x.type === 'table');
+    if (tbl) {
+      out.push({ title, type: 'table', header: tbl.header, rows: tbl.rows });
+      const after = parsed.filter((x) => x.type === 'p').map((x) => x.text);
+      if (after.length) out.push({ title, type: 'p', items: after });
+      continue;
+    }
     const allBullets = bullets.length > 1 && bullets.every((b) => /^[-•*]\s/.test(b));
     if (allBullets) {
       out.push({ title, type: 'list', items: bullets.map((b) => b.replace(/^[-•*]\s*/, '')) });
@@ -187,7 +267,14 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
 
   for (const item of items) {
     const facts = factsOf(item);
-    const paras = parasOf(item.notes_markdown);
+    // Prose before the first table introduces the story; the tables and what
+    // follows them are the detail. That is the template's own anatomy — block 4
+    // is a context paragraph, block 5 is "table then 1-2 prose paragraphs".
+    const noteBlocks = parseBlocks(item.notes_markdown);
+    const firstTable = noteBlocks.findIndex((b) => b.type === 'table');
+    const lead = firstTable === -1 ? noteBlocks : noteBlocks.slice(0, firstTable);
+    const rest = firstTable === -1 ? [] : noteBlocks.slice(firstTable);
+    const paras = lead.filter((b) => b.type === 'p').map((b) => b.text);
     const mcqs = (byItem.get(item.id) || []).slice(0, 4);
 
     const written = clean(item.hook);
@@ -209,7 +296,7 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
     const units = unitsOf ? unitsOf(item.id) : item.units || [];
     const withUnits = { ...item, units };
     const sec = sectionOf(withUnits);
-    const label = (SECTIONS.find((s) => s.key === sec) || {}).title || 'Current Affairs';
+    const label = (SECTIONS.find((s) => s.key === sec) || SECTIONS[0]).title;
 
     const topic = {
       n: 0,
@@ -218,7 +305,7 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
       hook: hook || clean(item.headline).slice(0, 120),
       recap: recap || [cut40(paras[0] || item.headline), cut40(facts[0] || ''), cut40(item.static_linkage || '')],
       why_in_news: paras.length ? paras : [strip(item.headline)],
-      key_details: [],
+      key_details: rest,
       prelims_facts: facts,
       questions: mcqs.map((m) => ({
         q: 0,
@@ -239,10 +326,17 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
     byLabel.get(label).push(topic);
   }
 
-  const sections = [...byLabel.entries()].map(([title, topics], i) => ({
+  // IN THE SYLLABUS'S ORDER, NOT THE ORDER THE ITEMS HAPPENED TO ARRIVE IN.
+  //
+  // Keyed by insertion, a day whose first item was a geography story printed
+  // "Section I — Geography" and "Section II — Polity". The numerals are how a
+  // reader navigates a document they read every day, so they have to mean the
+  // same thing on every issue. Empty sections are skipped, and the numbering
+  // closes up rather than leaving gaps.
+  const sections = SECTIONS.filter((s) => byLabel.has(s.title)).map((s, i) => ({
     label: `Section ${ROMAN[i] || i + 1}`,
-    title,
-    topics,
+    title: s.title,
+    topics: byLabel.get(s.title),
   }));
 
   let n = 0;

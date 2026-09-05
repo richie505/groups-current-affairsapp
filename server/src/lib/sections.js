@@ -22,13 +22,31 @@
 // units were assigned by relevance.js under a rule that only writes a row when
 // the match is solid, so they are the most reliable thing on the item.
 
-// The five sections, in the order they appear in the document.
+// THE SECTIONS ARE THE EXAM'S SUBJECTS, NOT A CONVENIENT FEW.
+//
+// This started as five, and five turned out to be a shape that hid three whole
+// subjects. Science and Technology — six units, ISRO and DRDO and Digital India
+// and energy policy — was folded into "Economy". The whole of History was
+// folded into "Culture, Tourism & Heritage", so a Vijayanagara item printed
+// under a heading about tourism. Geography had no section at all: physical
+// geography sat in Environment, economic geography in Economy, social geography
+// in Society, and a candidate revising geography had nowhere to look.
+//
+// A compendium is read by somebody revising a subject, and a section heading is
+// the promise that everything on that subject is under it. Eight sections keep
+// that promise; five broke it three times.
+//
+// Empty sections never print — the document is built from the items a day
+// actually has, so a day with no history simply has no history section.
 const SECTIONS = [
-  { key: 'governance', numeral: 'I', title: 'Governance, Polity & Administration' },
-  { key: 'economy', numeral: 'II', title: 'Economy, Infrastructure & Urban Development' },
-  { key: 'environment', numeral: 'III', title: 'Agriculture, Environment & Health' },
-  { key: 'society', numeral: 'IV', title: 'Society, Education & Welfare' },
-  { key: 'culture', numeral: 'V', title: 'Culture, Tourism & Heritage' },
+  { key: 'governance', numeral: 'I', title: 'Polity, Governance & Administration' },
+  { key: 'international', numeral: 'II', title: 'International Relations' },
+  { key: 'economy', numeral: 'III', title: 'Economy, Industry & Infrastructure' },
+  { key: 'science', numeral: 'IV', title: 'Science, Technology & Energy' },
+  { key: 'environment', numeral: 'V', title: 'Environment, Ecology & Agriculture' },
+  { key: 'geography', numeral: 'VI', title: 'Geography & Natural Resources' },
+  { key: 'society', numeral: 'VII', title: 'Society, Education & Welfare' },
+  { key: 'culture', numeral: 'VIII', title: 'History, Art & Culture' },
 ];
 
 // Every objective unit in ref_units, placed once.
@@ -46,7 +64,7 @@ const UNIT_SECTION = {
   'G1P-B3': 'governance',
   'G1P-B4': 'governance',
   'G1P-B5': 'governance',
-  'G1P-B6': 'governance',
+  'G1P-B6': 'international',
   'G2-P1-U6': 'governance',
   'G2-P1-U7': 'governance',
   'G2-P1-U8': 'governance',
@@ -80,23 +98,28 @@ const UNIT_SECTION = {
   // quantum campus. These are industrial policy stories that happen to be
   // about technology, and filing them under Environment & Health because the
   // syllabus files science and environment in one paper would scatter them.
-  'G1P-S1': 'economy',
-  'G1P-S2': 'economy',
-  'G1P-S3': 'economy',
-  'G1P-S4': 'economy',
-  'G2-P2-U6': 'economy',
-  'G2-P2-U7': 'economy',
+  'G1P-S1': 'science',
+  'G1P-S2': 'science',
+  'G1P-S3': 'science',
+  'G1P-S4': 'science',
+  'G2-P2-U6': 'science',
+  'G2-P2-U7': 'science',
 
   // ---- Agriculture, Environment & Health
-  'G1P-D1': 'environment',
-  'G1P-D2': 'environment',
+  'G1P-D1': 'geography',
+  'G1P-D2': 'geography',
   'G1P-S5': 'environment',
   'G2-P2-U8': 'environment',
   'G2-P2-U9': 'environment',
   'G2-P2-U10': 'environment',
 
   // ---- Society, Education & Welfare
-  'G1P-D3': 'society',
+  'G1P-D3': 'geography',
+  // G2-S2 was in no section at all. sectionOf() ignores a code it cannot place,
+  // so a geography-only item fell through to the governance fallback and
+  // printed under Administration — silently, because an unmapped unit and a
+  // genuinely untagged item look identical to that function.
+  'G2-S2': 'geography',
   'G2-S3': 'society',
 
   // ---- Culture, Tourism & Heritage
