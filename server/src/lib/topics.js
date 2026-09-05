@@ -80,6 +80,36 @@ function pluralise(body) {
   return `${body}(?:e?s)?`;
 }
 
+/**
+ * Whether a STRICT alias would be safe to match with a bare trailing "s".
+ *
+ * NOT WIRED IN. Kept because the measurement is the useful part.
+ *
+ * Strict aliases are excluded from stemming on purpose — `SCs` is Scheduled
+ * Castes and `SC` is usually the Supreme Court — and the argument for relaxing
+ * that above four characters is sound: "Integrated Tribal Development Agencies
+ * (ITDAs)" is how a newspaper introduces an acronym, so the singular the alias
+ * holds may never appear in the article at all.
+ *
+ * The argument is sound and the corpus does not pay it. Thirty-six of the
+ * seventy strict aliases qualify (the other thirty-four are three characters —
+ * FIR, NOC, MLA, FDC and the rest — and stay out because that is where the
+ * collisions are). Across 411 articles those thirty-six recovered exactly ONE
+ * match: `MSMEs` in "India's MSMEs, to strengthen manufacturing
+ * competitiveness". And that one is wrong — `MSME` maps only to G2-P2-U5, "AP
+ * agriculture, industry, MSMEs...", so the recovery files a national story
+ * about industrial heat under an Andhra Pradesh unit.
+ *
+ * So the rule costs a clause and buys one bad tag. The real defect it exposed
+ * is in the vocabulary rather than the matcher: `MSME` has no national unit.
+ * Re-enable by restoring the `strict && acronymPlural(alias)` branch in
+ * aliasMatcher if a later corpus makes the case.
+ */
+function acronymPlural(alias) {
+  const a = String(alias || '');
+  return a.length >= 4 && !/s$/.test(a);
+}
+
 // A strict alias is matched exactly as printed, case-sensitively, on word
 // boundaries. These are the short acronyms - HAM, TTD, CAA, SC - where a loose
 // match would fire inside unrelated words or on ordinary prose.
@@ -428,6 +458,7 @@ module.exports = {
   norm,
   aliasMatcher,
   stemmable,
+  acronymPlural,
   loadAliases,
   matchItem,
   rebuild,

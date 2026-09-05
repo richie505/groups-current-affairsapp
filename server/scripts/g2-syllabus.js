@@ -91,6 +91,8 @@ const G2_UNITS = [
       'urbanisation', 'migration', 'demographic', 'literacy rate', 'sex ratio',
     
       'Jal Shakti',
+    
+      'Sample Registration System',
     ],
   },
   {
@@ -113,6 +115,8 @@ const G2_UNITS = [
       'Scheduled Areas',
     
       'disability',
+    
+      'Integrated Tribal Development Agency',
     ],
   },
   {
@@ -368,6 +372,8 @@ const G2_UNITS = [
       'land pooling', 'land acquisition', 'assigned land', 'capital region', 'CRDA',
     
       'Bharat Audyogik Vikas Yojana', 'BHAVYA', 'South Coast Railway',
+    
+      'Visakhapatnam Steel Plant',
     ],
   },
 
@@ -452,6 +458,8 @@ const G2_UNITS = [
       'public health', 'epidemic', 'pandemic', 'vaccine', 'immunisation', 'immunization',
       'disease burden', 'malaria', 'tuberculosis', 'influenza', 'H1N1', 'Ayushman', 'primary health',
       'health insurance', 'public hospital', 'nutrition', 'malnutrition',
+    
+      'National AYUSH Mission', 'AYUSH', 'nursing personnel', 'Nurses Registration and Tracking System', 'cardiovascular', 'fixed-dose combination', 'FSSAI',
     ],
   },
 ];

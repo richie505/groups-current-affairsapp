@@ -170,6 +170,8 @@ const G1P_UNITS = [
       'regulator', 'regulatory authority', 'SEBI', 'TRAI', 'IRDAI', 'CCI',
       'Competition Commission', 'National Green Tribunal', 'tribunal', 'quasi-judicial',
       'statutory body', 'privatisation', 'disinvestment', 'globalisation', 'public sector undertaking',
+    
+      'FSSAI', 'Drugs Technical Advisory Board',
     ],
   },
   {
@@ -184,6 +186,8 @@ const G1P_UNITS = [
       'reservation', 'transgender', 'manual scavenging',
     
       'Scheduled Areas', 'disability',
+    
+      'Integrated Tribal Development Agency',
     ],
   },
   {
@@ -197,6 +201,8 @@ const G1P_UNITS = [
       'World Health Organization', 'World Bank', 'IMF', 'WTO', 'BRICS', 'G20', 'SCO', 'QUAD',
       'ASEAN', 'SAARC', 'Ministry of External Affairs', 'diplomatic', 'strategic partnership',
       'defence cooperation', 'maritime security', 'free trade agreement',
+    
+      'fuel supply agreement',
     ],
   },
 
@@ -228,6 +234,8 @@ const G1P_UNITS = [
       'national income', 'GDP', 'per capita income', 'census', 'demographic', 'poverty line',
       'unemployment', 'employment scheme', 'MGNREGA', 'skill development', 'rural development',
       'urban development', 'AMRUT', 'smart city', 'PMAY', 'inequality',
+    
+      'Sample Registration System',
     ],
   },
   {
@@ -282,6 +290,8 @@ const G1P_UNITS = [
       'special assistance', 'Polavaram', 'Krishna water', 'Godavari water', 'river water sharing',
       'Amaravati', 'capital region', 'CRDA', 'Vizag railway zone', 'Kadapa steel',
       'Dugarajapatnam', 'backward district', 'revenue deficit grant', 'e-governance',
+    
+      'Visakhapatnam Steel Plant', 'Rashtriya Ispat Nigam',
     ],
   },
 
@@ -300,6 +310,8 @@ const G1P_UNITS = [
       'solar system', 'atmosphere', 'climate change', 'global warming', 'ocean current', 'tsunami',
       'cyclone', 'depression', 'landform', 'tectonic', 'volcano', 'sea level rise',
       'marine resource', 'hydrological', 'El Nino', 'La Nina',
+    
+      'Geological Survey of India',
     ],
   },
   {
@@ -327,6 +339,8 @@ const G1P_UNITS = [
     aliases: [
       'census', 'population density', 'sex ratio', 'literacy rate', 'urbanisation', 'migration',
       'metropolitan', 'tribal population', 'linguistic group', 'rural-urban', 'demographic dividend',
+    
+      'crude death rate',
     ],
   },
   {
@@ -356,6 +370,8 @@ const G1P_UNITS = [
     aliases: [
       'science policy', 'innovation policy', 'CSIR', 'ICMR', 'IISc', 'research institute',
       'Indian scientist', 'patent', 'research and development', 'technology mission',
+    
+      'research integrity',
     ],
   },
   {
@@ -413,6 +429,8 @@ const G1P_UNITS = [
       'Pollution Control Board', 'air quality', 'carbon emission', 'net zero', 'Paris Agreement',
       'COP', 'climate commitment', 'disaster management', 'NDMA', 'biotechnology',
       'nanotechnology', 'genetic engineering', 'GM crop', 'public health', 'epidemic', 'vaccine',
+    
+      'National AYUSH Mission', 'AYUSH', 'fixed-dose combination', 'nursing personnel', 'cardiovascular',
     ],
   },
 

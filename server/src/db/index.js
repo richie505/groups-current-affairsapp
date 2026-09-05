@@ -206,6 +206,21 @@ db.exec(schema);
     // each one is and why the old single flag was two claims in a trench coat.
     ref_unit_aliases: [
       ['standalone', 'INTEGER NOT NULL DEFAULT 0'],
+      // A HAND DECISION THAT THE BACKFILL MUST NOT ARGUE WITH.
+      //
+      // `standalone` is derived — a phrase or an acronym earns it, anything
+      // else does not — and the derivation is right often enough to be worth
+      // keeping. What it cannot see is a single mixed-case word that is a
+      // unique proper noun: `Gorkhaland` names exactly one thing in the world
+      // and `BHAVYA` is an acronym six characters long, so neither is a phrase
+      // and neither is short enough to be read as an acronym. The rule scored
+      // both 0 and there is no wording of the rule that would fix that without
+      // also admitting every ordinary noun.
+      //
+      // NULL means "no opinion, derive it". 1 or 0 is a decision the backfill
+      // copies through untouched, and seed-g2-syllabus.js carries it across the
+      // clear-and-rebuild so a reseed does not silently discard it.
+      ['standalone_override', 'INTEGER'],
       // A COMMON NOUN THAT NAMES A DOMAIN BUT NOT A TOPIC.
       //
       // `monsoon`, `census`, `port`, `transport`, `regulator` each appear in

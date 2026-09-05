@@ -133,6 +133,15 @@ const NOT_STANDALONE = [
   // recruitment round that any AP politics story can mention in passing. They
   // earn a unit alongside a second term, not on their own.
   'Mega DSC', 'rule of law', 'energy security', 'mining sector', 'road safety',
+  // Batch 2, same ruling. `nursing personnel` and `research integrity` are
+  // descriptors rather than topics. `Geological Survey of India` is the Harvard
+  // case again in a form the proper-name guard cannot reach: the entity-noun
+  // test looks for a governing noun BESIDE the alias, and here the institution
+  // IS the alias, so nothing sits next to it to catch. In the article that
+  // prompted it, the GSI appears only as a co-author's affiliation on a paper
+  // about a 3.5-billion-year-old rock — the subject is the biosignature, not
+  // the survey.
+  'nursing personnel', 'research integrity', 'Geological Survey of India',
   // 3 — names and descriptors that appear beside any subject
   'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
   'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',
@@ -190,9 +199,25 @@ const weak = lower(WEAK);
 const extra = lower(EXTRA_ACRONYMS);
 const ambiguous = lower(AMBIGUOUS_ACRONYMS);
 
-const rows = db.prepare('SELECT unit_code, alias, strict FROM ref_unit_aliases').all();
+const rows = db
+  .prepare('SELECT unit_code, alias, strict, standalone_override FROM ref_unit_aliases')
+  .all();
 
 const decide = (r) => {
+  // A HAND DECISION WINS, AND IS NOT RE-ARGUED.
+  //
+  // Everything below this line is a rule about the SHAPE of an alias — has it
+  // a space, is it short and capitalised — and shape is a proxy for the thing
+  // that actually matters, which is whether one mention of the words is enough
+  // to be about the topic. The proxy is good and it is not perfect: a unique
+  // proper noun of one mixed-case word (`Gorkhaland`) and an acronym a letter
+  // too long (`BHAVYA`) both score 0, and no rewording of the rule admits them
+  // without admitting every ordinary noun with them.
+  //
+  // So the escape hatch is a column rather than another clause. NULL keeps the
+  // derivation; anything else is a decision a person made about one alias, and
+  // re-running this script must leave it exactly as it found it.
+  if (r.standalone_override != null) return r.standalone_override ? 1 : 0;
   const a = r.alias.toLowerCase();
   if (blocked.has(a) || ambiguous.has(a)) return 0;
   if (r.strict || extra.has(a)) return 1;

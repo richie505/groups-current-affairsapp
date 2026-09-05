@@ -84,6 +84,10 @@ CREATE TABLE IF NOT EXISTS ref_unit_aliases (
   -- Set by server/scripts/backfill-alias-standalone.js, which is the record of
   -- what was decided and is re-runnable after any reseed.
   standalone INTEGER NOT NULL DEFAULT 0,
+  -- A hand decision that overrides the derivation. NULL means "derive it";
+  -- 1 or 0 is copied through by the backfill and preserved across a reseed.
+  -- For the unique proper nouns the phrase-or-acronym rule cannot recognise.
+  standalone_override INTEGER,
   PRIMARY KEY (unit_code, alias)
 );
 CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);
