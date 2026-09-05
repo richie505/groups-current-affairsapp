@@ -14,15 +14,15 @@ const {
   circulationWords,
   circulationMinutes,
 } = require('../lib/digestPdf');
+
+const { groupIntoSections, papersFor, sectionOf, SECTIONS } = require('../lib/sections');
+const { buildCompendiumData } = require('../lib/compendiumData');
 const {
-  renderCompendiumPdf,
+  renderCompendium,
   compendiumFilename,
   monthlyFilename,
   monthName,
-} = require('../lib/compendiumPdf');
-const { groupIntoSections, papersFor, sectionOf, SECTIONS } = require('../lib/sections');
-const { buildCompendiumData } = require('../lib/compendiumData');
-const { renderCompendium } = require('../lib/compendiumRender');
+} = require('../lib/compendiumRender');
 
 const router = express.Router();
 router.use(requireAuth);

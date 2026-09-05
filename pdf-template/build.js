@@ -50,7 +50,36 @@
     return `<div class="q"><div class="stem"><span class="qn">Q${q.q}.</span>${esc(q.stem)}</div><ol>${opts}</ol></div>`;
   }
 
+  // A FACT CARD IS NOT A THIN TOPIC, IT IS A DIFFERENT THING.
+  //
+  // Some items are facts salvaged from an article that was not itself
+  // examinable — a date, a figure, a name worth carrying, with no story behind
+  // it. They have prelims facts and often a question or two, and no notes at
+  // all. Rendered through the full topic anatomy they came out as a heading
+  // followed by a "Why in news" paragraph that repeated the heading word for
+  // word, an empty static box and no recap: a topic that looks broken rather
+  // than a fact that looks brief.
+  //
+  // So they get their own shape — title, tags, facts, questions — and are
+  // marked as such, which is honest about what they are and stops them
+  // competing for attention with a topic that has been written.
+  function factCard(t) {
+    let html = `<article class="topic factcard" id="t${t.n}">`;
+    html += `<div class="topic-head"><div class="topic-num">${String(t.n).padStart(2, '0')}</div>` +
+      `<div><h3>${esc(t.title)}</h3>${tagChips(t.tags)}` +
+      `<div class="factcard-tag">Fact card — no full note for this one</div></div></div>`;
+    if (t.prelims_facts && t.prelims_facts.length) {
+      html += `<div class="facts">${t.prelims_facts.map(fact).join('')}</div>`;
+    }
+    if (t.questions && t.questions.length) {
+      html += `<div class="h4 quiz">Practice questions</div><div class="questions">${t.questions.map(question).join('')}</div>`;
+      html += `<div class="answers-strip">Answers → ${t.questions.map(q => `<b>Q${q.q}</b>&nbsp;${q.answer}`).join(' &nbsp;·&nbsp; ')} &nbsp;(explanations in the answer key)</div>`;
+    }
+    return html + `</article>`;
+  }
+
   function topic(t) {
+    if (t.kind === 'fact') return factCard(t);
     let html = `<article class="topic" id="t${t.n}">`;
     html += `<div class="topic-open"><div class="topic-head"><div class="topic-num">${String(t.n).padStart(2, '0')}</div><div><h3>${esc(t.title)}</h3>${tagChips(t.tags)}</div></div>`;
     // Retention layer
@@ -108,7 +137,7 @@
   function hookSheet(sections) {
     return `<section class="hooksheet page-break"><h2>Hook sheet — one-page revision</h2>
       <p class="intro">Cover the right-hand column and try to recall the recap from the hook alone. Tick the ones you get; revisit the rest.</p>
-      ${sections.map(s => `<div class="hookrow"><div></div><div class="sec">${esc(s.label)} — ${esc(s.title)}</div></div>` + s.topics.map(t => `<div class="hookrow"><div class="n">${t.n}</div><div><div class="t">${esc(t.title)}</div><div class="h">${md(t.hook || '')}</div></div></div>`).join('')).join('')}
+      ${sections.map(s => `<div class="hookrow"><div></div><div class="sec">${esc(s.label)} — ${esc(s.title)}</div></div>` + s.topics.filter(t => t.kind !== 'fact').map(t => `<div class="hookrow"><div class="n">${t.n}</div><div><div class="t">${esc(t.title)}</div><div class="h">${md(t.hook || '')}</div></div></div>`).join('')).join('')}
     </section>`;
   }
 

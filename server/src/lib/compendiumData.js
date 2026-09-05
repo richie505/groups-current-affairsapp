@@ -275,6 +275,16 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
     const lead = firstTable === -1 ? noteBlocks : noteBlocks.slice(0, firstTable);
     const rest = firstTable === -1 ? [] : noteBlocks.slice(firstTable);
     const paras = lead.filter((b) => b.type === 'p').map((b) => b.text);
+
+    // A salvaged item is a fact card: facts and maybe a question, no note. It
+    // gets a different shape in the template rather than the full topic
+    // anatomy with three quarters of it empty — see factCard() in build.js.
+    // Salvaged, or a note with nothing in it at all. NOT merely "no prose":
+    // an item whose note is a single table is a topic with a table, and
+    // testing on paras alone turned one of those into a fact card and threw
+    // its table away.
+    const isFact = Number(item.salvaged) === 1 || noteBlocks.length === 0;
+
     // EVERY QUESTION THE ITEM HAS, not a fixed four.
     //
     // The kit's schema says exactly four per topic and its renderer does not:
@@ -295,10 +305,12 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
     const hook = written || hookOf(item, facts);
     const recap = writtenRecap.length === 3 ? writtenRecap : recapOf(item, facts, paras);
 
+    // A fact card is not "thin" — it is complete for what it is. Reporting it
+    // as missing four fields every day is how a warning stops being read.
     const missing = [];
-    if (!hook) missing.push('hook');
-    if (!recap) missing.push('recap');
-    if (!paras.length) missing.push('why_in_news');
+    if (!isFact && !hook) missing.push('hook');
+    if (!isFact && !recap) missing.push('recap');
+    if (!isFact && !paras.length) missing.push('why_in_news');
     if (facts.length < 6) missing.push(`prelims_facts(${facts.length})`);
     if (mcqs.length < 4) missing.push(`questions(${mcqs.length})`);
     if (missing.length) thin.push({ id: item.id, headline: item.headline, missing });
@@ -310,12 +322,19 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
 
     const topic = {
       n: 0,
+      kind: isFact ? 'fact' : 'topic',
       title: clean(item.headline),
       tags: papersFor(withUnits).slice(0, 3).map((p) => String(p).toUpperCase()),
-      hook: hook || clean(item.headline).slice(0, 120),
-      recap: recap || [cut40(paras[0] || item.headline), cut40(facts[0] || ''), cut40(item.static_linkage || '')],
-      why_in_news: paras.length ? paras : [strip(item.headline)],
-      key_details: rest,
+      // A fact card carries none of the retention layer, and the old fallbacks
+      // are what made it look broken: `why_in_news` repeated the headline
+      // verbatim under the headline, and the recap was three slices of the
+      // same short string.
+      hook: isFact ? '' : hook || clean(item.headline).slice(0, 120),
+      recap: isFact
+        ? []
+        : recap || [cut40(paras[0] || item.headline), cut40(facts[0] || ''), cut40(item.static_linkage || '')],
+      why_in_news: isFact ? [] : paras,
+      key_details: isFact ? [] : rest,
       prelims_facts: facts,
       questions: mcqs.map((m) => ({
         q: 0,
@@ -327,8 +346,8 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
       })),
     };
 
-    const blocks = blocksOf(item.static_notes);
-    if (item.static_linkage || blocks.length) {
+    const blocks = isFact ? [] : blocksOf(item.static_notes);
+    if (!isFact && (item.static_linkage || blocks.length)) {
       topic.static_linkage = { summary: clean(item.static_linkage), blocks };
     }
 

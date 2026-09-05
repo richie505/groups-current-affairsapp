@@ -168,3 +168,24 @@ table.kv tr:nth-child(even) td { background: var(--tint); }
 .ans .asof { color: var(--muted); font-size: 7.4pt; font-style: italic; }
 .key .quick { font-size: 8.6pt; margin-bottom: 4mm; color: var(--ink-2); line-height: 1.7; }
 .key .quick b { display: inline-block; min-width: 42pt; }
+
+/* ---- fact cards -------------------------------------------------------
+   A fact salvaged from an article that was not itself examinable: no note,
+   no hook, no static linkage. Quieter than a topic on purpose — a lighter
+   ground and a smaller number — so the eye reads it as a brief entry rather
+   than as a topic that failed to load. */
+.topic.factcard {
+  background: #FAFAF9;
+  border-left: 3px solid #D6D3D1;
+  padding-left: 10px;
+}
+.topic.factcard .topic-num { color: #A8A29E; }
+.topic.factcard h3 { font-size: 11.4pt; }
+.factcard-tag {
+  font-size: 7.2pt;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #A8A29E;
+  margin-top: 2px;
+}
+.topic.factcard .facts { margin-top: 6px; }

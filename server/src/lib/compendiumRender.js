@@ -86,4 +86,32 @@ async function renderCompendium(data, outPath) {
   return outPath;
 }
 
-module.exports = { renderCompendium, inlineHtml, KIT };
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** `September` from `2026-09-06`. */
+function monthName(iso) {
+  const m = Number(String(iso).slice(5, 7));
+  return MONTHS[m - 1] || '';
+}
+
+/** `APPSC-Current-Affairs-2026-09-06.pdf` — what the browser saves it as. */
+function compendiumFilename(date) {
+  return `APPSC-Current-Affairs-${date}.pdf`;
+}
+
+/** `APPSC-Current-Affairs-September-2026.pdf` for the monthly edition. */
+function monthlyFilename(month) {
+  return `APPSC-Current-Affairs-${monthName(`${month}-01`)}-${month.slice(0, 4)}.pdf`;
+}
+
+module.exports = {
+  renderCompendium,
+  inlineHtml,
+  KIT,
+  compendiumFilename,
+  monthlyFilename,
+  monthName,
+};

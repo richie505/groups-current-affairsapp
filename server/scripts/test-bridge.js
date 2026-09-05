@@ -1007,73 +1007,6 @@ check('and records it in the front matter', mdDraft.includes('status: draft'));
 const mdEmpty = MD.renderDigest(mdDay, [], new Map(), { draft: false });
 check('an empty digest renders rather than throwing', mdEmpty.includes('no published items'));
 
-// ---------------------------------------------------------------------------
-// The compendium's two-column flow
-// ---------------------------------------------------------------------------
-//
-// WHY THIS IS TESTED HERE AND NOT BY READING THE PDF
-//
-// The bug is that leaving column flow left the cursor at the CURRENT column's
-// y, so a full-width section banner printed over the taller column — a page of
-// a section heading, a topic and a whole WHY IN NEWS block drawn on top of the
-// previous section's questions, every character of both still legible.
-//
-// Nothing observable in the finished file catches it. The text is all there,
-// it extracts in reading order, the question numbers still run 1..N with no
-// gaps. Re-breaking the renderer on purpose and re-running a structural check
-// over the output confirmed it: the broken file passed. The only thing that
-// separates the two is geometry, so the geometry is what gets asserted.
-
-const COL = require('../src/lib/compendiumPdf').__columns;
-
-// A stand-in for a pdfkit document — just the fields the column helpers read.
-const fakeDoc = () => ({
-  page: { width: 595.28, height: 841.89, margins: { top: 52, bottom: 52, left: 52, right: 52 } },
-  x: 52,
-  y: 52,
-  addPage() {
-    this.y = this.page.margins.top;
-    this.added = (this.added || 0) + 1;
-  },
-});
-
-{
-  const doc = fakeDoc();
-  COL.beginColumns(doc, 2);
-  const colWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  check('two columns are narrower than the page', colWidth < 595.28 - 104 + 1 && colWidth > 200);
-
-  const leftEdge = doc.page.margins.left;
-  doc.y = 700; // fill the first column nearly to the foot
-  COL.nextColumn(doc);
-  check('the second column starts further right', doc.page.margins.left > leftEdge);
-  check('and at the top of the measure again', doc.y < 200);
-
-  doc.y = 300; // the second column ends only a third of the way down
-  COL.endColumns(doc);
-  check(
-    'leaving column flow drops BELOW the deepest column, not the current one',
-    doc.y >= 700
-  );
-  check('and restores the full measure', doc.page.margins.left === 52 && doc.page.margins.right === 52);
-}
-
-{
-  // A fresh page is a clean sheet: the previous page's depth must not push the
-  // next section banner most of a page down for no reason.
-  const doc = fakeDoc();
-  COL.beginColumns(doc, 2);
-  doc.y = 780;
-  COL.nextColumn(doc); // into column 2
-  doc.y = 780;
-  COL.nextColumn(doc); // past the last column — a new page
-  check('running out of columns adds a page', doc.added === 1);
-  COL.columnState(doc).maxY = doc.page.margins.top; // what the pageAdded hook does
-  doc.y = 120;
-  COL.endColumns(doc);
-  check('a new page does not inherit the previous page depth', doc.y < 200);
-}
-
 {
   // THE FOREIGN-DOMESTIC GUARD, AND WHY IT MUST WRITE A NOTE EVEN WHEN IT TAKES
   // NOTHING AWAY.
@@ -1181,6 +1114,172 @@ const fakeDoc = () => ({
   check(
     'the item still has exactly the one unit it was given',
     db.prepare('SELECT COUNT(*) AS n FROM ca_item_units WHERE item_id = ?').get(item).n === 1
+  );
+}
+
+{
+  // THE COMPENDIUM MAPPING — the only thing standing between the database and
+  // the file students read, and it had no test until the audit said so. The
+  // bugs written into it on the day it was built were a dropped table, a
+  // variable shadow and sections printing in arrival order; all three were
+  // caught by reading output by hand, which is exactly the check that stops
+  // happening once the novelty wears off.
+  const CD = require(path.join(__dirname, '..', 'src', 'lib', 'compendiumData'));
+  const SEC = require(path.join(__dirname, '..', 'src', 'lib', 'sections'));
+
+  const day = { date: '2026-09-06' };
+  const NOTES = [
+    'The **Assembly** passed four Bills on **19 August 2026**.',
+    '',
+    '| Bill | Provision |',
+    '|---|---|',
+    '| **Regulatory Bill** | Fee regulation |',
+    '| **Private Universities Bill** | Land floor cut to **10 acres** |',
+    '',
+    'The Minister introduced them.',
+  ].join('\n');
+  const STATIC = [
+    '## What it is',
+    'State legislation on higher education.',
+    '',
+    '## Key facts',
+    '| Attribute | Value |',
+    '|---|---|',
+    '| Bills | 4 |',
+  ].join('\n');
+  const FACTS = [
+    'Bills passed: 4',
+    'Date: 19 August 2026',
+    'Minimum land: 10 acres',
+    'Minister: Nara Lokesh',
+    'House: Legislative Assembly',
+    'Session: Monsoon',
+  ].join('\n');
+
+  const mk = (over) => ({
+    id: 1,
+    headline: 'Assembly passes four higher-education Bills',
+    notes_markdown: NOTES,
+    static_linkage: 'This updates the static topic of higher-education regulation.',
+    static_notes: STATIC,
+    prelims_facts: FACTS,
+    hook: '',
+    recap: '',
+    salvaged: 0,
+    ...over,
+  });
+  const q = {
+    question: 'How many Bills?',
+    option_a: 'Two', option_b: 'Three', option_c: 'Four', option_d: 'Five',
+    correct_option: 'c', explanation: 'Four.', fact_as_of: '2026-08-19',
+  };
+
+  const one = CD.buildCompendiumData([mk()], new Map([[1, [q, q, q, q, q, q]]]), {
+    day,
+    unitsOf: () => [{ unit_code: 'G2-P1-U7' }],
+  });
+  const t = one.data.sections[0].topics[0];
+  const tbl = t.key_details.find((b) => b.type === 'table');
+
+  check('a markdown table survives into key_details', !!tbl && tbl.rows.length === 2);
+  check('the table keeps its header', !!tbl && tbl.header[0] === 'Bill');
+  check('prose before the table becomes why_in_news', t.why_in_news[0].includes('passed four Bills'));
+  check('no pipe leaks into the prose', !t.why_in_news.join(' ').includes('|'));
+  check(
+    'prose after the table is kept as key details',
+    t.key_details.some((b) => b.type === 'p' && b.text.includes('introduced'))
+  );
+  check(
+    'a Key-facts table reaches the static box',
+    (t.static_linkage.blocks || []).some((b) => b.type === 'table')
+  );
+  check(
+    'facts are normalised to an em-dash so the template can split them',
+    t.prelims_facts.length === 6 && t.prelims_facts.every((f) => f.includes(' — '))
+  );
+  check('every question is carried, not the first four', t.questions.length === 6);
+  check('question letters are upper-cased', t.questions[0].answer === 'C');
+  check('a derived hook is produced when none is written', t.hook.length > 12);
+  check('the recap is exactly three bullets', t.recap.length === 3);
+
+  // A WRITTEN hook and recap beat the derived ones, which is what lets the
+  // derivation retire by itself as the archive turns over.
+  const two = CD.buildCompendiumData(
+    [mk({ hook: 'Bills = 4 · land floor = 10 acres', recap: 'One\nTwo\nThree' })],
+    new Map([[1, [q]]]),
+    { day, unitsOf: () => [] }
+  );
+  const t2 = two.data.sections[0].topics[0];
+  check('a written hook wins over the derivation', t2.hook === 'Bills = 4 · land floor = 10 acres');
+  check('a written recap wins too', t2.recap.join('|') === 'One|Two|Three');
+
+  // A three-column table folds rather than losing columns three and four.
+  const wide = CD.buildCompendiumData(
+    [mk({ notes_markdown: '| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n' })],
+    new Map([[1, [q]]]),
+    { day, unitsOf: () => [] }
+  );
+  const wt = wide.data.sections[0].topics[0].key_details.find((b) => b.type === 'table');
+  check('a three-column table folds to two', !!wt && wt.rows[0].length === 2);
+  check('and keeps the folded columns rather than dropping them', !!wt && wt.rows[0][1] === '2 · 3');
+
+  // A sentence containing a pipe must not open a table.
+  const pipey = CD.buildCompendiumData(
+    [mk({ notes_markdown: 'The report covers A | B trade and nothing else.' })],
+    new Map([[1, [q]]]),
+    { day, unitsOf: () => [] }
+  );
+  check(
+    'a stray pipe in prose does not become a table',
+    !pipey.data.sections[0].topics[0].key_details.some((b) => b.type === 'table')
+  );
+
+  // A note with no table at all still produces prose.
+  const plain = CD.buildCompendiumData(
+    [mk({ notes_markdown: 'Just a paragraph with no table at all.' })],
+    new Map([[1, [q]]]),
+    { day, unitsOf: () => [] }
+  );
+  check(
+    'a note with no table still yields prose',
+    plain.data.sections[0].topics[0].why_in_news[0].includes('no table')
+  );
+
+  // ---- the section scheme ----
+  //
+  // G2-S2 was in no section at all and fell through to the governance
+  // fallback, silently, because sectionOf() cannot tell an unmapped unit from
+  // an untagged item. That is the shape of bug this pins.
+  const codes = db
+    .prepare(
+      "SELECT unit_code FROM ref_units WHERE broad = 0 AND unfeedable = 0 AND format = 'objective'"
+    )
+    .all()
+    .map((r) => r.unit_code);
+
+  check('the section list covers the exam subjects', SEC.SECTIONS.length >= 8);
+  check('every objective unit resolves to a section', codes.every((c) => !!SEC.sectionOf({ units: [c] })));
+  check('science has its own section rather than sitting in economy', SEC.sectionOf({ units: ['G1P-S3'] }) === 'science');
+  check('geography has its own section', SEC.sectionOf({ units: ['G1P-D2'] }) === 'geography');
+  check('G2-S2 is placed rather than falling through', SEC.sectionOf({ units: ['G2-S2'] }) === 'geography');
+  check('history lands in History, Art & Culture', SEC.sectionOf({ units: ['G1P-A1'] }) === 'culture');
+  check('foreign policy has its own section', SEC.sectionOf({ units: ['G1P-B6'] }) === 'international');
+  check('an untagged item still lands somewhere', !!SEC.sectionOf({ units: [] }));
+
+  // Sections print in syllabus order however the items arrive.
+  const mixed = CD.buildCompendiumData(
+    [mk({ id: 1 }), mk({ id: 2 })],
+    new Map([[1, [q]], [2, [q]]]),
+    {
+      day,
+      // item 1 is geography, item 2 is polity — polity must still print first
+      unitsOf: (id) => (id === 1 ? [{ unit_code: 'G1P-D2' }] : [{ unit_code: 'G2-P1-U7' }]),
+    }
+  );
+  check('sections print in syllabus order, not arrival order', mixed.data.sections[0].title.startsWith('Polity'));
+  check(
+    'and the numerals close up rather than leaving gaps',
+    mixed.data.sections.map((x) => x.label).join(',') === 'Section I,Section II'
   );
 }
 

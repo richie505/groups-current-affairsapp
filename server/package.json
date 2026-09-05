@@ -22,5 +22,8 @@
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.20.1",
     "playwright": "^1.63.0"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }
