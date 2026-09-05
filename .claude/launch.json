@@ -4,7 +4,9 @@
     {
       "name": "appsc-ca",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["src/index.js"],
+      "runtimeArgs": [
+        "src/index.js"
+      ],
       "cwd": "server",
       "port": 4100
     }

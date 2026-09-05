@@ -431,13 +431,181 @@ function calloutBox(doc, label, text, { bg, accent, textColor = BODY } = {}) {
 }
 
 /**
+ * THE COVER, for the circulation edition only.
+ *
+ * A file that arrives in a chat group is competing with photographs and
+ * forwards, and it is opened — or not — on the strength of its first screen.
+ * The archive export can afford to start with a heading because whoever
+ * downloaded it went looking for it; this one cannot.
+ *
+ * Everything on it is a fact about this particular day, not decoration: the
+ * date, what it is drawn from, how much there is, how long it takes, and how
+ * to use it. The "how to read this" block is there because the answer key is
+ * at the back — a reader who does not know that answers questions with the
+ * answers in front of them, which is the one way to make practice useless.
+ */
+function circulationCover(doc, day, { items, questions, minutes, publication, draft }) {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const width = right - left;
+
+  doc.y = 120;
+
+  doc.font('Helvetica-Bold').fontSize(11).fillColor(ACCENT)
+    .text('APPSC CURRENT AFFAIRS', { characterSpacing: 1.4 });
+  doc.moveDown(0.15);
+  doc.font('Helvetica').fontSize(10.5).fillColor(MUTED)
+    .text('Daily digest for Group-I Prelims and Group-II', { characterSpacing: 0.2 });
+
+  doc.moveDown(1.1);
+  doc.moveTo(left, doc.y).lineTo(left + 70, doc.y).lineWidth(3).strokeColor(ACCENT).stroke();
+  doc.moveDown(0.9);
+
+  doc.font('Helvetica-Bold').fontSize(30).fillColor(INK).text(longDate(day.date), { lineGap: 2 });
+
+  if (day.title) {
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fontSize(13).fillColor(BODY).text(tidy(day.title), { width: width * 0.86 });
+  }
+
+  doc.moveDown(1.4);
+
+  // The three numbers that decide whether someone opens it now or later.
+  const cells = [
+    [String(items), items === 1 ? 'item' : 'items'],
+    [String(questions), questions === 1 ? 'question' : 'questions'],
+    [`${minutes}`, minutes === 1 ? 'minute read' : 'minute read'],
+  ];
+  const cellW = width / 3;
+  const cy = doc.y;
+  cells.forEach(([big, small], i) => {
+    const x = left + i * cellW;
+    doc.font('Helvetica-Bold').fontSize(26).fillColor(ACCENT).text(big, x, cy, { width: cellW });
+    doc.font('Helvetica').fontSize(9.5).fillColor(MUTED)
+      .text(small.toUpperCase(), x, cy + 30, { width: cellW, characterSpacing: 0.8 });
+  });
+  doc.y = cy + 52;
+
+  doc.moveDown(0.8);
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).lineWidth(0.75).strokeColor(RULE).stroke();
+  doc.moveDown(0.8);
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(INK)
+    .text('HOW TO USE THIS', { characterSpacing: 0.8 });
+  doc.moveDown(0.4);
+  for (const line of [
+    'Read the items in order — Andhra Pradesh first, because that is where the marks are.',
+    'Prelims facts under each item are the ones worth memorising.',
+    'Answer the questions as you go. The answer key and explanations are at the back.',
+    'Every fact is dated. Current affairs are superseded by later events.',
+  ]) {
+    doc.font('Helvetica').fontSize(10).fillColor(BODY);
+    doc.text('•  ', left + 4, doc.y, { continued: true });
+    doc.text(line, { width: width - 20 });
+    doc.moveDown(0.15);
+  }
+
+  if (draft) {
+    doc.moveDown(0.9);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#b91c1c')
+      .text('DRAFT — these items have not been reviewed. Do not circulate this file.', left, doc.y, { width });
+  }
+
+  // Footer of the cover, pinned to the bottom rather than following the flow:
+  // the provenance line belongs at the foot of the page whatever the title
+  // above it did to the layout.
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(
+    `Prepared from ${publication}.  Facts are correct as at the dates shown.`,
+    left,
+    doc.page.height - doc.page.margins.bottom - 26,
+    { width, align: 'left' }
+  );
+
+  doc.addPage();
+}
+
+/**
+ * THE CONTENTS, for the circulation edition only.
+ *
+ * Not a table of contents with page numbers — those would need a second pass
+ * and the file is fifteen pages, not five hundred. It is a running order: the
+ * same numbers the items carry, so a reader deciding what to do with ten
+ * minutes can pick, and a teacher pointing at one can say "number four".
+ */
+function circulationContents(doc, grouped, mcqsByItem) {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text('In this digest');
+  doc.moveDown(0.4);
+  sectionRule(doc);
+  doc.moveDown(0.4);
+
+  let n = 0;
+  for (const group of grouped) {
+    const color = BUCKET_COLORS[group.bucket] || ACCENT;
+    ensureRoom(doc, 30);
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(color)
+      .text(BUCKET_LABELS[group.bucket].toUpperCase(), { characterSpacing: 0.7 });
+    doc.moveDown(0.25);
+
+    for (const item of group.items) {
+      n += 1;
+      ensureRoom(doc, 26);
+      const y = doc.y;
+      const qs = (mcqsByItem.get(item.id) || []).length;
+
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(color)
+        .text(`${n}.`, left, y, { width: 20 });
+
+      const textW = right - left - 24 - 46;
+      doc.font('Helvetica').fontSize(10).fillColor(BODY)
+        .text(tidy(item.headline), left + 24, y, { width: textW });
+
+      // The tier and question count sit hard against the right margin, on the
+      // FIRST line of the headline whatever the headline did to doc.y below.
+      const tail = [Number(item.importance) === 1 ? 'Tier 1' : null, qs ? `${qs}Q` : null]
+        .filter(Boolean)
+        .join('  ');
+      if (tail) {
+        doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
+          .text(tail, right - 46, y + 1, { width: 46, align: 'right' });
+      }
+      afterFlow(doc, y, 12);
+      doc.moveDown(0.25);
+    }
+  }
+
+  doc.addPage();
+}
+
+/**
  * @param {object}   day
  * @param {object[]} items
  * @param {Map<number, object[]>} mcqsByItem
- * @param {object}   opts  { draft: boolean }
+ * @param {object}   opts  { draft, variant, omitted, total, publication }
  * @returns {PDFDocument} a readable stream — pipe it to the response
  */
-function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
+function renderDigestPdf(
+  day,
+  items,
+  mcqsByItem,
+  { draft = false, variant = 'full', omitted = 0, total = 0, publication = 'The Hindu' } = {}
+) {
+  // ONE RENDERER, TWO EDITIONS — not two renderers.
+  //
+  // The circulation file and the archive export draw the same items from the
+  // same data with the same markdown handling, table renderer, answer key and
+  // pagination. Copying all of that to change four decisions would give two
+  // files that drift apart the first time either is fixed, which is the
+  // failure this codebase already avoided with insertDrafted.
+  //
+  // So the differences live here, named, as four flags.
+  const circulation = variant === 'circulation';
+  const showVerify = !circulation;
+  const staticForAll = !circulation;
+
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
 
   const salvaged = items.filter((i) => Number(i.salvaged) === 1);
@@ -450,35 +618,51 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
   const totalQuestions = items.reduce((n, i) => n + (mcqsByItem.get(i.id) || []).length, 0);
 
+  if (circulation) {
+    circulationCover(doc, day, {
+      items: items.length,
+      questions: totalQuestions,
+      minutes: circulationMinutes(items),
+      publication,
+      draft,
+    });
+    if (items.length) circulationContents(doc, grouped, mcqsByItem);
+  }
+
   // Header. A coloured rule under the eyebrow rather than a plain black block
   // of text at the top — the same weight given to the cover of the standalone
   // "how to read this" guide, so the two feel like one product's output
   // rather than a styled page followed by a plain-text dump.
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(ACCENT)
-    .text('APPSC CURRENT AFFAIRS', { characterSpacing: 0.5 });
-  doc.moveDown(0.2);
-  doc.font('Helvetica-Bold').fontSize(20).fillColor(INK)
-    .text(longDate(day.date));
-  if (day.title) {
-    doc.moveDown(0.1);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(BODY).text(tidy(day.title));
-  }
-  doc.moveDown(0.2);
-  doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(
-    `The Hindu   ·   ${items.length} item${items.length === 1 ? '' : 's'}   ·   ` +
-      `${totalQuestions} question${totalQuestions === 1 ? '' : 's'}`
-  );
+  // The circulation edition has already said all of this on its cover, and
+  // repeating it on the first content page reads as a page that failed to
+  // load rather than as a heading.
+  if (!circulation) {
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(ACCENT)
+      .text('APPSC CURRENT AFFAIRS', { characterSpacing: 0.5 });
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fontSize(20).fillColor(INK)
+      .text(longDate(day.date));
+    if (day.title) {
+      doc.moveDown(0.1);
+      doc.font('Helvetica-Bold').fontSize(12).fillColor(BODY).text(tidy(day.title));
+    }
+    doc.moveDown(0.2);
+    doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(
+      `${publication}   ·   ${items.length} item${items.length === 1 ? '' : 's'}   ·   ` +
+        `${totalQuestions} question${totalQuestions === 1 ? '' : 's'}`
+    );
 
-  if (draft) {
-    doc.moveDown(0.4);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor('#b91c1c')
-      .text('DRAFT — not published. These items have not been reviewed. Do not circulate.');
+    if (draft) {
+      doc.moveDown(0.4);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#b91c1c')
+        .text('DRAFT — not published. These items have not been reviewed. Do not circulate.');
+    }
+    doc.moveDown(0.5);
+    doc.moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+      .lineWidth(2).strokeColor(ACCENT).stroke();
+    doc.moveDown(0.6);
   }
-  doc.moveDown(0.5);
-  doc.moveTo(doc.page.margins.left, doc.y)
-    .lineTo(doc.page.width - doc.page.margins.right, doc.y)
-    .lineWidth(2).strokeColor(ACCENT).stroke();
-  doc.moveDown(0.6);
 
   // Present in the markdown export and silently dropped here until now — an
   // admin-written intro for the day would just never have appeared in the
@@ -548,7 +732,15 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
           textColor: BODY,
         });
       }
-      if (Number(item.needs_verify) === 1) {
+      // THE VERIFY NOTE IS EDITORIAL, AND IT NEVER LEAVES THE BUILDING.
+      //
+      // It is written to the person deciding whether to publish — "verify
+      // these figures against the department's records before publication" —
+      // and it was reaching candidates verbatim on 120 of 144 live items. To
+      // a student that instruction is unactionable and reads as an admission
+      // that the material cannot be trusted. It belongs in the app and in the
+      // archive export, where the person who can act on it works.
+      if (showVerify && Number(item.needs_verify) === 1) {
         calloutBox(
           doc,
           'Verify',
@@ -559,10 +751,23 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
 
       if (item.notes_markdown) markdownBlock(doc, item.notes_markdown, { headingSize: 11, accent: bucketColor });
 
-      if (item.static_linkage || item.static_notes) {
+      // STATIC BACKGROUND IS THE BIGGEST THING IN AN ITEM, and in a file that
+      // has to be finished in one sitting it earns its space only on the
+      // items a candidate cannot skip. Measured: it is roughly a fifth of the
+      // whole export by weight, and it is why a fifty-eight item day runs to
+      // a hundred and eighty pages.
+      //
+      // The one-line `static_linkage` — "this updates the static topics of
+      // urban local self-government, municipal finance" — still rides on
+      // every item, because naming what to go and read costs three lines and
+      // is most of the value.
+      const withStatic = staticForAll || Number(item.importance) === 1;
+      if (item.static_linkage || (withStatic && item.static_notes)) {
         subHeader(doc, 'Static background', bucketColor);
         if (item.static_linkage) paragraph(doc, `_${tidy(item.static_linkage)}_`, { size: 9.5, color: MUTED });
-        if (item.static_notes) markdownBlock(doc, item.static_notes, { headingSize: 10, accent: bucketColor });
+        if (withStatic && item.static_notes) {
+          markdownBlock(doc, item.static_notes, { headingSize: 10, accent: bucketColor });
+        }
       }
 
       if (item.prelims_facts) {
@@ -674,15 +879,15 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
     }
   }
 
-  ensureRoom(doc, 40);
+  ensureRoom(doc, 56);
   doc.moveDown(0.3);
   sectionRule(doc);
   doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(MUTED).text(
-    'Generated by APPSC Current Affairs from The Hindu. Current-affairs facts are correct as at the ' +
+    `Generated by APPSC Current Affairs from ${publication}. Current-affairs facts are correct as at the ` +
       'dates shown and are superseded by later events.'
   );
 
-  numberPages(doc, day);
+  numberPages(doc, day, circulation);
   doc.end();
   return doc;
 }
@@ -697,9 +902,13 @@ function renderDigestPdf(day, items, mcqsByItem, { draft = false } = {}) {
  * all was the single thing that made it feel like an undifferentiated dump
  * rather than a document — nothing to cite, nothing to find your way back to.
  */
-function numberPages(doc, day) {
+function numberPages(doc, day, circulation = false) {
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i++) {
+    // The cover carries its own footer and is deliberately not numbered — a
+    // "Page 1 of 16" under a title page is the look of a printed report, not
+    // of something a person was handed.
+    if (circulation && i === 0) continue;
     doc.switchToPage(i);
     // The footer sits BELOW margins.bottom, in the margin itself — and
     // pdfkit's own overflow check for .text() compares the y it's given
@@ -723,9 +932,100 @@ function numberPages(doc, day) {
   }
 }
 
+/**
+ * How much prose the CIRCULATION edition actually carries, and how long that
+ * takes to read.
+ *
+ * Exported, and used by both the cover and the admin screen that previews it,
+ * because the obvious way to write this is the wrong one: `pacing.wordsIn()`
+ * counts every item's static notes, and the circulation edition carries them
+ * for Tier 1 only. Static background is 62% of a day's words — 25,487 of
+ * 41,192 measured on 23 August — so counting it for all fifteen items
+ * overstated a 15-minute file as a 47-minute one. Two callers computing this
+ * separately is exactly how those two numbers came to disagree.
+ *
+ * 220 words a minute is the rate lib/pacing.js uses for the in-app clock.
+ */
+const WORDS_PER_MINUTE = 220;
+
+function circulationWords(items) {
+  let n = 0;
+  for (const i of items) {
+    const parts = [i.notes_markdown, i.prelims_facts, i.static_linkage];
+    if (Number(i.importance) === 1) parts.push(i.static_notes);
+    for (const p of parts) {
+      if (p) n += String(p).split(/\s+/).filter(Boolean).length;
+    }
+  }
+  return n;
+}
+
+/**
+ * Reading minutes for the prose — the QUESTIONS ARE DELIBERATELY NOT IN IT.
+ *
+ * Folding them in at thirty seconds each turned a 25-minute read into a
+ * "55 minute read" on the cover, which is both true and useless: it is one
+ * number covering two different activities, and the one a person is deciding
+ * about when they open the file at a bus stop is the reading. The questions
+ * have their own number beside it, so the cover says 25 minutes and 60
+ * questions and lets the reader do the arithmetic they actually care about.
+ */
+function circulationMinutes(items) {
+  return Math.max(1, Math.round(circulationWords(items) / WORDS_PER_MINUTE));
+}
+
 /** `appsc-current-affairs-2026-08-21.pdf` — sorts by date in any file list. */
 function digestPdfFilename(date) {
   return `appsc-current-affairs-${date}.pdf`;
 }
 
-module.exports = { renderDigestPdf, digestPdfFilename };
+/**
+ * The name the circulated file carries into a chat app.
+ *
+ * `APPSC-Current-Affairs-2026-08-21.pdf` rather than the lowercase archive
+ * name, and deliberately different from it: these are two different documents
+ * and a student who has been sent both should not have to open them to tell
+ * which is which. Hyphens rather than spaces, because a filename with spaces
+ * comes out of some messaging clients broken into pieces.
+ */
+function circulationPdfFilename(date) {
+  return `APPSC-Current-Affairs-${date}.pdf`;
+}
+
+module.exports = {
+  renderDigestPdf,
+  digestPdfFilename,
+  circulationPdfFilename,
+  circulationWords,
+  circulationMinutes,
+};
+
+// THE DRAWING PRIMITIVES, SHARED WITH THE COMPENDIUM RENDERER.
+//
+// lib/compendiumPdf.js lays out a different document — themed sections, a
+// numbered index, a paper-mapping line under every topic — but it draws the
+// same content with the same rules: the same WinAnsi sanitising, the same
+// loose-markdown subset, the same GFM tables, the same page-break arithmetic.
+//
+// Exported rather than copied, and rather than moved to a third file, for the
+// reason this codebase already settled once with insertDrafted: two copies of
+// a renderer drift the first time either is fixed, and the bugs already found
+// here — the bullet that needed `continued: true`, the footer that paginated
+// itself onto a new page, the box measured on stripped markup — are exactly
+// the kind that would be fixed in one copy and not the other.
+module.exports.primitives = {
+  sanitize,
+  tidy,
+  factLines,
+  inlineSegments,
+  fontFor,
+  paragraph,
+  markdownBlock,
+  ensureRoom,
+  afterFlow,
+  sectionRule,
+  calloutBox,
+  badge,
+  longDate,
+  colors: { INK, BODY, MUTED, ACCENT, RULE },
+};

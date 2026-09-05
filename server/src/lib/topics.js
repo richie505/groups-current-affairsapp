@@ -36,6 +36,95 @@ function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Whether an alias should also match its own plural.
+ *
+ * "Core sector growth slows as fertilizer output falls" lost its industry unit
+ * because the headline says `fertilizer` and the body says "the fertilizers
+ * sector", and `\bfertilizer\b` does not match `fertilizers`. Every single-word
+ * alias had that hole; the headline-needs-the-body rule made it bite, because
+ * a word that appears in both places in different numbers now counts as
+ * appearing in neither.
+ *
+ * Phrases are included. The objection was that a phrase pluralises on an inner
+ * word as often as the last one — `industrial park` is fine, but `member of
+ * Parliament` becomes `members of Parliament`, which suffixing the tail cannot
+ * reach. That is true and it does not matter: suffixing the tail never produces
+ * a WRONG match, only a missed one, and measured over this corpus all thirteen
+ * phrase matches it recovered pluralised on the last word — municipal
+ * corporations, constitutional amendments, local body elections, irrigation
+ * projects, scheduled castes. Twelve of the thirteen were right.
+ *
+ * Never a strict alias, and never an acronym: those are strict precisely
+ * because a loose match fires on prose, and `SCs` is a different thing from
+ * `SC`. Never an alias already stored plural, because +s on a plural is noise.
+ * Never non-ASCII - Telugu does not form plurals by suffix.
+ */
+function stemmable(alias, strict) {
+  if (strict) return false;
+  const a = String(alias || '');
+  if (a.length < 4) return false;
+  if (/[^\x00-\x7F]/.test(a)) return false;
+  if (a === a.toUpperCase()) return false; // MGNREGA, and any acronym stored loose
+  if (/s$/i.test(a)) return false; // census, exports, BrahMos
+  return true;
+}
+
+// The suffix group appended to a stemmable alias. `(?:e?s)?` covers the regular
+// -s and the -es that follows a sibilant (tax/taxes); the consonant-y branch is
+// handled by rewriting the stem, which is why it is a rule here rather than the
+// irregular table it started as - policy, industry, party and ten others in the
+// current vocabulary all take it, and none of them is irregular.
+function pluralise(body) {
+  if (/[^aeiou]y$/i.test(body)) return `${body.slice(0, -1)}(?:y|ies)`;
+  return `${body}(?:e?s)?`;
+}
+
+/**
+ * Whether a STRICT alias would be safe to match with a bare trailing "s".
+ *
+ * NOT WIRED IN. Kept because the measurement is the useful part.
+ *
+ * Strict aliases are excluded from stemming on purpose — `SCs` is Scheduled
+ * Castes and `SC` is usually the Supreme Court — and the argument for relaxing
+ * that above four characters is sound: "Integrated Tribal Development Agencies
+ * (ITDAs)" is how a newspaper introduces an acronym, so the singular the alias
+ * holds may never appear in the article at all.
+ *
+ * The argument is sound and the corpus does not pay it. Thirty-six of the
+ * seventy strict aliases qualify (the other thirty-four are three characters —
+ * FIR, NOC, MLA, FDC and the rest — and stay out because that is where the
+ * collisions are). Across 411 articles those thirty-six recovered exactly ONE
+ * match: `MSMEs` in "India's MSMEs, to strengthen manufacturing
+ * competitiveness". And that one is wrong — `MSME` maps only to G2-P2-U5, "AP
+ * agriculture, industry, MSMEs...", so the recovery files a national story
+ * about industrial heat under an Andhra Pradesh unit.
+ *
+ * So the rule costs a clause and buys one bad tag. The real defect it exposed
+ * is in the vocabulary rather than the matcher: `MSME` had no national unit.
+ *
+ * MEASURED AGAIN after `MSME` was given G1P-C3 and G2-P2-U3. The same one
+ * article now recovers three tags — the two national ones, both right, and
+ * G2-P2-U5 again, still wrong, because `MSME` is also an alias for "AP
+ * agriculture, industry, MSMEs..." and nothing in the match can tell a national
+ * story from an AP one. Two right and one wrong is worse than the corpus
+ * average, so the rule stays out.
+ *
+ * The blocker is one alias, not the rule: `MSME` on G2-P2-U5 earns exactly two
+ * tags across 411 articles and BOTH are wrong — item 154 (a White House report
+ * on Indian pump exports) and item 218 (India's industrial heat). It has never
+ * matched a genuine AP MSME story. Drop that one row and the recovery is 2 for
+ * 2 and this rule ships; that is a vocabulary decision for the reviewer, not
+ * one to take while wiring a matcher.
+ *
+ * Re-enable by restoring the `strict && acronymPlural(alias)` branch in
+ * aliasMatcher.
+ */
+function acronymPlural(alias) {
+  const a = String(alias || '');
+  return a.length >= 4 && !/s$/.test(a);
+}
+
 // A strict alias is matched exactly as printed, case-sensitively, on word
 // boundaries. These are the short acronyms - HAM, TTD, CAA, SC - where a loose
 // match would fire inside unrelated words or on ordinary prose.
@@ -43,13 +132,33 @@ function escapeRe(s) {
 // A non-strict alias is matched case-insensitively, still on word boundaries.
 // Word boundaries matter even here: without them 'mayor' matches nothing useful
 // in isolation but 'FTA' would match inside 'aftantecedent'.
-function aliasMatcher(alias, strict) {
-  const body = escapeRe(strict ? alias : norm(alias));
+//
+// `plural` opts the alias into matching its own plural — off by default so a
+// caller that has not thought about it keeps the old behaviour.
+function aliasMatcher(alias, strict, plural) {
+  const raw = escapeRe(strict ? alias : norm(alias));
+  const body = plural && stemmable(alias, strict) ? pluralise(raw) : raw;
   // \b does not work against a non-ASCII script, so Telugu aliases fall back to
   // a plain containment test. Telugu has no case, so nothing is lost.
   const nonAscii = /[^\x00-\x7F]/.test(alias);
   if (nonAscii) {
-    return { test: (haystackRaw, haystackNorm) => haystackNorm.includes(norm(alias)) };
+    const needle = norm(alias);
+    return {
+      test: (haystackRaw, haystackNorm) => haystackNorm.includes(needle),
+      count: (haystackRaw, haystackNorm) => haystackNorm.split(needle).length - 1,
+      // The same shape the ASCII branch returns, so a caller never has to ask
+      // which kind of alias it is holding. Omitting it here is how the
+      // proper-name guard crashed on the first Telugu alias it reached.
+      matches: (haystackRaw, haystackNorm) => {
+        const spans = [];
+        let i = haystackNorm.indexOf(needle);
+        while (i !== -1) {
+          spans.push({ start: i, end: i + needle.length });
+          i = haystackNorm.indexOf(needle, i + needle.length);
+        }
+        return { target: haystackNorm, spans };
+      },
+    };
   }
   const re = new RegExp(`\\b${body}\\b`, strict ? 'g' : 'gi');
   return {
@@ -64,6 +173,29 @@ function aliasMatcher(alias, strict) {
       while (re.exec(target) !== null) n++;
       return n;
     },
+    /**
+     * Where the alias matched, and in which string.
+     *
+     * `test` and `count` answer "is it there" and "how often", which is all
+     * the scorer needed until it had to ask what sits NEXT TO a match — an
+     * alias inside "Alluri Sitarama Raju Academy" or "Directorate of Public
+     * Health" is part of a name rather than a mention of the topic. That
+     * question needs offsets, and it needs to know which haystack they index
+     * into, because a strict alias matches the raw text and a loose one the
+     * normalised text. Returning both together is what keeps a caller from
+     * pairing an offset with the wrong string.
+     */
+    matches: (haystackRaw, haystackNorm) => {
+      const target = strict ? haystackRaw : haystackNorm;
+      re.lastIndex = 0;
+      const out = [];
+      let m;
+      while ((m = re.exec(target)) !== null) {
+        out.push({ start: m.index, end: m.index + m[0].length });
+        if (m[0].length === 0) re.lastIndex += 1; // cannot happen here, but a zero-width match would spin
+      }
+      return { target, spans: out };
+    },
   };
 }
 
@@ -74,7 +206,10 @@ function loadAliases(db) {
          FROM topic_aliases a JOIN topics t ON t.id = a.topic_id`
     )
     .all();
-  return rows.map((r) => ({ ...r, matcher: aliasMatcher(r.alias, !!r.strict) }));
+  // The topic layer stays singular-only for now: its aliases are almost all
+  // proper nouns, and its precision has not been measured the way the unit
+  // filter's has.
+  return rows.map((r) => ({ ...r, matcher: aliasMatcher(r.alias, !!r.strict, false) }));
 }
 
 // The text of an item, split into the part that decides what it is ABOUT and
@@ -337,6 +472,8 @@ function coldTopics(db) {
 module.exports = {
   norm,
   aliasMatcher,
+  stemmable,
+  acronymPlural,
   loadAliases,
   matchItem,
   rebuild,

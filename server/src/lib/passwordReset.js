@@ -54,7 +54,17 @@ function findValidReset(db, token) {
 
 function consumeReset(db, { resetId, userId, passwordHash }) {
   db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+    // The token version goes up in the SAME statement as the password.
+    //
+    // A reset is the recovery path for an account someone may have lost
+    // control of, so it is the last place a live session from before the
+    // reset should survive. Doing it here rather than in the route means
+    // every caller of consumeReset gets it — there is one today and the rule
+    // should not depend on the next one remembering.
+    db.prepare(
+      `UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 0) + 1
+        WHERE id = ?`
+    ).run(passwordHash, userId);
     db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE id = ?").run(resetId);
     // Belt and braces: burn every other outstanding link for this account too,
     // so an older one that was also sent out can't be replayed afterwards.

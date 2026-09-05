@@ -80,6 +80,23 @@ db.exec(schema);
     // a discipline, and a discipline nobody opted into is an obstacle.
     // See server/src/lib/pacing.js.
     users: [
+      // WHAT MAKES A SESSION REVOCABLE.
+      //
+      // A JWT is valid until it expires, and this app's expire in thirty days.
+      // So changing a password did nothing to the sessions already out there:
+      // the token on a lost phone, or on the machine the password was changed
+      // *because of*, kept working for up to a month. There was no jti, no
+      // deny-list and no version — nothing in the system could say "not that
+      // one".
+      //
+      // A counter on the row is the smallest thing that can. It rides in the
+      // token as `tv` and is compared against this column on every
+      // authenticated request; bumping it invalidates every token ever issued
+      // for that account at once, which is exactly what "I changed my
+      // password" should mean. The device doing the changing is handed a
+      // fresh token in the same response, so it stays signed in and every
+      // other device does not.
+      ['token_version', 'INTEGER NOT NULL DEFAULT 0'],
       ['pacing', "TEXT NOT NULL DEFAULT 'off'"],
       // The student's own reading time, in minutes, used when pacing is set to
       // 'custom'. Stored even while another mode is selected, so switching to
@@ -185,6 +202,40 @@ db.exec(schema);
     // trusts, and the first question an admin asks about "62 / HIGH" is which
     // part of it came from where. Keeping the breakdown also means a change to
     // the weights can be evaluated against past articles instead of guessed at.
+    // The evidence flags the syllabus matcher writes — see schema.sql for what
+    // each one is and why the old single flag was two claims in a trench coat.
+    ref_unit_aliases: [
+      ['standalone', 'INTEGER NOT NULL DEFAULT 0'],
+      // A HAND DECISION THAT THE BACKFILL MUST NOT ARGUE WITH.
+      //
+      // `standalone` is derived — a phrase or an acronym earns it, anything
+      // else does not — and the derivation is right often enough to be worth
+      // keeping. What it cannot see is a single mixed-case word that is a
+      // unique proper noun: `Gorkhaland` names exactly one thing in the world
+      // and `BHAVYA` is an acronym six characters long, so neither is a phrase
+      // and neither is short enough to be read as an acronym. The rule scored
+      // both 0 and there is no wording of the rule that would fix that without
+      // also admitting every ordinary noun.
+      //
+      // NULL means "no opinion, derive it". 1 or 0 is a decision the backfill
+      // copies through untouched, and seed-g2-syllabus.js carries it across the
+      // clear-and-rebuild so a reseed does not silently discard it.
+      ['standalone_override', 'INTEGER'],
+      // A COMMON NOUN THAT NAMES A DOMAIN BUT NOT A TOPIC.
+      //
+      // `monsoon`, `census`, `port`, `transport`, `regulator` each appear in
+      // 1-5% of the corpus. One of them is not evidence, and the audits showed
+      // that TWO of them are not either: `monsoon, census` filed a story about
+      // Adivasi employment under geography, and `lift irrigation, canal` filed
+      // a school-bus accident there too. So the two-distinct-terms clause now
+      // requires at least one term that is not weak.
+      //
+      // Weakness is about the term, not the tag: a weak term still counts
+      // towards the tag when a strong one sits beside it, and still carries a
+      // unit outright when it is in the headline.
+      ['weak', 'INTEGER NOT NULL DEFAULT 0'],
+    ],
+    np_article_units: [['in_standfirst', 'INTEGER NOT NULL DEFAULT 0']],
     np_articles: [
       ['score', 'REAL'],
       ['band', "TEXT NOT NULL DEFAULT ''"],
@@ -210,6 +261,18 @@ db.exec(schema);
       // authority the argument rests on.
       ['bylines', "TEXT NOT NULL DEFAULT ''"],
       ['credits', "TEXT NOT NULL DEFAULT ''"],
+      // A CONTRIBUTOR CREDIT FOUND INSIDE A NEWS ARTICLE'S BODY.
+      //
+      // The symptom of a multi-column segmentation bleed: two stories merged
+      // into one block, so an op-ed's "(X is an expert in launch vehicle
+      // systems)" ends up buried inside an unrelated report. That is how an
+      // ISRO/Gaganyaan passage came to sit inside a story about advertising
+      // notices, and how that item acquired a space-and-defence unit tag.
+      //
+      // A WARNING, never a rejection. Four articles in this corpus carry it and
+      // two were drafted; the signal is specific enough to be worth showing an
+      // admin and nowhere near reliable enough to throw an article away on.
+      ['bleed_suspect', 'INTEGER NOT NULL DEFAULT 0'],
     ],
   };
 

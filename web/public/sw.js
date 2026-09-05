@@ -13,7 +13,16 @@
 // what's left is small enough that a readable file beats a new dependency and
 // an extra build step in the deploy.
 
-const VERSION = 'v1';
+// BUMP THIS ON ANY DEPLOY THAT CHANGES THE SHELL OR THE CACHING RULES.
+//
+// The activate handler deletes every cache whose name is not in ALL_CACHES,
+// which is the right mechanism and did nothing for a year because the version
+// in the name never changed. The cost is quiet: SHELL_CACHE holds `/` — the
+// built index.html, naming that build's hashed bundles — and it is written
+// once at install and never revalidated. A device that installed the worker
+// months ago keeps serving that index.html on every offline cold start, so
+// offline is pinned to a build whose assets may no longer exist on the server.
+const VERSION = 'v2';
 const SHELL_CACHE = `shell-${VERSION}`;
 const ASSET_CACHE = `assets-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;

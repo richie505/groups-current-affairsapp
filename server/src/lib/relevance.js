@@ -140,6 +140,18 @@ const FOREIGN_NAME =
 const INDIA_TERM =
   /\b(?:India|Indian|Bharat|Andhra|Telangana|Amaravati|Vijayawada|Visakhapatnam|Tirupati|Delhi|Mumbai|Chennai|Kolkata|Bengaluru|Kerala|Karnataka|Tamil Nadu|Maharashtra|Gujarat|Rajasthan|Bihar|Odisha|Jharkhand|Assam|Punjab|Haryana|Centre|Union Government|Parliament|Lok Sabha|Rajya Sabha|RBI|NITI Aayog|Supreme Court of India)\b/i;
 
+// How much more foreign than Indian the body must be before the guard fires.
+// 1.0 (bare majority) fired on "Rashtrapati Bhavan withdraws email on Bangladesh
+// PM visit" at 4-3 and on an India-Sri Lanka cricket preview at 7-6, both of
+// which are domestic stories. 1.5 spares both and still catches every case the
+// guard was built for. It is one number, deliberately, so it can be moved.
+const FOREIGN_MARGIN = 1.5;
+
+// What a foreign-heavy story is still allowed to be tagged. Group-I's foreign
+// policy unit is the whole list: Group-II has no international-relations unit,
+// only the broad G2-S5, which is excluded from tagging everywhere.
+const IR_UNITS = new Set(['G1P-B6']);
+
 function bucketOf({ text, ap }) {
   // AP wins over everything else. A story that is both national and about Andhra
   // Pradesh belongs in the AP bucket, because AP is the axis this exam turns on
@@ -196,7 +208,14 @@ function loadSyllabusUnits(db) {
   try {
     rows = db
       .prepare(
-        `SELECT a.unit_code, a.alias, a.strict, u.label, u.paper, u.exam, u.format
+        // `standalone` decides whether ONE mention of this alias is enough to
+        // carry the unit — see the third clause of the evidence filter below,
+        // and server/scripts/backfill-alias-standalone.js for how it is set.
+        // COALESCE so a database that predates the column still scores.
+        `SELECT a.unit_code, a.alias, a.strict,
+                COALESCE(a.standalone, 0) AS standalone,
+                COALESCE(a.weak, 0) AS weak,
+                u.label, u.paper, u.exam, u.format
            FROM ref_unit_aliases a
            JOIN ref_units u ON u.unit_code = a.unit_code
           WHERE u.broad = 0 AND u.unfeedable = 0`
@@ -206,7 +225,83 @@ function loadSyllabusUnits(db) {
     // An older database without the syllabus map still scores, on topics alone.
     return [];
   }
-  return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict) }));
+  // Plural-tolerant: `fertilizer` must also see "the fertilizers sector".
+  // T.stemmable decides which aliases qualify; acronyms and phrases do not.
+  return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict, true) }));
+}
+
+/**
+ * The words that make a match part of somebody's NAME rather than a mention of
+ * the topic — see ref_entity_nouns and server/scripts/seed-entity-nouns.js.
+ *
+ * Lowercased once here because a loose alias matches against normalised text,
+ * which is already lowercase; a strict alias matches raw text, and comparing
+ * case-insensitively there costs nothing and avoids two code paths.
+ */
+function loadEntityNouns(db) {
+  try {
+    return new Set(
+      db.prepare('SELECT noun FROM ref_entity_nouns').all().map((r) => String(r.noun).toLowerCase())
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+// A word boundary either side, so "Academy" does not match inside "Academic".
+const WORD_BEFORE = /([A-Za-z][A-Za-z.'-]*)\s*$/;
+const WORD_AFTER = /^\s*([A-Za-z][A-Za-z.'-]*)/;
+// One linking word may sit between the alias and the entity noun:
+// "Directorate OF Public Health".
+const LINKERS = new Set(['of', 'for', 'and', 'the']);
+
+/**
+ * Is this particular occurrence part of a longer proper name?
+ *
+ * Looks one token out on each side, stepping over a single linking word, and
+ * asks whether that token is an entity noun. A trailing "+" counts on its own:
+ * "BRICS+ Legal Forum" is a forum, not the grouping.
+ *
+ * Deliberately NOT "any adjacent capitalised token" — that rejects "Election
+ * Commission of India", which is the Election Commission.
+ */
+function insideProperName(target, start, end, nouns) {
+  if (!nouns.size) return false;
+  if (target[end] === '+') return true;
+
+  const after = WORD_AFTER.exec(target.slice(end, end + 40));
+  if (after) {
+    let word = after[1].toLowerCase();
+    if (LINKERS.has(word)) {
+      const second = WORD_AFTER.exec(target.slice(end + after[0].length, end + 60));
+      word = second ? second[1].toLowerCase() : '';
+    }
+    if (nouns.has(word)) return true;
+  }
+
+  const before = WORD_BEFORE.exec(target.slice(Math.max(0, start - 40), start));
+  if (before) {
+    let word = before[1].toLowerCase();
+    if (LINKERS.has(word)) {
+      const head = target.slice(Math.max(0, start - 60), start - before[0].length);
+      const second = WORD_BEFORE.exec(head);
+      word = second ? second[1].toLowerCase() : '';
+    }
+    if (nouns.has(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does the alias appear in this text other than as part of a proper name?
+ *
+ * A unit survives on ONE clean occurrence: "Public health spending rose" in the
+ * same article as "Directorate of Public Health" is still about public health.
+ */
+function matchesOutsideName(matcher, raw, norm, nouns) {
+  const { target, spans } = matcher.matches(raw, norm);
+  if (!spans.length) return false;
+  return spans.some((sp) => !insideProperName(target, sp.start, sp.end, nouns));
 }
 
 function loadContext(db) {
@@ -285,6 +380,7 @@ function loadContext(db) {
     keywords, pyqCount, topicPapers, topicTier,
     aliases: T.loadAliases(db),
     g2Units: loadSyllabusUnits(db),
+    entityNouns: loadEntityNouns(db),
   };
 }
 
@@ -430,24 +526,101 @@ function score(article, ctx) {
   // The units matched are recorded whatever the score, because the drafter needs
   // them (it should write to the unit APPSC actually examines) and the admin
   // needs them (a list of articles with no unit between them is a list to skip).
+  // THE HEADLINE AND THE STANDFIRST ARE SEPARATED HERE, and only here.
+  //
+  // `head` above is headline + standfirst, which is right for keyword and
+  // topic matching — a standfirst is prominent text and a term in it is worth
+  // more than one buried in paragraph nine. It is wrong for the unit filter,
+  // whose strongest clause is "named in the headline". On this paper the
+  // standfirst is frequently a whole paragraph and on one advertisement it was
+  // the ad copy, so that clause was being satisfied by 200 characters of prose
+  // — which is how `stock exchange` came to be a headline hit on an article
+  // headed "Trade scam or supply chain play? Profit in transit".
+  //
+  // So the unit loop reads the headline alone as the headline, and treats the
+  // standfirst as body evidence: it still contributes a distinct term to the
+  // two-terms clause, it simply cannot carry a unit by itself.
+  //
+  // Kept local rather than changing `head`, because `head` is also what the
+  // keyword and topic matchers read and their flags mean something different.
+  // np_article_keywords.in_headline has the same conflation and is a separate
+  // decision.
+  const unitHead = String(article.headline || '');
+  const unitStand = String(article.standfirst || '');
+
+  const nouns = ctx.entityNouns || new Set();
+
   const g2Hits = [];
   for (const u of ctx.g2Units || []) {
-    const inHead = u.matcher.test(head, T.norm(head));
-    const inBody = inHead || u.matcher.test(body, T.norm(body));
-    if (!inHead && !inBody) continue;
+    // Each occurrence is checked for the proper-name guard, so a match that
+    // exists only inside "Alluri Sitarama Raju Academy" counts as no match.
+    const inHead = matchesOutsideName(u.matcher, unitHead, T.norm(unitHead), nouns);
+    const inStand = matchesOutsideName(u.matcher, unitStand, T.norm(unitStand), nouns);
+    const inBody = matchesOutsideName(u.matcher, body, T.norm(body), nouns);
+    if (!inHead && !inStand && !inBody) continue;
+
+    // 3b — A SINGLE COMMON WORD IN THE HEADLINE IS NOT A HEADLINE HIT.
+    //
+    // The headline clause is the strongest in the filter, and one word is the
+    // weakest evidence there is. "Monsoon Session of State Legislature" put a
+    // parliamentary term into physical geography on `monsoon` alone, and an
+    // advertisement's `dairy` reached AP agriculture the same way. Requiring
+    // the word to appear in the body too costs almost nothing on a real match
+    // — a story about the monsoon says "monsoon" more than once — and refuses
+    // the false friend, which by definition does not.
+    //
+    // Phrases and standalone aliases are exempt: they carry the unit on one
+    // mention anywhere, which is what standalone means.
+    const oneWord = !u.alias.includes(' ');
+    // 3b, unchanged: a single word in the headline must also be in the body.
+    const headOk = inHead && (!oneWord || u.standalone || inBody);
+    // Whether the HIT can claim the headline clause is decided after the loop,
+    // because it depends on terms this iteration has not seen yet — see the
+    // `in_headline` assignment below.
     const found = g2Hits.find((h) => h.unit_code === u.unit_code);
     if (found) {
       found.hits += 1;
-      found.in_headline = found.in_headline || (inHead ? 1 : 0);
+      found.headStrong = found.headStrong || (headOk && !u.weak);
+      found.headWeak = found.headWeak || (headOk && !!u.weak);
+      found.bodyStrong = found.bodyStrong || ((inBody || inStand) && !u.weak);
+      found.in_standfirst = found.in_standfirst || (inStand ? 1 : 0);
+      if (!u.weak) found.strongTerms += 1;
+      // Tracked on every alias regardless of the four-term display cap: a
+      // standalone alias that happens to be the fifth match still counts.
+      found.standalone = found.standalone || !!u.standalone;
       if (found.matched.length < 4) found.matched.push(u.alias);
     } else {
       g2Hits.push({
         unit_code: u.unit_code, label: u.label, paper: u.paper,
         exam: u.exam, format: u.format,
-        hits: 1, in_headline: inHead ? 1 : 0, matched: [u.alias],
+        hits: 1,
+        headStrong: headOk && !u.weak,
+        headWeak: headOk && !!u.weak,
+        bodyStrong: (inBody || inStand) && !u.weak,
+        in_standfirst: inStand ? 1 : 0,
+        standalone: !!u.standalone,
+        strongTerms: u.weak ? 0 : 1,
+        matched: [u.alias],
       });
     }
   }
+  // A WEAK WORD IN THE HEADLINE IS STILL A WEAK WORD.
+  //
+  // The headline clause was the last place weakness did not apply, and
+  // "Monsoon Session of State Legislature" walked through it: `monsoon` in the
+  // headline, `monsoon` again in the body — so 3b was satisfied — and a
+  // parliamentary term went into physical geography. 3b asks whether the word
+  // is really there; this asks whether the word means anything.
+  //
+  // So a weak headline term needs a NON-WEAK partner somewhere in the article.
+  // A story genuinely about the monsoon says "rainfall" or "southwest monsoon"
+  // or "deficit" too; a story about a legislative session says none of them.
+  // Decided here rather than in the loop because the partner may be matched by
+  // an alias processed later.
+  for (const h of g2Hits) {
+    h.in_headline = h.headStrong || (h.headWeak && h.bodyStrong) ? 1 : 0;
+  }
+
   // Strongest first: a unit named in the headline, then one with more distinct
   // terms behind it. A single body mention of "hospital" is not a health-policy
   // article, and the ordering is what lets a caller take the top two and be
@@ -469,14 +642,36 @@ function score(article, ctx) {
   // read "YSRCP disrupts proceedings in Council" as off-syllabus, because the
   // body says "Legislative Council" once and says it exactly right. The
   // distinction that matters is not how often a term appears but how much work
-  // it does: every alias that misfired — hospital, women, missile, Gandhi — is a
-  // single common word, and every phrase — "Legislative Council", "Right to
-  // Education", "minimum support price" — names its unit on sight.
+  // it does.
   //
-  // A space is a crude test for that and a good one here: a newspaper does not
-  // write "minimum support price" about anything else.
-  const specific = (h) => h.matched.some((m) => m.includes(' '));
-  const solid = g2Hits.filter((h) => h.in_headline || h.matched.length >= 2 || specific(h));
+  // A SPACE WAS THE WRONG TEST FOR THAT, measured on 40 random tags in
+  // docs/audits/2026-09-05-paper-mapping/. Precision came out at 72.5%, and
+  // this clause was seven of the eleven errors: `human rights` from a quote
+  // about an extradition, `good governance` on a SEBI framework, `stock
+  // exchange` from "New York Stock Exchange", `population density` on a
+  // highway land dispute, `renewable energy` on industrial parks, `artificial
+  // intelligence` on a robotic dog, `Legislative Assembly` on the place a
+  // fertiliser figure was read out. Every one of them contains a space.
+  //
+  // It failed in the other direction at the same time, which is what makes it
+  // one fault rather than two. 415 aliases have no space and so could never
+  // qualify — UPSC, SEBI, IRDAI, NHRC, ASEAN, BRICS, SAARC, AMRUT, MGNREGA. A
+  // report on the BRICS Youth Ministers' Meeting was left with no unit at all.
+  //
+  // So specificity is now recorded per alias rather than inferred from its
+  // punctuation. See server/scripts/backfill-alias-standalone.js, which holds
+  // the decision and can be re-run after a reseed.
+  // THE TWO-TERMS CLAUSE NEEDS ONE TERM THAT MEANS SOMETHING.
+  //
+  // Two distinct terms was a proxy for "more than a passing mention", and it
+  // holds only while the terms carry weight. `monsoon, census` filed a story
+  // about Adivasi employment under geography; `lift irrigation, canal` filed a
+  // school-bus accident there too. Both cleared the clause on two words that
+  // appear in 1-2% of the corpus apiece. At least one term must now be
+  // non-weak — see ref_unit_aliases.weak.
+  let solid = g2Hits.filter(
+    (h) => h.in_headline || h.standalone || (h.matched.length >= 2 && h.strongTerms >= 1)
+  );
 
   // The same foreign-domestic guard factor A already applies. A war report
   // naming a missile is not Indian defence technology, and letting the Group-II
@@ -494,6 +689,52 @@ function score(article, ctx) {
           `${headUnit ? ' (in the headline)' : ''}`
       );
     }
+  }
+
+  // A FOREIGN STORY HAS ONE INDIAN PAPER LINE, AND IT IS FOREIGN POLICY.
+  //
+  // `foreignDomestic` above damps the topic score, but it demands NO Indian
+  // term anywhere in the article, and an op-ed comparing China's party system
+  // with India's names India constantly. So it fires on nothing that matters,
+  // and Xi Jinping's doctrine for a self-governing party went out tagged to six
+  // units — the Constitution, Centre-State relations, political parties.
+  //
+  // This test is proportional instead. A foreign name in the headline, and the
+  // body is more than half again as foreign as it is Indian. The margin is what
+  // separates "China's party congress, which India watched" from "India and
+  // China signed": at parity, or anywhere near it, the story is domestic with a
+  // foreign subject and keeps its units. It is deliberately a ratio over raw
+  // counts and not a rate over length — a long article about Bangladesh names
+  // Bangladesh more often, and that is the signal, not a confound.
+  //
+  // When it fires, the article keeps foreign-policy units and drops the rest.
+  // Group-II ends up with nothing, and that is correct rather than a gap: its
+  // only international unit is G2-S5, "Current affairs — international, national
+  // and Andhra Pradesh", which is broad by design and excluded from tagging
+  // everywhere. A foreign story genuinely has no Group-II paper line.
+  //
+  // Placed AFTER the syllabus scoring above so the guard changes what an
+  // article is TAGGED, not what it scores. Re-ranking the drafts is a different
+  // question from mapping them, and mixing the two would make neither
+  // measurable.
+  const foreignBody = countOf(FOREIGN_NAME, body);
+  const indianBody = countOf(INDIA_TERM, body);
+  const foreignHeavy =
+    !ap && FOREIGN_NAME.test(head) && foreignBody > FOREIGN_MARGIN * indianBody;
+  //
+  // The note is written whenever the guard TRIGGERS, not only when it takes
+  // something away. A foreign story that matched no unit in the first place
+  // drops nothing, and if silence were the record of that, it would be
+  // indistinguishable from an ordinary mapping failure — which is exactly the
+  // distinction the admin screen needs to draw. Three of the four foreign
+  // blanks in this corpus are of that kind.
+  if (foreignHeavy) {
+    const kept = solid.filter((h) => IR_UNITS.has(h.unit_code));
+    notes.push(
+      `foreign-heavy (${foreignBody} foreign vs ${indianBody} Indian): dropped ` +
+        `${solid.length - kept.length} non-IR unit(s)`
+    );
+    solid = kept;
   }
 
   // THE ANSWER THE ADMIN ACTUALLY WANTS.
@@ -647,4 +888,19 @@ function extractEntities(article) {
   return [...found.values()];
 }
 
-module.exports = { score, bandFor, bucketOf, subjectsOf, loadContext, extractEntities, WEIGHTS, BANDS };
+module.exports = {
+  score,
+  bandFor,
+  bucketOf,
+  subjectsOf,
+  loadContext,
+  extractEntities,
+  WEIGHTS,
+  BANDS,
+  // Exposed for the audit scripts under docs/audits — the foreign-domestic
+  // guard's vocabulary is the thing most likely to need widening, so it has to
+  // be inspectable from outside without being copied and drifting.
+  FOREIGN_NAME,
+  INDIA_TERM,
+  FOREIGN_MARGIN,
+};

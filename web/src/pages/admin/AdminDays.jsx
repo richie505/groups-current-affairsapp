@@ -6,8 +6,9 @@ import Loading from '../../components/Loading';
 import ErrorState from '../../components/ErrorState';
 import { Chip } from '../../components/Badges';
 import DownloadDigest from '../../components/DownloadDigest';
+import CirculationPanel from '../../components/admin/CirculationPanel';
 import { longDate, todayIso } from '../../lib/caFormat';
-import { IconPlus, IconCheck, IconPencil } from '../../components/Icon';
+import { IconPlus, IconCheck, IconPencil, IconSend } from '../../components/Icon';
 
 export default function AdminDays() {
   const { data, error, loading, reload } = useResource('/admin/days');
@@ -15,6 +16,10 @@ export default function AdminDays() {
   const [title, setTitle] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  // Which day's circulation panel is open. One at a time: the panel is the
+  // last screen before a file is sent to people, and two of them side by side
+  // is how the wrong day's PDF gets downloaded.
+  const [openFor, setOpenFor] = useState(null);
 
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={reload} />;
@@ -105,10 +110,8 @@ export default function AdminDays() {
 
       <div className="space-y-2">
         {data.days.map((d) => (
-          <div
-            key={d.id}
-            className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-surface p-3"
-          >
+          <div key={d.id} className="rounded-lg border border-slate-200 bg-surface p-3">
+            <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-slate-900">{longDate(d.date)}</p>
               {d.title ? <p className="truncate text-sm text-slate-600">{d.title}</p> : null}
@@ -138,11 +141,27 @@ export default function AdminDays() {
                 the last check before it goes out. The file itself says DRAFT
                 across the top, because a file has no status once it is in a
                 folder. */}
+            {/* The archive export — everything, for reading a day through or
+                keeping it. The circulation file below it is the one that goes
+                to students; these are deliberately two different documents and
+                two different buttons. */}
             <DownloadDigest
               date={d.date}
-              label={d.status === 'published' ? 'PDF' : 'Draft PDF'}
+              label={d.status === 'published' ? 'Full PDF' : 'Draft PDF'}
               className="!px-2 !py-1 !text-xs !font-semibold"
             />
+            <button
+              type="button"
+              onClick={() => setOpenFor(openFor === d.id ? null : d.id)}
+              aria-expanded={openFor === d.id}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${
+                openFor === d.id
+                  ? 'bg-slate-200 text-slate-900'
+                  : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+              }`}
+            >
+              <IconSend /> {openFor === d.id ? 'Close' : 'Circulate'}
+            </button>
             {d.status === 'published' ? (
               <button
                 type="button"
@@ -162,6 +181,8 @@ export default function AdminDays() {
                 <IconCheck /> Publish
               </button>
             )}
+            </div>
+            {openFor === d.id ? <CirculationPanel date={d.date} status={d.status} /> : null}
           </div>
         ))}
       </div>

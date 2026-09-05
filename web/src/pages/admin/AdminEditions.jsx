@@ -31,10 +31,16 @@ import { IconSpinner } from '../../components/Icon';
 // This is about SOURCE newspapers, not about Telugu as exam content — AP History
 // and Society legitimately test Telugu literature and dynasties, and the
 // relevance scorer still matches them.
-const PUBLICATIONS = [
-  { value: 'The Hindu', language: 'en' },
-  { value: 'Indian Express', language: 'en' },
-];
+// AND ONLY THE ONE THE PIPELINE ACTUALLY KNOWS.
+//
+// Indian Express was offered here and there is no profile for it —
+// np-daily/profiles.js carries `the-hindu`, `eenadu` (retired) and `generic`,
+// and detection falls back to `generic` on anything it does not recognise.
+// So choosing it produced a silently worse extraction: no masthead rules, no
+// advertisement detection, no font-name semantics for headline vs body. The
+// list should name what is supported, and a second paper belongs here the day
+// a profile for it exists and not before.
+const PUBLICATIONS = [{ value: 'The Hindu', language: 'en' }];
 
 export default function AdminEditions() {
   const { id } = useParams();
@@ -333,10 +339,17 @@ function EditionList() {
           </button>
         </div>
 
+        {/* THE TELUGU LINE THAT USED TO BE HERE WAS SIX WEEKS OUT OF DATE.
+            It told the admin that Telugu editions are accepted and need a
+            `tel.traineddata` install — but Telugu ingestion was taken out of
+            scope on 22 Aug 2026, the eenadu profile was retired with it, and
+            the dropdown above has offered English papers only ever since. A
+            screen that describes a path the code no longer has sends the
+            person reading it to install something that will not help. */}
         <p className="mt-2 text-xs text-slate-500">
           The same file uploaded twice for the same date is recognised rather than duplicated.
-          Telugu editions are accepted but cannot be read until Tesseract has{' '}
-          <code>tel.traineddata</code> installed.
+          English editions only — a page with no text layer is read by OCR, which is slower and
+          less accurate than the ePaper&rsquo;s own text.
         </p>
 
         {msg ? (

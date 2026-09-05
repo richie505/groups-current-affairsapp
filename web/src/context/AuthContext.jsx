@@ -22,6 +22,16 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const res = await api.post('/auth/login', { email, password });
+    // CLEARED ON THE WAY IN, NOT ONLY ON THE WAY OUT.
+    //
+    // logout() already dropped the cached API responses, which covers the
+    // tidy case. It does not cover the common one: a session that ENDED
+    // rather than being signed out of — an expired token, a password changed
+    // elsewhere — leaves that cache in place, and the next person to sign in
+    // on the same phone could be served the previous account's progress and
+    // notes from it while offline. Clearing here makes signing in mean "this
+    // is my session now" regardless of how the last one finished.
+    clearCachedApiData();
     setToken(res.token);
     setUser(res.user);
     return res.user;

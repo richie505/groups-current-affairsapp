@@ -67,10 +67,50 @@ CREATE TABLE IF NOT EXISTS ref_units (
 CREATE TABLE IF NOT EXISTS ref_unit_aliases (
   unit_code TEXT NOT NULL REFERENCES ref_units(unit_code) ON DELETE CASCADE,
   alias     TEXT NOT NULL,
+  -- Matched case-sensitively, so `ASI` does not fire inside a lowercase word.
   strict    INTEGER NOT NULL DEFAULT 0,
+  -- IS ONE MENTION OF THIS ALIAS ENOUGH TO CARRY THE UNIT?
+  --
+  -- This replaces a heuristic that read "the alias contains a space" as proof
+  -- of specificity. Audited on 40 random tags: that test was wrong in both
+  -- directions. It admitted `human rights`, `good governance`, `stock
+  -- exchange`, `population density`, `renewable energy`, `artificial
+  -- intelligence` and `Legislative Assembly` on a single passing mention —
+  -- seven of the eleven errors it found — while refusing all 415 single-word
+  -- aliases including UPSC, SEBI, IRDAI, NHRC, ASEAN, BRICS, SAARC, AMRUT and
+  -- MGNREGA. A report on the BRICS Youth Ministers' Meeting was left with no
+  -- unit at all because `BRICS` has no space in it.
+  --
+  -- Set by server/scripts/backfill-alias-standalone.js, which is the record of
+  -- what was decided and is re-runnable after any reseed.
+  standalone INTEGER NOT NULL DEFAULT 0,
+  -- A hand decision that overrides the derivation. NULL means "derive it";
+  -- 1 or 0 is copied through by the backfill and preserved across a reseed.
+  -- For the unique proper nouns the phrase-or-acronym rule cannot recognise.
+  standalone_override INTEGER,
   PRIMARY KEY (unit_code, alias)
 );
 CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);
+
+-- WORDS THAT TURN AN ALIAS INTO SOMEBODY'S NAME.
+--
+-- "Alluri Sitarama Raju" is a freedom fighter and an alias for AP's colonial
+-- history; "Alluri Sitarama Raju Academy of Medical Sciences" is a college in
+-- a rankings table. "Public health" is a syllabus topic; "Directorate of
+-- Public Health" is an employer in a story about a pay dispute. "BRICS" is a
+-- grouping; "BRICS+ Legal Forum" is the room a judge gave a speech in. In each
+-- case the alias is really part of a longer proper name, and the match is an
+-- artefact of where the name happens to overlap the vocabulary.
+--
+-- A table rather than an array in the matcher, so it grows the way the alias
+-- blocklist does — by someone adding a row after an audit, without a deploy.
+-- Deliberately NOT here: Act, Board, Council, Commission, Mission. Each is
+-- part of legitimate aliases (Forest Rights Act, Pollution Control Board,
+-- Finance Commission), and where the longer form is itself an alias it matches
+-- on its own anyway.
+CREATE TABLE IF NOT EXISTS ref_entity_nouns (
+  noun TEXT PRIMARY KEY
+);
 
 -- Which syllabus units an ARTICLE touches, decided before any model is asked.
 -- Derived and rebuilt on every re-score, like np_article_topics: the vocabulary
@@ -80,7 +120,18 @@ CREATE TABLE IF NOT EXISTS np_article_units (
   article_id  INTEGER NOT NULL REFERENCES np_articles(id) ON DELETE CASCADE,
   unit_code   TEXT NOT NULL,
   hits        INTEGER NOT NULL DEFAULT 1,
-  in_headline INTEGER NOT NULL DEFAULT 0,
+  -- THE HEADLINE ONLY. It used to mean "headline or standfirst", which on this
+  -- paper is a very different claim: the standfirst regularly runs to a full
+  -- paragraph, and on one advertisement it was the ad copy. That is how
+  -- `stock exchange` came to be recorded as a headline hit on an article
+  -- headed "Trade scam or supply chain play? Profit in transit" — the phrase
+  -- was 200 characters into the standfirst.
+  --
+  -- Only a true headline hit satisfies the headline clause of the evidence
+  -- filter. A standfirst hit is body evidence, and counts towards the
+  -- two-distinct-terms clause like any other body match.
+  in_headline    INTEGER NOT NULL DEFAULT 0,
+  in_standfirst  INTEGER NOT NULL DEFAULT 0,
   matched     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (article_id, unit_code)
 );

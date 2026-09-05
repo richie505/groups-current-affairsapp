@@ -89,6 +89,10 @@ const G2_UNITS = [
       'irrigation project', 'lift irrigation', 'drinking water', 'water supply', 'canal',
       'port', 'highway', 'corridor', 'tourism', 'census', 'command area', 'ayacut',
       'urbanisation', 'migration', 'demographic', 'literacy rate', 'sex ratio',
+    
+      'Jal Shakti',
+    
+      'Sample Registration System',
     ],
   },
   {
@@ -103,10 +107,16 @@ const G2_UNITS = [
       'Scheduled Caste', 'Scheduled Tribe', 'Backward Class', 'reservation', 'casteism',
       'communal', 'crime against women', 'gender gap', 'domestic violence', 'child labour', 'child marriage',
       'POCSO', 'trafficking', 'welfare scheme', 'pension', 'ration', 'PDS', 'Anganwadi',
-      'self-help group', 'SHG', 'differently abled', 'disabilit', 'transgender', 'manual scavenging',
+      'self-help group', 'SHG', 'differently abled', 'transgender', 'manual scavenging',
       'social justice', 'NCSK', 'National Commission for Women',
       'Right to Education', 'RTE', 'school education', 'National Education Policy',
       'mid-day meal', 'scholarship', 'residential school', 'dropout rate', 'gross enrolment',
+    
+      'Scheduled Areas',
+    
+      'disability',
+    
+      'Integrated Tribal Development Agency',
     ],
   },
   {
@@ -189,7 +199,12 @@ const G2_UNITS = [
       'Commission and its recommendations; the Gentlemen’s Agreement; important social and cultural events ' +
       'between 1956 and 2014.',
     aliases: [
-      'Visalandhra', 'States Reorganisation Commission', 'Gentlemen’s Agreement', "Gentlemen's Agreement",
+      // One spelling only. Aliases are matched against normalised text, and
+      // norm() folds curly quotes to straight ones — so both spellings became
+      // the SAME matcher, and an article naming the agreement once collected
+      // two entries in `matched`. That satisfied the two-distinct-terms clause
+      // of the evidence filter on what is really one term.
+      'Visalandhra', 'States Reorganisation Commission', "Gentlemen's Agreement",
       'Fazal Ali', 'bifurcation', 'Reorganisation Act', 'Reorganization Act', 'successor State',
       'Telangana movement', 'Jai Andhra',
     ],
@@ -210,6 +225,8 @@ const G2_UNITS = [
       'Kesavananda', 'constitutional amendment', 'Article 14', 'Article 19', 'Article 21', 'Article 32',
       'Article 226', 'writ petition', 'constitutional validity', 'ultra vires', 'right to life',
       'right to equality', 'freedom of speech',
+    
+      'rule of law',
     ],
   },
   {
@@ -239,6 +256,8 @@ const G2_UNITS = [
       'devolution', 'CAG', 'Comptroller and Auditor General', 'Election Commission', 'UPSC',
       'Public Service Commission', 'Human Rights Commission', 'NHRC', 'Right to Information',
       'RTI', 'Lokpal', 'Lok Ayukta', 'Attorney General', 'Advocate General',
+    
+      'APPSC', 'Inter-State Council',
     ],
   },
   {
@@ -253,6 +272,8 @@ const G2_UNITS = [
       'Tenth Schedule', 'disqualification', 'electoral reform', 'electoral bond', 'EVM', 'VVPAT',
       'model code of conduct', 'delimitation', 'national party', 'State party', 'by-election',
       'Assembly election', 'local body election',
+    
+      'Zonal Council', 'Gorkhaland',
     ],
   },
   {
@@ -265,7 +286,9 @@ const G2_UNITS = [
       'panchayat', 'Panchayati Raj', 'Zilla Parishad', 'Zilla Praja Parishad', 'Mandal Parishad',
       'Mandal Praja Parishad', 'gram sabha', 'sarpanch', 'municipal corporation', 'municipality',
       '73rd Amendment', '74th Amendment', 'Balwant Rai Mehta', 'Ashok Mehta', 'urban local bod',
-      'ULB', 'mayor', 'ward member', 'decentralis', 'local self-government',
+      'ULB', 'mayor', 'ward member', 'local self-government',
+    
+      'decentralisation',
     ],
   },
 
@@ -298,6 +321,8 @@ const G2_UNITS = [
       'income tax', 'GST', 'excise', 'customs duty', 'cess', 'balance of payments', 'FDI',
       'foreign direct investment', 'bank credit', 'NPA', 'SEBI', 'IRDAI', 'insurance', 'IPO',
       'disinvestment proceeds', 'dividend', 'Finance Ministry', 'CGA',
+    
+      'Tariff Rate Quota',
     ],
   },
   {
@@ -313,6 +338,10 @@ const G2_UNITS = [
       'farmer', 'fertilizer', 'fertiliser', 'irrigation', 'horticulture', 'food grain',
       'industrial policy', 'manufacturing', 'ease of doing business', 'disinvestment',
       'services sector', 'IT industry', 'ITES', 'exports', 'imports', 'PLI', 'production linked',
+    
+      'stockholding limit', 'MMDR',
+    
+      'MSME',
     ],
   },
   {
@@ -343,6 +372,10 @@ const G2_UNITS = [
       'fisheries', 'aqua', 'animal husbandry', 'dairy', 'horticulture', 'agricultural marketing',
       'rythu', 'cooperative bank', 'APIIC', 'Sunrise', 'investment MoU', 'MoU signed',
       'land pooling', 'land acquisition', 'assigned land', 'capital region', 'CRDA',
+    
+      'Bharat Audyogik Vikas Yojana', 'BHAVYA', 'South Coast Railway',
+    
+      'Visakhapatnam Steel Plant',
     ],
   },
 
@@ -378,6 +411,8 @@ const G2_UNITS = [
       'Bharat Stage', 'thermal power', 'coal', 'installed capacity', 'megawatt', 'gigawatt',
       'power purchase', 'discom', 'electricity', 'energy policy', 'pumped storage', 'battery storage',
       'polysilicon', 'solar module',
+    
+      'energy security',
     ],
   },
   {
@@ -425,6 +460,8 @@ const G2_UNITS = [
       'public health', 'epidemic', 'pandemic', 'vaccine', 'immunisation', 'immunization',
       'disease burden', 'malaria', 'tuberculosis', 'influenza', 'H1N1', 'Ayushman', 'primary health',
       'health insurance', 'public hospital', 'nutrition', 'malnutrition',
+    
+      'National AYUSH Mission', 'AYUSH', 'nursing personnel', 'Nurses Registration and Tracking System', 'cardiovascular', 'fixed-dose combination', 'FSSAI',
     ],
   },
 ];

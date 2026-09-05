@@ -475,10 +475,16 @@ function scoreEdition(editionId, { log } = {}) {
     .prepare('SELECT * FROM np_articles WHERE edition_id = ?')
     .all(editionId);
 
+  // A contributor credit is how a signed opinion piece ends. Finding one in
+  // the middle of a body is the cheapest reliable sign that two stories were
+  // merged by the column segmenter — see np_articles.bleed_suspect.
+  const BLEED = /\((?:[A-Z][\w.\- ]+ )?is an? (?:expert|professor|former|senior|independent|researcher)|views expressed are personal|The writer is|is a professor at|is an expert in/i;
+
   const upd = db.prepare(
     `UPDATE np_articles
         SET score = @score, band = @band, bucket = @bucket, subjects = @subjects,
             breakdown = @breakdown, scored_at = datetime('now'),
+            bleed_suspect = @bleed,
             discard_reason = CASE WHEN @vetoed <> '' THEN @vetoed ELSE discard_reason END,
             status = CASE
                        WHEN status IN ('drafted', 'duplicate') THEN status
@@ -505,7 +511,8 @@ function scoreEdition(editionId, { log } = {}) {
   // feed?" and a blank answer is the useful one.
   const insUnit = db.prepare(
     `INSERT OR REPLACE INTO np_article_units
-       (article_id, unit_code, hits, in_headline, matched) VALUES (?, ?, ?, ?, ?)`
+       (article_id, unit_code, hits, in_headline, in_standfirst, matched)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
 
   const bands = {};
@@ -531,6 +538,23 @@ function scoreEdition(editionId, { log } = {}) {
         subjects: (r.subjects || []).join(', '),
         breakdown: JSON.stringify({ ...r.breakdown, why: r.why }),
         vetoed: r.vetoed || '',
+        // The signal is the MISMATCH, not the credit's position.
+        //
+        // A first attempt looked for a credit away from the end of the body,
+        // on the theory that a signed piece ends with one. It flagged nothing:
+        // in all four real cases the credit is at the end, because the merged
+        // op-ed's own ending is what landed there.
+        //
+        // What is actually anomalous is a contributor credit inside a piece the
+        // genre classifier called a REPORT. All four carry one; all 9 genuine
+        // op-eds are classified `oped` and are not flagged. It catches two
+        // things at once and both are worth an admin's eye: a true segmentation
+        // bleed, and an op-ed the classifier read as a report.
+        bleed:
+          !['oped', 'editorial', 'interview'].includes(String(a.genre || 'report')) &&
+          BLEED.test(String(a.body || ''))
+            ? 1
+            : 0,
       });
       bands[r.band] = (bands[r.band] || 0) + 1;
       scored++;
@@ -544,7 +568,11 @@ function scoreEdition(editionId, { log } = {}) {
       for (const k of r.keywords) insKw.run(a.id, k.term, k.subject || '', k.in_headline || 0, k.pyq || 0);
       for (const t of r.topics) insTop.run(a.id, t.topic_id, t.hits, t.in_headline || 0, t.matched || '');
       for (const u of r.g2_units || []) {
-        insUnit.run(a.id, u.unit_code, u.hits, u.in_headline || 0, (u.matched || []).join(', '));
+        insUnit.run(
+          a.id, u.unit_code, u.hits,
+          u.in_headline || 0, u.in_standfirst || 0,
+          (u.matched || []).join(', ')
+        );
       }
     }
   })();

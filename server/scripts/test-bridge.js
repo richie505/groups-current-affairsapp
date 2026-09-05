@@ -1008,6 +1008,144 @@ const mdEmpty = MD.renderDigest(mdDay, [], new Map(), { draft: false });
 check('an empty digest renders rather than throwing', mdEmpty.includes('no published items'));
 
 // ---------------------------------------------------------------------------
+// The compendium's two-column flow
+// ---------------------------------------------------------------------------
+//
+// WHY THIS IS TESTED HERE AND NOT BY READING THE PDF
+//
+// The bug is that leaving column flow left the cursor at the CURRENT column's
+// y, so a full-width section banner printed over the taller column — a page of
+// a section heading, a topic and a whole WHY IN NEWS block drawn on top of the
+// previous section's questions, every character of both still legible.
+//
+// Nothing observable in the finished file catches it. The text is all there,
+// it extracts in reading order, the question numbers still run 1..N with no
+// gaps. Re-breaking the renderer on purpose and re-running a structural check
+// over the output confirmed it: the broken file passed. The only thing that
+// separates the two is geometry, so the geometry is what gets asserted.
+
+const COL = require('../src/lib/compendiumPdf').__columns;
+
+// A stand-in for a pdfkit document — just the fields the column helpers read.
+const fakeDoc = () => ({
+  page: { width: 595.28, height: 841.89, margins: { top: 52, bottom: 52, left: 52, right: 52 } },
+  x: 52,
+  y: 52,
+  addPage() {
+    this.y = this.page.margins.top;
+    this.added = (this.added || 0) + 1;
+  },
+});
+
+{
+  const doc = fakeDoc();
+  COL.beginColumns(doc, 2);
+  const colWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  check('two columns are narrower than the page', colWidth < 595.28 - 104 + 1 && colWidth > 200);
+
+  const leftEdge = doc.page.margins.left;
+  doc.y = 700; // fill the first column nearly to the foot
+  COL.nextColumn(doc);
+  check('the second column starts further right', doc.page.margins.left > leftEdge);
+  check('and at the top of the measure again', doc.y < 200);
+
+  doc.y = 300; // the second column ends only a third of the way down
+  COL.endColumns(doc);
+  check(
+    'leaving column flow drops BELOW the deepest column, not the current one',
+    doc.y >= 700
+  );
+  check('and restores the full measure', doc.page.margins.left === 52 && doc.page.margins.right === 52);
+}
+
+{
+  // A fresh page is a clean sheet: the previous page's depth must not push the
+  // next section banner most of a page down for no reason.
+  const doc = fakeDoc();
+  COL.beginColumns(doc, 2);
+  doc.y = 780;
+  COL.nextColumn(doc); // into column 2
+  doc.y = 780;
+  COL.nextColumn(doc); // past the last column — a new page
+  check('running out of columns adds a page', doc.added === 1);
+  COL.columnState(doc).maxY = doc.page.margins.top; // what the pageAdded hook does
+  doc.y = 120;
+  COL.endColumns(doc);
+  check('a new page does not inherit the previous page depth', doc.y < 200);
+}
+
+{
+  // THE FOREIGN-DOMESTIC GUARD, AND WHY IT MUST WRITE A NOTE EVEN WHEN IT TAKES
+  // NOTHING AWAY.
+  //
+  // The admin screen tells a blank paper line caused by missing vocabulary from
+  // one that is blank because the story is foreign, and the only signal it has
+  // is the note the guard leaves in `breakdown.why`. An earlier version wrote
+  // that note only when it actually dropped a unit, so three of the four
+  // foreign blanks in the corpus looked exactly like mapping failures.
+  const fctx = R.loadContext(db);
+  const foreign = R.score(
+    {
+      headline: "Xi Jinping's doctrine for a self-governing party",
+      standfirst: '',
+      body:
+        'The Communist Party of China opened its plenary session in Beijing. Xi Jinping ' +
+        'told delegates that China must hold to self-governance. Chinese officials said ' +
+        'the Beijing meeting would run four days. Russia and Pakistan sent observers. ' +
+        'India was not represented.',
+    },
+    fctx
+  );
+  check('foreign-heavy story is flagged', /foreign-heavy/.test(foreign.why));
+  check(
+    'and reports the counts it decided on',
+    /\d+ foreign vs \d+ Indian/.test(foreign.why)
+  );
+  check(
+    'a foreign story keeps no non-IR unit',
+    foreign.g2_units.every((u) => u.unit_code === 'G1P-B6')
+  );
+
+  // The margin is the whole judgement: a domestic story with a foreign subject
+  // names both sides at close to parity and must survive untouched.
+  const domestic = R.score(
+    {
+      headline: 'Rashtrapati Bhavan withdraws email on Bangladesh PM visit',
+      standfirst: '',
+      body:
+        'Rashtrapati Bhavan withdrew an email about the Bangladesh Prime Minister. ' +
+        'The Centre said the India visit stands. Parliament was informed. Bangladesh ' +
+        'has not commented.',
+    },
+    fctx
+  );
+  check('a domestic story about a foreign subject is spared', !/foreign-heavy/.test(domestic.why));
+}
+
+{
+  // PLURALS. Each of these is a real miss from the 5 September audit.
+  const t = require(path.join(__dirname, '..', 'src', 'lib', 'topics'));
+  const hit = (alias, text, strict) => {
+    const m = t.aliasMatcher(alias, !!strict, true);
+    return m.test(text, t.norm(text));
+  };
+  check('a single-word alias matches its plural', hit('fertilizer', 'the fertilizers sector contracted'));
+  check('a sibilant plural takes -es', hit('direct tax', 'direct taxes rose sharply'));
+  check('a three-letter alias is too short to stem', !t.stemmable('tax', false));
+  check('consonant-y takes -ies', hit('municipality', 'the municipalities were merged'));
+  check('a phrase pluralises on its last word', hit('industrial park', 'six industrial parks proposed'));
+  check('the singular still matches', hit('fertilizer', 'fertilizer output falls'));
+  check('an acronym is never stemmed', !hit('RTI', 'PARTIES met', true));
+  check('a strict alias is never stemmed', !t.stemmable('SC', true));
+  check('an alias already plural is left alone', !t.stemmable('exports', false));
+  check('a loose all-caps alias is not stemmed', !t.stemmable('MGNREGA', false));
+  check(
+    'stemming never reaches a different word',
+    !hit('port', 'the airport was closed') && !hit('mine', 'the ministry replied')
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 let failed = 0;
 for (const [name, ok] of checks) {

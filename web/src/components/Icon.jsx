@@ -263,6 +263,19 @@ export function IconDownload(props) {
   );
 }
 
+// A paper plane — the circulation action. Deliberately not the download arrow
+// IconDownload already carries: both buttons sit on the same row and they do
+// different things, so they must not read as the same thing twice.
+export function IconSend(props) {
+  return (
+    <Svg {...props}>
+      <path d="M20.5 3.5 3.8 10.2a.6.6 0 0 0 .05 1.12l6.4 2.15" />
+      <path d="M20.5 3.5 13.9 20.2a.6.6 0 0 1-1.12.05l-2.53-6.78" />
+      <path d="m20.5 3.5-10.25 9.97" />
+    </Svg>
+  );
+}
+
 export function IconAlert(props) {
   return (
     <Svg {...props}>

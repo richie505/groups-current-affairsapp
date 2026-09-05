@@ -40,6 +40,21 @@ function leftovers(db, editionId) {
   const picked = new Set(
     SELECT.selectForDrafting(SELECT.candidateRows(db, editionId)).picked.map((r) => r.id)
   );
+  // THE SAME NO-UNIT RULE THE DRAFTER APPLIES, FOR THE SAME REASON.
+  //
+  // selectForDrafting refuses an article that connects to no syllabus unit —
+  // `unmatchedMinScore: null` — because a composite score cannot tell "Rs 7,470
+  // cr. cleared for infra works in ULBs" from "Cultural diversity highlight of
+  // gala dinner in Vizag": both score highly on AP place names, money and
+  // officialdom, and neither is on the syllabus.
+  //
+  // Salvage was exempt from that, and it should not be. It reads what drafting
+  // left behind, so without the rule it becomes the back door for exactly the
+  // articles the rule exists to keep out. Six published items — a Duleep Trophy
+  // preview, a race club AGM, a jockey's win — carry no unit at all and were
+  // drafted before the rule existed; nothing should be able to add more.
+  //
+  // Objective, feedable units only, matching candidateRows().
   return db
     .prepare(
       `SELECT a.id, a.headline, a.body, a.dateline, a.score, a.page
@@ -48,6 +63,12 @@ function leftovers(db, editionId) {
           AND a.item_id IS NULL
           AND a.status <> 'duplicate'
           AND (a.status <> 'discarded' OR a.score > 0)
+          AND EXISTS (
+                SELECT 1 FROM np_article_units au
+                  JOIN ref_units ru ON ru.unit_code = au.unit_code
+                 WHERE au.article_id = a.id
+                   AND ru.format = 'objective' AND ru.broad = 0 AND ru.unfeedable = 0
+              )
         ORDER BY a.score DESC`
     )
     .all(editionId)

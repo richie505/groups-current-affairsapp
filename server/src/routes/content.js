@@ -4,7 +4,19 @@ const { requireAuth } = require('../auth');
 const { seedRevisionItem, scheduleOutcome, fmt, addDays } = require('../lib/revision');
 const { buildQuiz } = require('../lib/quiz');
 const { renderDigest, digestFilename } = require('../lib/digestMarkdown');
-const { renderDigestPdf, digestPdfFilename } = require('../lib/digestPdf');
+const {
+  renderDigestPdf,
+  digestPdfFilename,
+  circulationWords,
+  circulationMinutes,
+} = require('../lib/digestPdf');
+const {
+  renderCompendiumPdf,
+  compendiumFilename,
+  monthlyFilename,
+  monthName,
+} = require('../lib/compendiumPdf');
+const { groupIntoSections, papersFor, sectionOf, SECTIONS } = require('../lib/sections');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -344,7 +356,175 @@ router.get('/days/:date', (req, res) => {
 // somebody preparing for an exam.
 // Shared by both export routes below, so a markdown file and a PDF of the
 // same day can never disagree about which items or questions belong in it.
-function loadDigestData(date, isAdmin) {
+// WHICH ITEMS A CIRCULATED FILE CARRIES, when it cannot carry them all.
+//
+// The full export takes the day entire, which is right for an archive and
+// wrong for the thing that actually goes out to students: a rich edition
+// drafts fifty-eight items, and fifty-eight items is a hundred and eighty
+// pages and three hours of reading. Nobody finishes it, so nobody starts it.
+//
+// The cut is made on the two judgements the pipeline has ALREADY made, rather
+// than on a new one invented here:
+//
+//   importance — the drafter's own tier, 1 to 3. Tier 1 is what it decided
+//                a candidate cannot skip.
+//   score      — the relevance score Section 2 computed for the article this
+//                item came from, out of 100. It carries syllabus fit, PYQ
+//                pressure and AP-ness, which is precisely the ranking a
+//                current-affairs digest wants.
+//
+// Items with no linked article (hand-written ones) sort as if they scored 50
+// — mid-table rather than last, because an admin who typed an item in by hand
+// meant it, and rather than first, because nothing has vouched for it.
+//
+// Selection is by MERIT and presentation is by BUCKET: the renderer still
+// groups Andhra Pradesh first. So the cut never means "the AP block is full",
+// it means "these fifteen are the strongest fifteen in the paper".
+const HAND_WRITTEN_SCORE = 50;
+
+// A BUCKET QUOTA, BECAUSE PURE MERIT ORDER PRODUCES AN ALL-AP DIGEST.
+//
+// Twenty of the hundred relevance points are awarded for Andhra Pradesh, and
+// they are awarded to every AP story equally — so a routine AP item outscores
+// a strong national one by construction. Ranked on score alone, the first cut
+// of 23 August came back ten AP items out of fifteen, and among them a
+// university delegation's visit and a cultural programme at a summit, while
+// an RBI forex release and a Supreme Court judgment sat below the line.
+//
+// That is not a scoring bug to fix in relevance.js — the score is doing what
+// it was designed to do, which is to find AP material a national paper
+// buries. It is the wrong instrument for deciding the SHAPE of a day.
+//
+// So the shape is set here, from the exam rather than from the scorer.
+// Andhra Pradesh is the largest share because it is roughly half of Papers II
+// and IV and the material no national source covers properly; the rest
+// follows the weight those papers give it. Within each bucket the ranking is
+// still pure merit, and any bucket the paper did not fill hands its places
+// back to the overall order — a quiet day for international news should mean
+// two more national items, not two empty slots.
+const BUCKET_SHARE = { ap: 0.47, national: 0.33, international: 0.13, dynamic: 0.07 };
+
+function topItemIds(dayId, max, includeDrafts) {
+  // AN ITEM WITH NO SYLLABUS UNIT SORTS LAST, WHATEVER IT SCORED.
+  //
+  // The circulated document's defining line is the paper mapping under each
+  // headline — "Group-II Paper II — Economy" — and that line is built from the
+  // item's units. An item with none cannot carry it, so it arrives in a
+  // revision compendium as a news story with no reason to be there, and the
+  // section grouping has to guess where to file it.
+  //
+  // 30 of 144 live items are in that state (see the tagging gaps in the audit).
+  // The rule does not exclude them — a thin day should still fill up — it just
+  // stops them displacing an item that can be mapped. Measured on 23 August it
+  // dropped a cultural-programme item and let an RBI forex release in.
+  const ranked = db
+    .prepare(
+      `SELECT i.id, i.bucket
+         FROM ca_items i
+         LEFT JOIN np_articles a ON a.item_id = i.id
+        WHERE i.day_id = ?
+          AND i.status IN (${includeDrafts ? "'draft', 'published'" : "'published'"})
+        ORDER BY (SELECT COUNT(*) FROM ca_item_units u WHERE u.item_id = i.id) = 0 ASC,
+                 i.importance ASC,
+                 COALESCE(a.score, ${HAND_WRITTEN_SCORE}) DESC,
+                 i.order_index ASC,
+                 i.id ASC`
+    )
+    .all(dayId);
+
+  const bucketsPresent = [...new Set(ranked.map((r) => r.bucket))];
+  const picked = new Set();
+
+  // PASS 1 — ONE OF EVERY BUCKET THE DAY ACTUALLY HAS, RESERVED FIRST.
+  //
+  // "Current events of regional, national and international importance" is the
+  // syllabus's own wording, so a digest that carries no international item
+  // teaches a candidate that international news is not examined. Taking the
+  // representative first, before any quota arithmetic, is what makes the
+  // guarantee survive everything below it.
+  for (const bucket of bucketsPresent) {
+    const best = ranked.find((r) => r.bucket === bucket);
+    if (best) picked.add(best.id);
+  }
+
+  // PASS 2 — the weighted shares, on top of the reservations.
+  for (const [bucket, share] of Object.entries(BUCKET_SHARE)) {
+    const quota = Math.max(1, Math.round(max * share));
+    let taken = [...picked].length ? ranked.filter((r) => picked.has(r.id) && r.bucket === bucket).length : 0;
+    for (const r of ranked) {
+      if (taken >= quota) break;
+      if (r.bucket === bucket && !picked.has(r.id)) {
+        picked.add(r.id);
+        taken += 1;
+      }
+    }
+  }
+
+  // PASS 3 — backfill by merit.
+  for (const r of ranked) {
+    if (picked.size >= max) break;
+    picked.add(r.id);
+  }
+
+  // TRIM, AND WHY IT CANNOT BE A SLICE OF THE MERIT ORDER.
+  //
+  // The per-bucket rounding overshoots: at max=12 the shares come to 6+4+2+1,
+  // which is 13. Cutting that back with `ranked.slice(0, max)` drops whichever
+  // item ranks last overall — and on 23 August that was the single Syllabus-
+  // update item the quota had just reserved, so the guarantee above was
+  // undone one line later by the arithmetic meant to enforce it.
+  //
+  // So the trim removes from the bucket that most exceeds its share, and never
+  // takes a bucket below one. What goes is the weakest item of the most
+  // over-represented block, which is the right thing to lose.
+  while (picked.size > max) {
+    const rows = ranked.filter((r) => picked.has(r.id));
+    const counts = new Map();
+    for (const r of rows) counts.set(r.bucket, (counts.get(r.bucket) || 0) + 1);
+
+    let victim = null;
+    let worstExcess = -Infinity;
+    for (const r of [...rows].reverse()) {
+      // Reverse merit order: the first candidate considered is the weakest.
+      if ((counts.get(r.bucket) || 0) <= 1) continue; // never the last of its kind
+      const excess = counts.get(r.bucket) - Math.max(1, Math.round(max * (BUCKET_SHARE[r.bucket] || 0)));
+      if (excess > worstExcess) {
+        worstExcess = excess;
+        victim = r;
+      }
+    }
+    if (!victim) break; // every bucket is down to one; the cap yields to coverage
+    picked.delete(victim.id);
+  }
+  return picked;
+}
+
+// HOW MANY QUESTIONS ONE ITEM CONTRIBUTES TO A CIRCULATED FILE.
+//
+// The bank runs to ten questions on some items, which is right for a
+// practice screen a student returns to and wrong for a daily file: fifteen
+// items came to NINETY-EIGHT questions, which is a mock test with a digest
+// attached rather than a day's reading. Four is the number that keeps the
+// questions feeling like a check on what was just read.
+//
+// The rest are not lost — they are in the app and in the archive export.
+// Taken in id order rather than at random so the same day exported twice is
+// the same file, which matters when it has already been sent to people.
+const CIRCULATION_QUESTIONS_PER_ITEM = 4;
+
+// AN EXPLICIT LIST OF ITEMS BEATS THE SELECTOR, ALWAYS.
+//
+// The ranking is a good default and a bad master. It cannot know that today's
+// third-ranked item is the one every coaching centre is talking about, or that
+// the item it put first is a review meeting dressed in instrument words. The
+// admin reading the day can. So `only` sits beside the automatic selection
+// rather than replacing it: press nothing and the ranking decides; touch a
+// checkbox and the ranking stops arguing.
+//
+// The same shape the drafting route already uses for hand-picked articles —
+// there, `--article` overrides the score threshold rather than being filtered
+// by it, for exactly this reason.
+function loadDigestData(date, isAdmin, { max = 0, questionsPerItem = 0, only = null } = {}) {
   const day = db
     .prepare(
       `SELECT id, date, title, intro_markdown, status FROM ca_days
@@ -362,13 +542,39 @@ function loadDigestData(date, isAdmin) {
   const itemWhere = draft
     ? `i.day_id = ? AND i.status IN ('draft', 'published')`
     : `i.day_id = ? AND ${VISIBLE}`;
-  const items = db
+  // THE SAME ORDER THE SCREEN USES, from the same constant.
+  //
+  // READING_ORDER's own comment says it has to be defined in one place, and
+  // then this query quietly defined a second one — `importance, order_index,
+  // id`, missing the `salvaged ASC` that puts fact-only cards after the items
+  // with notes. Nothing showed it, because no published item is salvaged yet
+  // and both renderers regroup by bucket on the way out. Publish one salvaged
+  // card and the file silently stops matching the app, which is exactly the
+  // fault the constant exists to prevent.
+  const all = db
     .prepare(
       `SELECT ${itemColumns()} FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE ${itemWhere}
-        ORDER BY i.importance, i.order_index, i.id`
+        ORDER BY ${READING_ORDER}`
     )
     .all(day.id);
+
+  // The cap is applied as a FILTER over the reading order, not as its own
+  // ORDER BY — so the selection decides what is in and the reading order
+  // decides where it sits, and the two never argue.
+  const keep = only
+    ? new Set(all.filter((i) => only.has(i.id)).map((i) => i.id))
+    : max > 0 && all.length > max
+      ? topItemIds(day.id, max, draft)
+      : null;
+  const items = keep ? all.filter((i) => keep.has(i.id)) : all;
+  const omitted = all.length - items.length;
+
+  // Every item of the day, chosen or not — the admin screen needs the ones
+  // that are OUT as much as the ones that are in, or deselecting is a
+  // one-way door and an item can be removed but never put back.
+  const pool = all.map((i) => ({ id: i.id, chosen: !keep || keep.has(i.id) }));
+
   attachTags(items, { full: false });
 
   // Questions in one query for the whole day rather than one per item. Same
@@ -389,7 +595,36 @@ function loadDigestData(date, isAdmin) {
     for (const r of rows) byItem.get(r.item_id)?.push(r);
   }
 
-  return { day, items, byItem, draft };
+  let questionsDropped = 0;
+  if (questionsPerItem > 0) {
+    for (const [id, list] of byItem) {
+      if (list.length > questionsPerItem) {
+        questionsDropped += list.length - questionsPerItem;
+        byItem.set(id, list.slice(0, questionsPerItem));
+      }
+    }
+  }
+
+  return { day, items, byItem, draft, omitted, total: all.length, questionsDropped, all, pool };
+}
+
+/**
+ * `?items=41,52,63` — the admin's own list, validated against the day.
+ *
+ * Returns null when the parameter is absent, which is what keeps the automatic
+ * selection the default. An empty or entirely-unknown list is NOT null: it is
+ * a selection of nothing, and the routes refuse it with a message rather than
+ * quietly falling back to the ranking and handing back a file the admin did
+ * not ask for.
+ */
+function parseItemIds(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return new Set(
+    String(value)
+      .split(',')
+      .map((n) => Number(n.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0)
+  );
 }
 
 router.get('/days/:date/export.md', (req, res) => {
@@ -422,6 +657,238 @@ router.get('/days/:date/export.pdf', (req, res) => {
 
   const doc = renderDigestPdf(day, items, byItem, { draft });
   doc.pipe(res);
+});
+
+// ---- The day as the thing that actually goes out ------------------------
+//
+// THE CIRCULATION EDITION.
+//
+// This is now the product. The admin uploads a paper, the pipeline turns it
+// into items and questions, and THIS is what leaves the building — one file,
+// sent to students on whatever they already use, read on a phone with no
+// account and no login.
+//
+// It differs from export.pdf in four deliberate ways, and each one is the
+// difference between a database dump and something a person reads:
+//
+//   1. It is CAPPED. Top fifteen by tier and relevance, so a day is fifteen
+//      pages rather than a hundred and eighty. See topItemIds().
+//   2. It carries a COVER and a CONTENTS. A file that arrives in a chat app
+//      with no first page is indistinguishable from every other attachment.
+//   3. It shows NO verify notes. Those are written for an editor — "verify
+//      these figures against the department's records before publication" —
+//      and printing that to a candidate is both useless and alarming. The
+//      note stays in the app, where the person who can act on it works.
+//   4. Static background rides along only for TIER 1. It is the single
+//      biggest thing in an item and the reason the full export runs to
+//      hundreds of pages; on the items that matter most it is worth the
+//      space, and on the rest the news itself is the point.
+//
+// Admin-only. A circulated file is a publishing act, and the person doing it
+// needs to have seen the day first.
+// Measured on 23 August, a rich 58-item edition, rendering the real content:
+//
+//   15 items x 4 questions -> 33 pages, 60 questions, 25 min read
+//   12 items x 4 questions -> 28 pages, 48 questions, 21 min read
+//   12 items x 3 questions -> 25 pages, 36 questions, 21 min read
+//   10 items x 3 questions -> 21 pages, 30 questions, 19 min read
+//
+// Twelve and four is the default because it is the largest of these a person
+// plausibly finishes in a sitting: twenty minutes of reading and forty-eight
+// questions. The archive still holds all 58 items and all 98 questions, and
+// both dials are on the admin screen for a thin day or a heavy one.
+// WHICH ITEMS ARE BLANK BECAUSE THEY ARE FOREIGN.
+//
+// An item with no paper line is normally a mapping failure — vocabulary the
+// filter is missing. A foreign story is the one case where blank is the correct
+// answer and no alias will ever fill it: Group-I gives it G1P-B6 or nothing,
+// and Group-II has no international unit at all, only the broad G2-S5. So the
+// two kinds of blank look identical on the screen and mean opposite things, and
+// the admin was left to tell them apart by reading headlines.
+//
+// The signal is the guard's own note rather than the bucket. Bucket is derived
+// from vocabulary counts and puts a CPC plenum in 'dynamic' and a Ukraine
+// strike in 'national'; the note is written by the thing that actually made the
+// decision, so it cannot disagree with it.
+const foreignBlankIds = (ids) => {
+  if (!ids.length) return new Set();
+  return new Set(
+    db
+      .prepare(
+        `SELECT a.item_id FROM np_articles a
+          WHERE a.item_id IN (${ids.map(() => '?').join(',')})
+            AND a.breakdown LIKE '%foreign-heavy%'`
+      )
+      .all(...ids)
+      .map((r) => r.item_id)
+  );
+};
+
+const CIRCULATION_DEFAULT = 12;
+const CIRCULATION_MAX = 40;
+
+router.get('/days/:date/digest.pdf', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
+  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 1, 10);
+  const only = parseItemIds(req.query.items);
+  const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });
+  if (!data) return res.status(404).json({ error: 'No digest for that date.' });
+  const { day, items, byItem, draft } = data;
+  if (!items.length) {
+    return res.status(409).json({
+      error: only
+        ? 'Nothing is selected — tick at least one topic to build a file.'
+        : 'That day has no items to circulate yet.',
+    });
+  }
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${compendiumFilename(day.date)}"`);
+
+  const doc = renderCompendiumPdf(items, byItem, {
+    // NO "12 of 58 topics" ON THE COVER.
+    //
+    // It was put there so a reader would know this is a selection rather than
+    // the whole paper. But this file is not an extract of a longer document a
+    // student can ask for — it IS the publication, and the archive it is drawn
+    // from is an internal working store nobody outside the app can reach. So
+    // the number told a candidate nothing they could act on and read as an
+    // apology for the thing they were being handed.
+    subtitle: `Daily Compendium — ${new Date(`${day.date}T00:00:00Z`).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+    })}`,
+    date: day.date,
+    draft,
+    minutes: circulationMinutes(items),
+  });
+  doc.pipe(res);
+});
+
+// What that file WOULD contain, without building it — so the admin screen can
+// show the running order and the page-count estimate before committing to a
+// download, and can see which items the cap left behind.
+router.get('/days/:date/digest-plan', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
+  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 1, 10);
+  const only = parseItemIds(req.query.items);
+  const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });
+  if (!data) return res.status(404).json({ error: 'No digest for that date.' });
+  const { day, items, byItem, draft, omitted, total, questionsDropped, all, pool } = data;
+
+  const foreignBlank = foreignBlankIds([...new Set(all.map((i) => i.id))]);
+  const questions = items.reduce((n, i) => n + (byItem.get(i.id) || []).length, 0);
+  // From the renderer, not recomputed here — see circulationWords() for why
+  // the obvious pacing.wordsIn() answer is wrong for this edition.
+  const words = circulationWords(items);
+
+  // The topics that are OUT, with everything the screen needs to offer them
+  // back: what they are, where they would be filed, and how many questions
+  // they would bring. Counted here rather than fetched separately so the two
+  // lists cannot disagree about what the day holds.
+  const chosen = new Set(items.map((i) => i.id));
+  const excludedIds = all.filter((i) => !chosen.has(i.id)).map((i) => i.id);
+  const excluded = [];
+  if (excludedIds.length) {
+    const rows = db
+      .prepare(
+        `SELECT ${itemColumns()} FROM ca_items i
+          WHERE i.id IN (${excludedIds.map(() => '?').join(',')})
+          ORDER BY ${READING_ORDER}`
+      )
+      .all(...excludedIds);
+    attachTags(rows, { full: false });
+    const qCounts = new Map(
+      db
+        .prepare(
+          `SELECT item_id, COUNT(*) AS n FROM ca_mcqs
+            WHERE item_id IN (${excludedIds.map(() => '?').join(',')})
+              ${draft ? '' : `AND status = 'published'`}
+            GROUP BY item_id`
+        )
+        .all(...excludedIds)
+        .map((r) => [r.item_id, r.n])
+    );
+    for (const r of rows) {
+      excluded.push({
+        id: r.id,
+        headline: r.headline,
+        bucket: r.bucket,
+        importance: r.importance,
+        needs_verify: r.needs_verify,
+        questions: Math.min(qCounts.get(r.id) || 0, qpi),
+        papers: papersFor(r),
+        foreign_no_paper: foreignBlank.has(r.id) && !papersFor(r).length,
+        section: sectionOf(r),
+      });
+    }
+  }
+
+  res.json({
+    day: { date: day.date, title: day.title, status: day.status },
+    draft,
+    max,
+    // Whether the ranking chose this list or the admin did. The screen says
+    // which, because "12 topics" means something different in each case.
+    manual: Boolean(only),
+    selected: items.map((i) => i.id),
+    pool,
+    excluded,
+    questions_per_item: qpi,
+    total,
+    omitted,
+    questions_dropped: questionsDropped,
+    questions,
+    words,
+    minutes: circulationMinutes(items),
+    tier1: items.filter((i) => Number(i.importance) === 1).length,
+    unverified: items.filter((i) => Number(i.needs_verify) === 1).length,
+    // WHICH OF THE THREE THE DAY ACTUALLY HAS.
+    //
+    // The syllabus asks for "current events of regional, national and
+    // international importance", so a digest missing one of them is a gap in
+    // coverage rather than a quiet editorial choice — and the selection
+    // cannot invent an item nobody drafted. Two of the four editions in this
+    // database produced no international item at all while international
+    // stories sat unread in the pool.
+    //
+    // Reported per bucket, in the digest AND in the day, so the admin can
+    // tell the two causes apart: nothing drafted (go back to the edition and
+    // draft more) versus drafted but not selected (raise the item count).
+    coverage: BUCKETS.map((bucket) => ({
+      bucket,
+      in_digest: items.filter((i) => i.bucket === bucket).length,
+      in_day: db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM ca_items i
+            WHERE i.day_id = ? AND i.bucket = ?
+              AND i.status IN (${draft ? "'draft', 'published'" : "'published'"})`
+        )
+        .get(day.id, bucket).n,
+    })),
+    // Grouped the way the FILE will group them, not the way the app does.
+    // The panel is a preview, and a preview that shows a different running
+    // order from the document is worse than no preview.
+    sections: groupIntoSections(items).map((s) => ({
+      numeral: s.numeral,
+      title: s.title,
+      items: s.items.map((i) => ({
+        id: i.id,
+        headline: i.headline,
+        bucket: i.bucket,
+        importance: i.importance,
+        needs_verify: i.needs_verify,
+        questions: (byItem.get(i.id) || []).length,
+        papers: papersFor(i),
+        foreign_no_paper: foreignBlank.has(i.id) && !papersFor(i).length,
+      })),
+    })),
+  });
 });
 
 // The latest published digest — what "Today" actually resolves to.
@@ -808,6 +1275,19 @@ router.post('/revision/review', (req, res) => {
 // Grouped by keyword angle, not just listed. A student who keeps missing
 // "Appointed" questions has a specific, fixable gap; a flat list of wrong
 // answers tells them only that they got things wrong.
+// A CEILING, BECAUSE THIS ONE GROWS WITH USE AND NOTHING ELSE STOPPED IT.
+//
+// Every other list route is capped — days at 120, search at 50, revision at
+// 40. This one returned every wrong answer ever recorded, each carrying its
+// full stem, four options and explanation. That is fine at six attempts and
+// is a multi-megabyte response for a student a year in, sent to a phone, to
+// render a screen nobody scrolls to the bottom of.
+//
+// Most recent first, because a mistake made this week is the one worth
+// re-reading; `total` still counts every one, so the screen can say how many
+// are behind the cap rather than pretending the list is complete.
+const MISTAKES_LIMIT = 200;
+
 router.get('/mistakes', (req, res) => {
   const rows = db
     .prepare(
@@ -827,9 +1307,28 @@ router.get('/mistakes', (req, res) => {
          JOIN ca_items i ON i.id = m.item_id
          JOIN ca_days d ON d.id = i.day_id
         WHERE a.is_correct = 0 AND ${VISIBLE} AND ${MCQ_VISIBLE}
-        ORDER BY a.attempted_at DESC`
+        ORDER BY a.attempted_at DESC
+        LIMIT ?`
     )
-    .all(req.user.id);
+    .all(req.user.id, MISTAKES_LIMIT);
+
+  // Counted separately rather than taken from rows.length, which is now the
+  // capped number: the screen has to be able to say "200 of 640 shown".
+  const { n: total } = db
+    .prepare(
+      `WITH latest AS (
+         SELECT mcq_id, MAX(id) AS attempt_id
+           FROM ca_attempts WHERE user_id = ? GROUP BY mcq_id
+       )
+       SELECT COUNT(*) AS n
+         FROM latest l
+         JOIN ca_attempts a ON a.id = l.attempt_id
+         JOIN ca_mcqs m ON m.id = l.mcq_id
+         JOIN ca_items i ON i.id = m.item_id
+         JOIN ca_days d ON d.id = i.day_id
+        WHERE a.is_correct = 0 AND ${VISIBLE} AND ${MCQ_VISIBLE}`
+    )
+    .get(req.user.id);
 
   const byKeyword = {};
   for (const r of rows) {
@@ -840,7 +1339,7 @@ router.get('/mistakes', (req, res) => {
     .map(([keyword, mcqs]) => ({ keyword, count: mcqs.length, mcqs }))
     .sort((a, b) => b.count - a.count);
 
-  res.json({ total: rows.length, groups });
+  res.json({ total, shown: rows.length, limit: MISTAKES_LIMIT, groups });
 });
 
 // ---- Progress -----------------------------------------------------------
@@ -888,6 +1387,19 @@ router.get('/progress', (req, res) => {
     .all(userId);
 
   // Where the marks are being lost, by keyword angle.
+  //
+  // THE ACCURACY CEILING IS THE POINT, not a refinement of it. Ordering by
+  // accuracy ascending and taking the first eight returns the eight best
+  // angles when those are the only eight there are — so an account that had
+  // answered five "Port" questions and got all five right was shown
+  // "Port — 5/5 — 100%" under a heading reading "worst first … gaps in a
+  // habit of thought". A screen that calls a perfect score a weakness is
+  // worse than a screen that shows nothing, because the student acts on it.
+  //
+  // 0.8 rather than 1.0: an angle answered ten times with nine right is not a
+  // gap either, and a list that fills up with near-misses buries the two real
+  // ones. Below 80% is the band where re-reading actually pays.
+  const WEAK_ACCURACY = 0.8;
   const weakKeywords = db
     .prepare(
       `SELECT m.keyword,
@@ -897,10 +1409,11 @@ router.get('/progress', (req, res) => {
         WHERE a.user_id = ? AND m.keyword <> '' AND ${MCQ_VISIBLE}
         GROUP BY m.keyword
        HAVING attempts >= 3
+          AND (CAST(SUM(a.is_correct) AS REAL) / COUNT(*)) < ?
         ORDER BY (CAST(SUM(a.is_correct) AS REAL) / COUNT(*)) ASC
         LIMIT 8`
     )
-    .all(userId);
+    .all(userId, WEAK_ACCURACY);
 
   const daily = db
     .prepare(
@@ -955,17 +1468,35 @@ router.get('/months/:month', (req, res) => {
   const month = req.params.month;
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Month must be YYYY-MM.' });
 
+  // CAPPED, for the same reason /mistakes is. A month is the biggest thing
+  // this API hands out in one piece — measured at 284 KB raw / 69 KB gzipped
+  // for a month holding only FOUR days — and it grows linearly with how well
+  // the pipeline is running. Thirty full days would be an order of magnitude
+  // more, sent to a phone before anything renders.
+  //
+  // Ordered by importance first, so the cap takes the tail rather than the
+  // head: what a cut month loses is Tier-3 items late in the month, not the
+  // Tier-1 ones the compendium exists for.
+  const limit = clamp(req.query.limit, 150, 1, 400);
   const items = db
     .prepare(
       `SELECT ${listColumns()}, d.date AS day_date
          FROM ca_items i JOIN ca_days d ON d.id = i.day_id
         WHERE d.date LIKE ? AND ${VISIBLE}
-        ORDER BY i.importance, d.date, i.order_index`
+        ORDER BY i.importance, d.date, i.order_index
+        LIMIT ?`
     )
-    .all(`${month}-%`);
+    .all(`${month}-%`, limit);
   attachTags(items, { full: false });
   attachWordCounts(items);
   attachUserState(items, req.user.id);
+
+  const { n: itemTotal } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM ca_items i JOIN ca_days d ON d.id = i.day_id
+        WHERE d.date LIKE ? AND ${VISIBLE}`
+    )
+    .get(`${month}-%`);
 
   const mcqTotal = db
     .prepare(
@@ -975,7 +1506,7 @@ router.get('/months/:month', (req, res) => {
     )
     .get(`${month}-%`);
 
-  res.json({ month, items, mcq_total: mcqTotal.n });
+  res.json({ month, items, item_total: itemTotal, shown: items.length, mcq_total: mcqTotal.n });
 });
 
 // ---- Search -------------------------------------------------------------
