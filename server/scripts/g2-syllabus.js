@@ -367,7 +367,7 @@ const G2_UNITS = [
       'window mechanism; industrial incentives; MSMEs; industrial corridors; the services sector; IT, ' +
       'electronics and communications; the recent AP IT Policy.',
     aliases: [
-      'MSME', 'industrial park', 'industrial corridor', 'single window', 'industrial incentive',
+      'industrial park', 'industrial corridor', 'single window', 'industrial incentive',
       'AP Industrial', 'IT policy', 'electronics manufacturing', 'data centre', 'data center',
       'fisheries', 'aqua', 'animal husbandry', 'dairy', 'horticulture', 'agricultural marketing',
       'rythu', 'cooperative bank', 'APIIC', 'Sunrise', 'investment MoU', 'MoU signed',
@@ -376,6 +376,12 @@ const G2_UNITS = [
       'Bharat Audyogik Vikas Yojana', 'BHAVYA', 'South Coast Railway',
     
       'Visakhapatnam Steel Plant',
+      // `MSME` alone is gone from this unit. Across 411 articles it earned two
+      // tags and both were national stories — a White House report on Indian
+      // pump exports and a piece on India's industrial heat. It never once
+      // caught an AP MSME story, because a newspaper writing about AP MSMEs
+      // says so. These do.
+      'AP MSME', 'Andhra Pradesh MSME', 'MSME in Andhra Pradesh',
     ],
   },
 

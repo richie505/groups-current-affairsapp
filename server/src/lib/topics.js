@@ -81,44 +81,32 @@ function pluralise(body) {
 }
 
 /**
- * Whether a STRICT alias would be safe to match with a bare trailing "s".
- *
- * NOT WIRED IN. Kept because the measurement is the useful part.
+ * Whether a STRICT alias may also match a bare trailing "s".
  *
  * Strict aliases are excluded from stemming on purpose — `SCs` is Scheduled
- * Castes and `SC` is usually the Supreme Court — and the argument for relaxing
- * that above four characters is sound: "Integrated Tribal Development Agencies
+ * Castes and `SC` is usually the Supreme Court — and the case for relaxing that
+ * above four characters is that "Integrated Tribal Development Agencies
  * (ITDAs)" is how a newspaper introduces an acronym, so the singular the alias
  * holds may never appear in the article at all.
  *
- * The argument is sound and the corpus does not pay it. Thirty-six of the
- * seventy strict aliases qualify (the other thirty-four are three characters —
- * FIR, NOC, MLA, FDC and the rest — and stay out because that is where the
- * collisions are). Across 411 articles those thirty-six recovered exactly ONE
- * match: `MSMEs` in "India's MSMEs, to strengthen manufacturing
- * competitiveness". And that one is wrong — `MSME` maps only to G2-P2-U5, "AP
- * agriculture, industry, MSMEs...", so the recovery files a national story
- * about industrial heat under an Andhra Pradesh unit.
+ * Thirty-six of the seventy strict aliases qualify. The other thirty-four are
+ * three characters — FIR, NOC, MLA, FDC — and stay out, because three is where
+ * the collisions are. Only a bare `s`: no `es`, no consonant-y rewrite, because
+ * an acronym does not inflect like a word.
  *
- * So the rule costs a clause and buys one bad tag. The real defect it exposed
- * is in the vocabulary rather than the matcher: `MSME` had no national unit.
+ * IT TOOK TWO MEASUREMENTS AND A VOCABULARY FIX TO EARN ITS PLACE. The first
+ * run recovered exactly one match in 411 articles — `MSMEs` in "India's MSMEs,
+ * to strengthen manufacturing competitiveness" — and it was WRONG, because
+ * `MSME` mapped only to G2-P2-U5, "AP agriculture, industry, MSMEs...", so a
+ * national story about industrial heat was filed under an Andhra Pradesh unit.
+ * The rule was left out rather than shipped on a bad tag.
  *
- * MEASURED AGAIN after `MSME` was given G1P-C3 and G2-P2-U3. The same one
- * article now recovers three tags — the two national ones, both right, and
- * G2-P2-U5 again, still wrong, because `MSME` is also an alias for "AP
- * agriculture, industry, MSMEs..." and nothing in the match can tell a national
- * story from an AP one. Two right and one wrong is worse than the corpus
- * average, so the rule stays out.
- *
- * The blocker is one alias, not the rule: `MSME` on G2-P2-U5 earns exactly two
- * tags across 411 articles and BOTH are wrong — item 154 (a White House report
- * on Indian pump exports) and item 218 (India's industrial heat). It has never
- * matched a genuine AP MSME story. Drop that one row and the recovery is 2 for
- * 2 and this rule ships; that is a vocabulary decision for the reviewer, not
- * one to take while wiring a matcher.
- *
- * Re-enable by restoring the `strict && acronymPlural(alias)` branch in
- * aliasMatcher.
+ * The defect was the alias, not the matcher. `MSME` on the AP unit earned two
+ * tags across the whole corpus and both were national stories; it never once
+ * caught an AP one, because a newspaper writing about AP MSMEs says so. So the
+ * bare acronym now maps to G1P-C3 and G2-P2-U3, the AP unit holds `AP MSME`,
+ * `Andhra Pradesh MSME` and `MSME in Andhra Pradesh` instead, and the same
+ * recovery is two tags, both right.
  */
 function acronymPlural(alias) {
   const a = String(alias || '');
@@ -137,7 +125,11 @@ function acronymPlural(alias) {
 // caller that has not thought about it keeps the old behaviour.
 function aliasMatcher(alias, strict, plural) {
   const raw = escapeRe(strict ? alias : norm(alias));
-  const body = plural && stemmable(alias, strict) ? pluralise(raw) : raw;
+  let body = raw;
+  if (plural) {
+    if (stemmable(alias, strict)) body = pluralise(raw);
+    else if (strict && acronymPlural(alias)) body = `${raw}s?`;
+  }
   // \b does not work against a non-ASCII script, so Telugu aliases fall back to
   // a plain containment test. Telugu has no case, so nothing is lost.
   const nonAscii = /[^\x00-\x7F]/.test(alias);
