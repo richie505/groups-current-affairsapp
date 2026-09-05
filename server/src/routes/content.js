@@ -516,7 +516,14 @@ function topItemIds(dayId, max, includeDrafts) {
 // The rest are not lost — they are in the app and in the archive export.
 // Taken in id order rather than at random so the same day exported twice is
 // the same file, which matters when it has already been sent to people.
-const CIRCULATION_QUESTIONS_PER_ITEM = 4;
+// 0 MEANS EVERY QUESTION THE ITEM HAS.
+//
+// It was 4, which was invisible and lossy: items carry between one and ten
+// published questions and 79 of the 127 on this database have more than four,
+// so the default quietly dropped 2 to 6 questions from most topics of every
+// file. They were drafted on purpose and reviewed on purpose; the compendium
+// should carry them unless somebody decides otherwise on the panel.
+const CIRCULATION_QUESTIONS_PER_ITEM = 0;
 
 // AN EXPLICIT LIST OF ITEMS BEATS THE SELECTOR, ALWAYS.
 //
@@ -738,7 +745,7 @@ router.get('/days/:date/digest.pdf', (req, res) => {
     return res.status(403).json({ error: 'Admin access required.' });
   }
   const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
-  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 1, 10);
+  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 0, 10);
   const only = parseItemIds(req.query.items);
   const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });
   if (!data) return res.status(404).json({ error: 'No digest for that date.' });
@@ -805,7 +812,7 @@ router.get('/days/:date/digest-plan', (req, res) => {
     return res.status(403).json({ error: 'Admin access required.' });
   }
   const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
-  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 1, 10);
+  const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 0, 10);
   const only = parseItemIds(req.query.items);
   const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });
   if (!data) return res.status(404).json({ error: 'No digest for that date.' });

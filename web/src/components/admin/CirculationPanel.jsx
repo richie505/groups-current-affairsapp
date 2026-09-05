@@ -39,11 +39,18 @@ const BUCKET_CLASS = {
 };
 
 const ITEM_CHOICES = [8, 10, 12, 15, 20];
-const QUESTION_CHOICES = [2, 3, 4, 6];
+// 0 IS "ALL", AND IT IS THE DEFAULT.
+//
+// The dial used to offer 2/3/4/6 with 4 preselected, and items carry up to ten
+// questions — so the file most days printed four of them and dropped the rest
+// without saying so. Every question was drafted and reviewed on purpose. A cap
+// is now something the admin chooses, not something the panel does quietly.
+const QUESTION_CHOICES = [0, 4, 6, 8];
+const QUESTION_LABEL = (n) => (n === 0 ? 'All' : String(n));
 
 export default function CirculationPanel({ date, status }) {
   const [max, setMax] = useState(12);
-  const [perItem, setPerItem] = useState(4);
+  const [perItem, setPerItem] = useState(0);
   // null = let the ranking decide. An array = the admin's own list, which
   // wins outright. Kept as the single source of "who is choosing".
   const [selection, setSelection] = useState(null);
@@ -148,6 +155,7 @@ export default function CirculationPanel({ date, status }) {
           label="Questions each"
           value={perItem}
           choices={QUESTION_CHOICES}
+          format={QUESTION_LABEL}
           onChange={setDial(setPerItem)}
         />
         {plan?.manual ? (
@@ -356,7 +364,7 @@ function TopicRow({ item, number, checked, onToggle }) {
   );
 }
 
-function Dial({ label, value, choices, onChange }) {
+function Dial({ label, value, choices, onChange, format }) {
   return (
     <div>
       <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
@@ -371,7 +379,7 @@ function Dial({ label, value, choices, onChange }) {
               c === value ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            {c}
+            {format ? format(c) : c}
           </button>
         ))}
       </div>

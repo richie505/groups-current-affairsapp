@@ -85,7 +85,7 @@
       <div class="howto"><h3>How to study this compendium</h3><ol>
         <li><strong>First pass (10 min):</strong> read only the <em>Memory hook</em> and <em>30-second recap</em> of every topic. That is the skeleton you must retain.</li>
         <li><strong>Second pass (20 min):</strong> read Why in news → Key details → Static linkage. Bold text = the words examiners lift into options.</li>
-        <li><strong>Test (5 min per topic):</strong> attempt the 4 practice questions without looking back; check the answer strip; read the explanation only for mistakes.</li>
+        <li><strong>Test (5 min per topic):</strong> attempt the practice questions without looking back; check the answer strip; read the explanation only for mistakes.</li>
         <li><strong>Next day:</strong> re-read the one-page <em>Hook sheet</em> at the end. If a hook does not unlock the recap in your head, revisit that topic.</li>
       </ol></div>
       <dl class="meta">

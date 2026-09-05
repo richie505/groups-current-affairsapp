@@ -69,7 +69,7 @@
           }
         },
         "prelims_facts": {"type": "array", "items": {"type": "string"}},
-        "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}, "minItems": 4, "maxItems": 4}
+        "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}, "minItems": 1}
       }
     }
   }

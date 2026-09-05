@@ -275,7 +275,17 @@ function buildCompendiumData(items, byItem, { day, unitsOf }) {
     const lead = firstTable === -1 ? noteBlocks : noteBlocks.slice(0, firstTable);
     const rest = firstTable === -1 ? [] : noteBlocks.slice(firstTable);
     const paras = lead.filter((b) => b.type === 'p').map((b) => b.text);
-    const mcqs = (byItem.get(item.id) || []).slice(0, 4);
+    // EVERY QUESTION THE ITEM HAS, not a fixed four.
+    //
+    // The kit's schema says exactly four per topic and its renderer does not:
+    // build.js maps over the array everywhere, for the questions, the answer
+    // strip, the quick-check row and the explanations. Items here carry between
+    // one and ten, written deliberately during drafting, and a compendium that
+    // silently prints four of ten throws away work somebody reviewed.
+    //
+    // Capping is still possible and is now the ADMIN's choice, made on the
+    // Circulate panel, rather than a constant nobody can see.
+    const mcqs = byItem.get(item.id) || [];
 
     const written = clean(item.hook);
     const writtenRecap = clean(item.recap)
