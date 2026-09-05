@@ -47,6 +47,11 @@ const DRY = process.argv.includes('--dry-run');
 //
 // MGNREGA is the one row `strict` misses; it is unambiguous and is added here
 // rather than by changing what `strict` means.
+//
+// NOTE FOR ANYONE EDITING `strict` LATER: standalone is DERIVED from it for
+// acronyms, so setting strict on an alias that is not specific enough to carry
+// a unit alone will also make it standalone. If you need case-sensitive
+// matching without that, add the alias to NEVER_STANDALONE below.
 const EXTRA_ACRONYMS = ['MGNREGA'];
 
 // CPI IS THE ONE ACRONYM LEFT OUT, AND THE COLLISION IS NOT HYPOTHETICAL.
@@ -60,73 +65,73 @@ const EXTRA_ACRONYMS = ['MGNREGA'];
 const AMBIGUOUS_ACRONYMS = ['CPI'];
 
 // ---------------------------------------------------------------------------
-// B. Named bodies, schemes, acts, events and places.
+// B. Multi-word aliases — standalone by DEFAULT.
 // ---------------------------------------------------------------------------
 //
-// A named thing carries its unit on one mention: an article that says
-// "NITI Aayog" or "Forest Rights Act" or "Quit India" is about that thing.
-const NAMED = [
-  // bodies and institutions
-  'Archaeological Survey', 'Competition Commission', 'Comptroller and Auditor General',
-  'Election Commission', 'Finance Commission', 'Finance Commission grant', 'Finance Ministry',
-  'Human Rights Commission', 'Lok Ayukta', 'Ministry of External Affairs',
-  'National Commission for Women', 'National Green Tribunal', 'NITI Aayog',
-  'Pollution Control Board', 'Public Service Commission', 'Reserve Bank', 'United Nations',
-  'World Bank', 'World Health Organization', 'Mandal Parishad', 'Mandal Praja Parishad',
-  'Zilla Parishad', 'Zilla Praja Parishad', 'Panchayati Raj', 'Constituent Assembly',
-  // schemes, policies, acts, agreements
-  'Bharat Stage', 'Digital India', 'Five Year Plan', 'Forest Rights Act',
-  'Human Development Index', 'Make in India', 'National Education Policy', 'Paris Agreement',
-  'Project Elephant', 'Project Tiger', 'Reorganisation Act', 'Reorganization Act',
-  'Right to Education', 'Right to Information', 'Union Budget', 'Wildlife Protection Act',
-  // constitutional furniture
-  'Directive Principle', 'Fundamental Duties', 'Fundamental Right', 'State List',
-  'Tenth Schedule', 'Union List',
-  // history and the Andhra movement
-  'Alluri Sitarama Raju', 'Andhra Chola', 'Andhra Mahasabha', 'Andhra Patrika', 'Andhra State',
-  'Arya Samaj', 'Ashok Mehta', 'Badami Chalukya', 'Balwant Rai Mehta', 'Battle of Plassey',
-  'Brahmo Samaj', 'Civil Disobedience', 'Delhi Sultanate', 'East India Company',
-  'Eastern Chalukya', 'Fazal Ali', 'Gandhi Jayanti', "Gentlemen's Agreement",
-  'Gentlemen’s Agreement', 'Home Rule', 'Indian National Congress', 'Indus Valley',
-  'Jai Andhra', 'Justice Party', 'Kalyani Chalukya', 'Library Movement', 'Nataka Samstha',
-  'Potti Sriramulu', 'Quit India', 'Qutb Shahi', 'Self-Respect Movement',
-  'States Reorganisation', 'States Reorganisation Commission', 'Taj Mahal', 'Tipu Sultan',
-  // geography
-  'Eastern Ghats', 'El Nino', 'La Nina', 'Western Ghats',
-  // one truncated-looking alias kept because it is unambiguous in this corpus
-  'AP Industrial',
-];
+// THIS IS THE CORRECTION THE RE-SCORE FORCED, AND IT IS WORTH RECORDING.
+//
+// The first version of this script was an ALLOWLIST: about 120 named bodies,
+// schemes, acts and places were marked standalone and every other multi-word
+// alias was left false. Re-scored across the four editions, that took the
+// published items from 30 blanks to 57 and halved the tag count, 378 to 178.
+//
+// The reason is that the space heuristic it replaced was mostly RIGHT. Of the
+// 518 multi-word aliases, the overwhelming majority genuinely name their unit
+// on sight — `73rd Amendment`, `Article 21`, `minimum support price`,
+// `basic structure`, `balance of payments`, `olive ridley`, `sepoy mutiny`,
+// `compensatory afforestation`, `model code of conduct`, `repo rate`. The
+// audit found seven that do not. Seven is a blocklist, not a reason to
+// re-derive the other five hundred.
+//
+// So the rule is inverted: a multi-word alias stands alone unless it is named
+// below. That keeps the recall the space test had, adds the 92 acronyms it
+// could never reach, and removes only what was measured to misfire.
+//
+// The list below is therefore the reviewable artefact — it is short, every
+// entry can be argued about, and a wrong entry costs one alias rather than
+// four hundred.
 
-// ---------------------------------------------------------------------------
-// C. Left false on purpose.
-// ---------------------------------------------------------------------------
+// C. The generic ones, which do NOT stand alone.
 //
-// These are the VENUE or the AUTHORITY, not the subject. Every beat cites a
-// court, a chamber or a founding figure in passing, and two of the eleven
-// audit errors were exactly this shape: `Mahatma Gandhi, Subhas Chandra Bose`
-// inside one quoted sentence about the freedom struggle, and
-// `Legislative Assembly` as the place a fertiliser stock figure was read out.
+// Three families, and each was demonstrated rather than guessed:
 //
-// Recorded rather than merely omitted, so the decision is visible and can be
-// reversed with evidence. Measured cost: audit tag 38 (`High Court`, one body
-// mention, judged correct) is lost, because its article headline is "Noise
-// annoys India must enforce noise pollution regulations…" and so cannot rescue
-// it through the headline clause. One good tag for two bad ones.
-const NEVER_STANDALONE = [
-  'Supreme Court', 'High Court', 'Chief Justice', 'Constitution Bench',
-  'Lok Sabha', 'Rajya Sabha', 'Legislative Council', 'Legislative Assembly',
-  'Question Hour', 'Select Committee', 'Council of Ministers', 'President of India',
-  'Advocate General', 'Attorney General',
-  'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru', 'B.R. Ambedkar',
-  'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',
-  // the seven the audit caught firing on one passing mention
+//   1. The seven the audit caught firing on a single passing mention.
+//   2. Courts, chambers, offices and procedural boilerplate — the VENUE or the
+//      instrument, not the subject. Error 19 was `Legislative Assembly` as the
+//      room a fertiliser figure was read out in; every beat cites a court or a
+//      Bill's passage in the same way.
+//   3. Freedom-movement names and demographic descriptors. Error 17 was
+//      `Mahatma Gandhi, Subhas Chandra Bose` inside one quoted sentence about
+//      the independence struggle.
+//
+// Plus a handful of macro-economic words so vague they attach to any story
+// that mentions money, and `solar system`, which is an astronomy phrase
+// wearing an energy alias.
+const NOT_STANDALONE = [
+  // 1 — measured misfires
   'human rights', 'good governance', 'stock exchange', 'population density',
   'renewable energy', 'artificial intelligence',
+  // 2 — venue, office, instrument
+  'Legislative Assembly', 'Legislative Council', 'Lok Sabha', 'Rajya Sabha',
+  'Supreme Court', 'High Court', 'Chief Justice', 'Constitution Bench',
+  'constitutional bench', 'Question Hour', 'Select Committee', 'Council of Ministers',
+  'President of India', 'Advocate General', 'Attorney General',
+  'Assembly election', 'Assembly passed', 'Assembly session',
+  'Bill passed', 'Bill was passed', 'Bills passed',
+  // Curly apostrophe only — that is how the alias is stored, and the
+  // blocklist is compared against the alias text rather than normalised text.
+  'Governor’s assent', 'Presidential assent',
+  'writ petition', 'joint statement', 'MoU signed', 'investment MoU',
+  // 3 — names and descriptors that appear beside any subject
+  'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
+  'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',
+  // 4 — too vague to place a story
+  'economic growth', 'economic development', 'growth rate', 'developing economy',
+  'research and development', 'research institute', 'Indian scientist', 'solar system',
 ];
 
 const lower = (xs) => new Set(xs.map((x) => x.toLowerCase()));
-const named = lower(NAMED);
-const never = lower(NEVER_STANDALONE);
+const blocked = lower(NOT_STANDALONE);
 const extra = lower(EXTRA_ACRONYMS);
 const ambiguous = lower(AMBIGUOUS_ACRONYMS);
 
@@ -134,12 +139,11 @@ const rows = db.prepare('SELECT unit_code, alias, strict FROM ref_unit_aliases')
 
 const decide = (r) => {
   const a = r.alias.toLowerCase();
-  if (never.has(a)) return 0;
-  if (ambiguous.has(a)) return 0;
-  if (r.strict) return 1;
-  if (extra.has(a)) return 1;
-  if (named.has(a)) return 1;
-  return 0;
+  if (blocked.has(a) || ambiguous.has(a)) return 0;
+  if (r.strict || extra.has(a)) return 1;
+  // Multi-word by default; a single common word never carried a unit alone
+  // and still does not.
+  return a.includes(' ') ? 1 : 0;
 };
 
 const wanted = rows.map((r) => ({ ...r, standalone: decide(r) }));
@@ -148,7 +152,7 @@ const on = wanted.filter((r) => r.standalone);
 // Anything named above that is not actually in the vocabulary is a typo in
 // this file, and a silent no-op is how such a list rots.
 const present = new Set(rows.map((r) => r.alias.toLowerCase()));
-const missing = [...named, ...never, ...extra, ...ambiguous].filter((a) => !present.has(a));
+const missing = [...blocked, ...extra, ...ambiguous].filter((a) => !present.has(a));
 
 console.log(`aliases: ${rows.length}`);
 console.log(`  standalone = 1 : ${on.length}`);

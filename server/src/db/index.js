@@ -231,6 +231,18 @@ db.exec(schema);
       // authority the argument rests on.
       ['bylines', "TEXT NOT NULL DEFAULT ''"],
       ['credits', "TEXT NOT NULL DEFAULT ''"],
+      // A CONTRIBUTOR CREDIT FOUND INSIDE A NEWS ARTICLE'S BODY.
+      //
+      // The symptom of a multi-column segmentation bleed: two stories merged
+      // into one block, so an op-ed's "(X is an expert in launch vehicle
+      // systems)" ends up buried inside an unrelated report. That is how an
+      // ISRO/Gaganyaan passage came to sit inside a story about advertising
+      // notices, and how that item acquired a space-and-defence unit tag.
+      //
+      // A WARNING, never a rejection. Four articles in this corpus carry it and
+      // two were drafted; the signal is specific enough to be worth showing an
+      // admin and nowhere near reliable enough to throw an article away on.
+      ['bleed_suspect', 'INTEGER NOT NULL DEFAULT 0'],
     ],
   };
 

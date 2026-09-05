@@ -595,7 +595,10 @@ router.get('/:id', (req, res) => {
 
   const articles = db
     .prepare(
+      // bleed_suspect rides along so the admin screen can warn that this
+      // article may be two stories merged — see np_articles.bleed_suspect.
       `SELECT id, page, headline, standfirst, byline, dateline, chars, language,
+              COALESCE(bleed_suspect, 0) AS bleed_suspect,
               extraction, ocr_confidence, prominence, ap, status, discard_reason,
               merged_into, item_id, score, band, bucket, subjects, breakdown,
               section, genre, genre_why, bylines, credits,

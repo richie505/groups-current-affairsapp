@@ -189,7 +189,12 @@ const G2_UNITS = [
       'Commission and its recommendations; the Gentlemen’s Agreement; important social and cultural events ' +
       'between 1956 and 2014.',
     aliases: [
-      'Visalandhra', 'States Reorganisation Commission', 'Gentlemen’s Agreement', "Gentlemen's Agreement",
+      // One spelling only. Aliases are matched against normalised text, and
+      // norm() folds curly quotes to straight ones — so both spellings became
+      // the SAME matcher, and an article naming the agreement once collected
+      // two entries in `matched`. That satisfied the two-distinct-terms clause
+      // of the evidence filter on what is really one term.
+      'Visalandhra', 'States Reorganisation Commission', "Gentlemen's Agreement",
       'Fazal Ali', 'bifurcation', 'Reorganisation Act', 'Reorganization Act', 'successor State',
       'Telangana movement', 'Jai Andhra',
     ],
