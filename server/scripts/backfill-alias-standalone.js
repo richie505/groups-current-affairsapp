@@ -152,6 +152,18 @@ const NOT_STANDALONE = [
   // Ruled non-standalone when it was added: a real concept, but "emerging
   // technology" is how any technology story describes itself.
   'emerging technology',
+  // Ruled non-standalone in the final sitting of the September audit. Each
+  // names a real syllabus concept and each is loose enough in ordinary prose
+  // that one mention proves nothing — "financial markets fell", "natural
+  // resources of the region", "under British rule". They earn a unit with a
+  // partner term.
+  'financial institution', 'financial market', 'natural resource', 'space science',
+  'British rule', 'revenue loss',
+  // `poverty line` and `mixed economy` are the same case in the planning unit.
+  'poverty line', 'mixed economy',
+  // `Andhra University` would otherwise carry the Andhra Movement unit on any
+  // campus story — a convocation, a rank list, a strike.
+  'Andhra University',
   // 3 — names and descriptors that appear beside any subject
   'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
   'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',

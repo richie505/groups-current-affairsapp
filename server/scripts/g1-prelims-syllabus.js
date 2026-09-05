@@ -84,6 +84,8 @@ const G1P_UNITS = [
       'East India Company', 'Governor-General', 'Viceroy', 'Nizam', 'Mysore', 'Tipu Sultan',
       'Battle of Plassey', 'Carnatic', 'Machilipatnam', 'French settlement', 'Dutch settlement',
       'colonial administration', 'Company rule',
+    
+      'British rule',
     ],
   },
   {
@@ -100,6 +102,8 @@ const G1P_UNITS = [
       'Rampa rebellion', 'Indian National Congress', 'partition of Bengal',
     
       'Justice Party', 'Self-Respect Movement', 'Library Movement',
+    
+      'social reform movement',
     ],
   },
   {
@@ -237,6 +241,8 @@ const G1P_UNITS = [
       'NITI Aayog', 'Five Year Plan', 'economic development', 'Human Development Index',
       'sustainable development', 'SDG', 'inclusive growth', 'developing economy',
       'economic survey', 'distributive justice',
+    
+      'Planning Commission', 'Twelfth Five Year Plan', 'perspective plan', 'poverty line', 'multidimensional poverty', 'environmental degradation', 'environmental policy', 'Aspirational District', 'SDG India Index', 'mixed economy',
     ],
   },
   {
@@ -296,6 +302,8 @@ const G1P_UNITS = [
       'Tariff Rate Quota',
     
       'State budget', 'borrowing limit', 'Finance Commission grant', 'revenue deficit grant', 'special status', 'central assistance',
+    
+      'financial institution', 'financial market',
     ],
   },
   {
@@ -318,6 +326,8 @@ const G1P_UNITS = [
       'Visakhapatnam Steel Plant', 'Rashtriya Ispat Nigam',
     
       'river water dispute',
+    
+      'natural resource', 'revenue loss',
     ],
   },
 

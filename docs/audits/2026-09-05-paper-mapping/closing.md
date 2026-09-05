@@ -4,7 +4,7 @@ Run it: `python docs/audits/2026-09-05-paper-mapping/final-measurement.py server
 
 ```
 published items      127
-tags                 272
+tags                 280
 blank items          11   (8.7% of published)
 
 POOLED PRECISION           138/147 = 93.9%
@@ -14,7 +14,10 @@ POOLED PRECISION           138/147 = 93.9%
   new-alias tags           57/57  = 100.0%
 ```
 
-Fourth and final run, superseding 261 / 91.8%, 262 / 92.5% and 263 / 93.2%: `road safety` was then made weak,
+72.5% -> 90.0% on the blind samples, over five sittings. The work stops here
+until the first weekly review.
+
+Final run, superseding 261 / 91.8%, 262 / 92.5%, 263 / 93.2% and 272 / 93.9%: `road safety` was then made weak,
 which removed the one error the batches had introduced (item 213), and `MSME`
 was given its missing national units, which added one tag to item 154. The
 100.0% on new-alias tags is 55 of 55 rather than a perfect vocabulary — the
@@ -211,3 +214,51 @@ editions.
 first time — with their tags, for spot-checking — and rows still silent. Neither
 list is a defect list. **A syllabus-justified mapping with zero corpus hits is
 untested, not failed; it stays until the audit shows it fired wrongly.**
+
+## Where the vocabulary ended up
+
+```
+                          rows   fired
+  seed                     925     283  (31%)
+  syllabus-audit-2026-09   105      31  (30%)
+  batch-2026-09-05          33      28  (85%)
+  batch-2026-09-05b         25      23  (92%)
+                          ----
+                          1088     365
+```
+
+1,088 alias rows, up from 933. The batches are at 85% and 92% because every row
+in them was proposed from an article that had already failed to map. The audit
+is at 30% because it was approved on syllabus text rather than on evidence, and
+that is what such a set should look like after four editions of one newspaper.
+
+The last 51 rows — ten for `G1P-C1` (development and planning), ten for
+`G2-P1-U4` (the Andhra Movement), and the terms the vocabulary audit found —
+have a corpus hit count of zero between them. That is the point of them. Both
+units had ten aliases and none had ever fired; a daily paper does not print
+`Sri Bagh Pact` or `multidimensional poverty` in a given week, and the map has
+to be ready for the week it does.
+
+## The last three defects, and what kind each was
+
+**A truncation.** `urban local bod` could never match "urban local body", because
+`\b` does not anchor inside a word. Four articles were waiting on it. Found by a
+detector that uses the syllabus and the corpus as its dictionary — the aliases
+were derived from the syllabus, so the syllabus is the right dictionary — and
+which now reports nothing but two real words this corpus never prints alone.
+
+**A rule quietly wrong about English.** `Backward Class` looked like the same
+defect and was not. The plural rule refused to stem any alias ending in `s`, a
+bail written for `exports` and `fisheries` that caught every singular word
+ending in s: Backward Class, Indian National Congress, ease of doing business,
+census. Only one of these two was ever going to be found by reading the alias
+list.
+
+**An audit inventing gaps.** The vocabulary report tested coverage with a
+lowercase set while the matcher tests it with plurals, and split n-grams across
+alias boundaries. It reported `stock exchanges`, `Directive Principles`,
+`Vijayanagara empire`, `Subhas Chandra Bose` and `74th Constitutional` as
+uncovered while every one of them was already in the table. Coverage now runs
+through the matcher and candidates are checked against alias windows: 27
+candidates became 19, then 4 — of which three were rejected on their merits and
+the fourth, `Dr. B.R`, is syllabus prose whose subject `Ambedkar` already covers.

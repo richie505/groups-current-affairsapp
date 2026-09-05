@@ -95,6 +95,8 @@ const G2_UNITS = [
       'Jal Shakti',
     
       'Sample Registration System',
+    
+      'natural resource',
     ],
   },
   {
@@ -181,6 +183,8 @@ const G2_UNITS = [
       'Justice Party', 'Self-Respect Movement', 'Zamindari', 'Kisan', 'Rayalaseema famine',
       'Alluri Sitarama Raju', 'Rampa rebellion', 'Machilipatnam', 'Masulipatnam', 'Company rule',
       'Nataka Samstha', 'Gurajada', 'Kandukuri', 'Veeresalingam', 'social reform',
+    
+      'British rule', 'social reform movement',
     ],
   },
   {
@@ -193,6 +197,8 @@ const G2_UNITS = [
     aliases: [
       'Andhra Mahasabha', 'Potti Sriramulu', 'Andhra State', 'Library Movement', 'Andhra Patrika',
       'folk culture', 'tribal culture', 'Kuchipudi', 'Burrakatha', 'linguistic state',
+    
+      'Sri Bagh Pact', 'Visalandhra', 'Madras Presidency', 'Rayalaseema Mahasabha', 'Krishna Patrika', 'Andhra Kesari', 'Pattabhi Sitaramayya', 'Vandemataram Movement', 'Andhra University', 'Sriramulu fast',
     ],
   },
   {
@@ -427,6 +433,8 @@ const G2_UNITS = [
       'IT policy',
     
       'emerging technology',
+    
+      'space science', 'nuclear programme',
     ],
   },
   {

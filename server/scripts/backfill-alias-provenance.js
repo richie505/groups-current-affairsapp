@@ -83,6 +83,31 @@ const AUDIT = [
   // provenance is what will say so when somebody finds them idle.
   ['G2-P2-U5', ['AP MSME', 'Andhra Pradesh MSME', 'MSME in Andhra Pradesh',
                 'Sunrise Andhra Pradesh']],
+  // Terms the vocabulary audit found the syllabus naming and the map missing.
+  ['G2-P2-U6', ['emerging technology', 'space science', 'nuclear programme']],
+  ['G2-P2-U9', ['pollution control']],
+  ['G1P-S5', ['pollution control']],
+  ['G1P-B2', ['river water dispute', 'inter-State river']],
+  ['G2-P1-U8', ['river water dispute', 'inter-State river']],
+  ['G1P-C5', ['river water dispute', 'natural resource', 'revenue loss']],
+  ['G1P-B3', ['74th Constitutional Amendment', '73rd Constitutional Amendment']],
+  ['G2-P1-U10', ['74th Constitutional Amendment', '73rd Constitutional Amendment',
+                 'urban local body']],
+  ['G1P-C4', ['financial institution', 'financial market']],
+  ['G2-S2', ['natural resource']],
+  ['G1P-A4', ['British rule']],
+  ['G1P-A5', ['social reform movement']],
+  ['G2-P1-U3', ['British rule', 'social reform movement']],
+  // The two thin units, filled from their own syllabus text and standard exam
+  // vocabulary. Twenty rows, none of which had a corpus hit when they were
+  // approved — which is exactly what provenance and first_hit_at are for.
+  ['G1P-C1', ['Planning Commission', 'Twelfth Five Year Plan', 'perspective plan',
+              'poverty line', 'multidimensional poverty', 'environmental degradation',
+              'environmental policy', 'Aspirational District', 'SDG India Index',
+              'mixed economy']],
+  ['G2-P1-U4', ['Sri Bagh Pact', 'Visalandhra', 'Madras Presidency', 'Rayalaseema Mahasabha',
+                'Krishna Patrika', 'Andhra Kesari', 'Pattabhi Sitaramayya',
+                'Vandemataram Movement', 'Andhra University', 'Sriramulu fast']],
 ];
 
 const byAlias = db.prepare('UPDATE ref_unit_aliases SET provenance = ? WHERE alias = ?');
