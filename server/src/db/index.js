@@ -204,7 +204,22 @@ db.exec(schema);
     // the weights can be evaluated against past articles instead of guessed at.
     // The evidence flags the syllabus matcher writes — see schema.sql for what
     // each one is and why the old single flag was two claims in a trench coat.
-    ref_unit_aliases: [['standalone', 'INTEGER NOT NULL DEFAULT 0']],
+    ref_unit_aliases: [
+      ['standalone', 'INTEGER NOT NULL DEFAULT 0'],
+      // A COMMON NOUN THAT NAMES A DOMAIN BUT NOT A TOPIC.
+      //
+      // `monsoon`, `census`, `port`, `transport`, `regulator` each appear in
+      // 1-5% of the corpus. One of them is not evidence, and the audits showed
+      // that TWO of them are not either: `monsoon, census` filed a story about
+      // Adivasi employment under geography, and `lift irrigation, canal` filed
+      // a school-bus accident there too. So the two-distinct-terms clause now
+      // requires at least one term that is not weak.
+      //
+      // Weakness is about the term, not the tag: a weak term still counts
+      // towards the tag when a strong one sits beside it, and still carries a
+      // unit outright when it is in the headline.
+      ['weak', 'INTEGER NOT NULL DEFAULT 0'],
+    ],
     np_article_units: [['in_standfirst', 'INTEGER NOT NULL DEFAULT 0']],
     np_articles: [
       ['score', 'REAL'],

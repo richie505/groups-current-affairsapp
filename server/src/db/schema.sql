@@ -88,6 +88,26 @@ CREATE TABLE IF NOT EXISTS ref_unit_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);
 
+-- WORDS THAT TURN AN ALIAS INTO SOMEBODY'S NAME.
+--
+-- "Alluri Sitarama Raju" is a freedom fighter and an alias for AP's colonial
+-- history; "Alluri Sitarama Raju Academy of Medical Sciences" is a college in
+-- a rankings table. "Public health" is a syllabus topic; "Directorate of
+-- Public Health" is an employer in a story about a pay dispute. "BRICS" is a
+-- grouping; "BRICS+ Legal Forum" is the room a judge gave a speech in. In each
+-- case the alias is really part of a longer proper name, and the match is an
+-- artefact of where the name happens to overlap the vocabulary.
+--
+-- A table rather than an array in the matcher, so it grows the way the alias
+-- blocklist does — by someone adding a row after an audit, without a deploy.
+-- Deliberately NOT here: Act, Board, Council, Commission, Mission. Each is
+-- part of legitimate aliases (Forest Rights Act, Pollution Control Board,
+-- Finance Commission), and where the longer form is itself an alias it matches
+-- on its own anyway.
+CREATE TABLE IF NOT EXISTS ref_entity_nouns (
+  noun TEXT PRIMARY KEY
+);
+
 -- Which syllabus units an ARTICLE touches, decided before any model is asked.
 -- Derived and rebuilt on every re-score, like np_article_topics: the vocabulary
 -- will improve, and a derived table that cannot be thrown away becomes a

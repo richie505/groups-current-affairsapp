@@ -49,7 +49,23 @@ function aliasMatcher(alias, strict) {
   // a plain containment test. Telugu has no case, so nothing is lost.
   const nonAscii = /[^\x00-\x7F]/.test(alias);
   if (nonAscii) {
-    return { test: (haystackRaw, haystackNorm) => haystackNorm.includes(norm(alias)) };
+    const needle = norm(alias);
+    return {
+      test: (haystackRaw, haystackNorm) => haystackNorm.includes(needle),
+      count: (haystackRaw, haystackNorm) => haystackNorm.split(needle).length - 1,
+      // The same shape the ASCII branch returns, so a caller never has to ask
+      // which kind of alias it is holding. Omitting it here is how the
+      // proper-name guard crashed on the first Telugu alias it reached.
+      matches: (haystackRaw, haystackNorm) => {
+        const spans = [];
+        let i = haystackNorm.indexOf(needle);
+        while (i !== -1) {
+          spans.push({ start: i, end: i + needle.length });
+          i = haystackNorm.indexOf(needle, i + needle.length);
+        }
+        return { target: haystackNorm, spans };
+      },
+    };
   }
   const re = new RegExp(`\\b${body}\\b`, strict ? 'g' : 'gi');
   return {
@@ -63,6 +79,29 @@ function aliasMatcher(alias, strict) {
       let n = 0;
       while (re.exec(target) !== null) n++;
       return n;
+    },
+    /**
+     * Where the alias matched, and in which string.
+     *
+     * `test` and `count` answer "is it there" and "how often", which is all
+     * the scorer needed until it had to ask what sits NEXT TO a match — an
+     * alias inside "Alluri Sitarama Raju Academy" or "Directorate of Public
+     * Health" is part of a name rather than a mention of the topic. That
+     * question needs offsets, and it needs to know which haystack they index
+     * into, because a strict alias matches the raw text and a loose one the
+     * normalised text. Returning both together is what keeps a caller from
+     * pairing an offset with the wrong string.
+     */
+    matches: (haystackRaw, haystackNorm) => {
+      const target = strict ? haystackRaw : haystackNorm;
+      re.lastIndex = 0;
+      const out = [];
+      let m;
+      while ((m = re.exec(target)) !== null) {
+        out.push({ start: m.index, end: m.index + m[0].length });
+        if (m[0].length === 0) re.lastIndex += 1; // cannot happen here, but a zero-width match would spin
+      }
+      return { target, spans: out };
     },
   };
 }

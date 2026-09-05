@@ -111,6 +111,10 @@ const NOT_STANDALONE = [
   // 1 — measured misfires
   'human rights', 'good governance', 'stock exchange', 'population density',
   'renewable energy', 'artificial intelligence',
+  // the third audit's additions, same family: `skill development` filed a
+  // university award and a Blue Economy centre under national income, and
+  // `drinking water` filed an education-equity op-ed under geography
+  'skill development', 'drinking water',
   // 2 — venue, office, instrument
   'Legislative Assembly', 'Legislative Council', 'Lok Sabha', 'Rajya Sabha',
   'Supreme Court', 'High Court', 'Chief Justice', 'Constitution Bench',
@@ -130,8 +134,52 @@ const NOT_STANDALONE = [
   'research and development', 'research institute', 'Indian scientist', 'solar system',
 ];
 
+// ---------------------------------------------------------------------------
+// D. Weak terms — common nouns that name a domain but not a topic.
+// ---------------------------------------------------------------------------
+//
+// A weak term still counts towards a tag when a strong term sits beside it,
+// and still carries a unit outright from the headline. What it cannot do is be
+// BOTH of the two distinct terms: the audits found `monsoon, census` filing a
+// story about Adivasi employment under geography, and `lift irrigation, canal`
+// filing a school-bus accident there as well.
+//
+// Chosen on corpus frequency rather than intuition — each of these appears in
+// 1-5% of the 411 articles, and a term in that many separates nothing.
+//
+// Deliberately NOT weak, though just as frequent: Polavaram, Amaravati,
+// Srisailam, Tirumala, delimitation, inflation, insurance, quantum, wildlife,
+// conservation, dairy, tourism, reservation, tribunal, panchayat, coal. Each
+// names a specific thing, and `wildlife` was right twice in the first audit.
+const WEAK = [
+  'Parliament', 'manufacturing', 'transport', 'regulator', 'monsoon', 'irrigation',
+  'agriculture', 'census', 'port', 'railway', 'exports', 'imports', 'logistics',
+  'atmosphere', 'soil', 'rainfall', 'corridor', 'canal',
+  // the venue-or-name family, in its single-word form
+  'Governor', 'Speaker', 'Ambedkar', 'mineral',
+  // THE MULTI-WORD VENUE NAMES ARE DELIBERATELY *NOT* WEAK, AND THAT WAS
+  // MEASURED RATHER THAN ASSUMED.
+  //
+  // Marking Supreme Court, High Court, Chief Justice, Lok Sabha, Rajya Sabha,
+  // Legislative Assembly / Council and Council of Ministers weak looks right:
+  // two of them together filed a CBSE grace-marks row under the judiciary. But
+  // a court story usually names ONLY the court, so weakness took the genuine
+  // ones with it — "SC lauds scrapped MGNREGA" and "Will strongly oppose FCRA
+  // Bill in Parliament" both lost their correct tag, because every term they
+  // had was a venue word.
+  //
+  // Measured over the pooled judged sample: weak gave 82.7% precision on 81
+  // surviving tags; leaving them non-weak gave 83.9% on 93. Worse on precision
+  // AND on recall, so the single-word forms above stay weak and the named
+  // institutions do not. They remain barred from standing alone, which is what
+  // stops one passing mention carrying a unit.
+  // borderline, decided weak
+  'summit', 'electricity', 'ecosystem', 'procurement', 'delta',
+];
+
 const lower = (xs) => new Set(xs.map((x) => x.toLowerCase()));
 const blocked = lower(NOT_STANDALONE);
+const weak = lower(WEAK);
 const extra = lower(EXTRA_ACRONYMS);
 const ambiguous = lower(AMBIGUOUS_ACRONYMS);
 
@@ -146,17 +194,23 @@ const decide = (r) => {
   return a.includes(' ') ? 1 : 0;
 };
 
-const wanted = rows.map((r) => ({ ...r, standalone: decide(r) }));
+const wanted = rows.map((r) => ({
+  ...r,
+  standalone: decide(r),
+  weak: weak.has(r.alias.toLowerCase()) ? 1 : 0,
+}));
 const on = wanted.filter((r) => r.standalone);
 
 // Anything named above that is not actually in the vocabulary is a typo in
 // this file, and a silent no-op is how such a list rots.
 const present = new Set(rows.map((r) => r.alias.toLowerCase()));
-const missing = [...blocked, ...extra, ...ambiguous].filter((a) => !present.has(a));
+const missing = [...blocked, ...extra, ...ambiguous, ...weak].filter((a) => !present.has(a));
 
+const weakRows = wanted.filter((r) => r.weak);
 console.log(`aliases: ${rows.length}`);
 console.log(`  standalone = 1 : ${on.length}`);
 console.log(`  standalone = 0 : ${rows.length - on.length}`);
+console.log(`  weak = 1       : ${weakRows.length}`);
 if (missing.length) {
   console.log(`\n  ${missing.length} name(s) in this script match no alias — check for typos:`);
   for (const m of missing) console.log(`    ${m}`);
@@ -167,11 +221,13 @@ if (DRY) {
   process.exit(missing.length ? 1 : 0);
 }
 
-const update = db.prepare('UPDATE ref_unit_aliases SET standalone = ? WHERE unit_code = ? AND alias = ?');
+const update = db.prepare(
+  'UPDATE ref_unit_aliases SET standalone = ?, weak = ? WHERE unit_code = ? AND alias = ?'
+);
 let changed = 0;
 db.transaction(() => {
   for (const r of wanted) {
-    const info = update.run(r.standalone, r.unit_code, r.alias);
+    const info = update.run(r.standalone, r.weak, r.unit_code, r.alias);
     if (info.changes) changed += 1;
   }
 })();

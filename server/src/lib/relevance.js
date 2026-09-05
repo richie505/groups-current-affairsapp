@@ -202,6 +202,7 @@ function loadSyllabusUnits(db) {
         // COALESCE so a database that predates the column still scores.
         `SELECT a.unit_code, a.alias, a.strict,
                 COALESCE(a.standalone, 0) AS standalone,
+                COALESCE(a.weak, 0) AS weak,
                 u.label, u.paper, u.exam, u.format
            FROM ref_unit_aliases a
            JOIN ref_units u ON u.unit_code = a.unit_code
@@ -213,6 +214,80 @@ function loadSyllabusUnits(db) {
     return [];
   }
   return rows.map((r) => ({ ...r, matcher: T.aliasMatcher(r.alias, !!r.strict) }));
+}
+
+/**
+ * The words that make a match part of somebody's NAME rather than a mention of
+ * the topic — see ref_entity_nouns and server/scripts/seed-entity-nouns.js.
+ *
+ * Lowercased once here because a loose alias matches against normalised text,
+ * which is already lowercase; a strict alias matches raw text, and comparing
+ * case-insensitively there costs nothing and avoids two code paths.
+ */
+function loadEntityNouns(db) {
+  try {
+    return new Set(
+      db.prepare('SELECT noun FROM ref_entity_nouns').all().map((r) => String(r.noun).toLowerCase())
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+// A word boundary either side, so "Academy" does not match inside "Academic".
+const WORD_BEFORE = /([A-Za-z][A-Za-z.'-]*)\s*$/;
+const WORD_AFTER = /^\s*([A-Za-z][A-Za-z.'-]*)/;
+// One linking word may sit between the alias and the entity noun:
+// "Directorate OF Public Health".
+const LINKERS = new Set(['of', 'for', 'and', 'the']);
+
+/**
+ * Is this particular occurrence part of a longer proper name?
+ *
+ * Looks one token out on each side, stepping over a single linking word, and
+ * asks whether that token is an entity noun. A trailing "+" counts on its own:
+ * "BRICS+ Legal Forum" is a forum, not the grouping.
+ *
+ * Deliberately NOT "any adjacent capitalised token" — that rejects "Election
+ * Commission of India", which is the Election Commission.
+ */
+function insideProperName(target, start, end, nouns) {
+  if (!nouns.size) return false;
+  if (target[end] === '+') return true;
+
+  const after = WORD_AFTER.exec(target.slice(end, end + 40));
+  if (after) {
+    let word = after[1].toLowerCase();
+    if (LINKERS.has(word)) {
+      const second = WORD_AFTER.exec(target.slice(end + after[0].length, end + 60));
+      word = second ? second[1].toLowerCase() : '';
+    }
+    if (nouns.has(word)) return true;
+  }
+
+  const before = WORD_BEFORE.exec(target.slice(Math.max(0, start - 40), start));
+  if (before) {
+    let word = before[1].toLowerCase();
+    if (LINKERS.has(word)) {
+      const head = target.slice(Math.max(0, start - 60), start - before[0].length);
+      const second = WORD_BEFORE.exec(head);
+      word = second ? second[1].toLowerCase() : '';
+    }
+    if (nouns.has(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does the alias appear in this text other than as part of a proper name?
+ *
+ * A unit survives on ONE clean occurrence: "Public health spending rose" in the
+ * same article as "Directorate of Public Health" is still about public health.
+ */
+function matchesOutsideName(matcher, raw, norm, nouns) {
+  const { target, spans } = matcher.matches(raw, norm);
+  if (!spans.length) return false;
+  return spans.some((sp) => !insideProperName(target, sp.start, sp.end, nouns));
 }
 
 function loadContext(db) {
@@ -291,6 +366,7 @@ function loadContext(db) {
     keywords, pyqCount, topicPapers, topicTier,
     aliases: T.loadAliases(db),
     g2Units: loadSyllabusUnits(db),
+    entityNouns: loadEntityNouns(db),
   };
 }
 
@@ -458,17 +534,43 @@ function score(article, ctx) {
   const unitHead = String(article.headline || '');
   const unitStand = String(article.standfirst || '');
 
+  const nouns = ctx.entityNouns || new Set();
+
   const g2Hits = [];
   for (const u of ctx.g2Units || []) {
-    const inHead = u.matcher.test(unitHead, T.norm(unitHead));
-    const inStand = u.matcher.test(unitStand, T.norm(unitStand));
-    const inBody = u.matcher.test(body, T.norm(body));
+    // Each occurrence is checked for the proper-name guard, so a match that
+    // exists only inside "Alluri Sitarama Raju Academy" counts as no match.
+    const inHead = matchesOutsideName(u.matcher, unitHead, T.norm(unitHead), nouns);
+    const inStand = matchesOutsideName(u.matcher, unitStand, T.norm(unitStand), nouns);
+    const inBody = matchesOutsideName(u.matcher, body, T.norm(body), nouns);
     if (!inHead && !inStand && !inBody) continue;
+
+    // 3b — A SINGLE COMMON WORD IN THE HEADLINE IS NOT A HEADLINE HIT.
+    //
+    // The headline clause is the strongest in the filter, and one word is the
+    // weakest evidence there is. "Monsoon Session of State Legislature" put a
+    // parliamentary term into physical geography on `monsoon` alone, and an
+    // advertisement's `dairy` reached AP agriculture the same way. Requiring
+    // the word to appear in the body too costs almost nothing on a real match
+    // — a story about the monsoon says "monsoon" more than once — and refuses
+    // the false friend, which by definition does not.
+    //
+    // Phrases and standalone aliases are exempt: they carry the unit on one
+    // mention anywhere, which is what standalone means.
+    const oneWord = !u.alias.includes(' ');
+    // 3b, unchanged: a single word in the headline must also be in the body.
+    const headOk = inHead && (!oneWord || u.standalone || inBody);
+    // Whether the HIT can claim the headline clause is decided after the loop,
+    // because it depends on terms this iteration has not seen yet — see the
+    // `in_headline` assignment below.
     const found = g2Hits.find((h) => h.unit_code === u.unit_code);
     if (found) {
       found.hits += 1;
-      found.in_headline = found.in_headline || (inHead ? 1 : 0);
+      found.headStrong = found.headStrong || (headOk && !u.weak);
+      found.headWeak = found.headWeak || (headOk && !!u.weak);
+      found.bodyStrong = found.bodyStrong || ((inBody || inStand) && !u.weak);
       found.in_standfirst = found.in_standfirst || (inStand ? 1 : 0);
+      if (!u.weak) found.strongTerms += 1;
       // Tracked on every alias regardless of the four-term display cap: a
       // standalone alias that happens to be the fifth match still counts.
       found.standalone = found.standalone || !!u.standalone;
@@ -478,13 +580,33 @@ function score(article, ctx) {
         unit_code: u.unit_code, label: u.label, paper: u.paper,
         exam: u.exam, format: u.format,
         hits: 1,
-        in_headline: inHead ? 1 : 0,
+        headStrong: headOk && !u.weak,
+        headWeak: headOk && !!u.weak,
+        bodyStrong: (inBody || inStand) && !u.weak,
         in_standfirst: inStand ? 1 : 0,
         standalone: !!u.standalone,
+        strongTerms: u.weak ? 0 : 1,
         matched: [u.alias],
       });
     }
   }
+  // A WEAK WORD IN THE HEADLINE IS STILL A WEAK WORD.
+  //
+  // The headline clause was the last place weakness did not apply, and
+  // "Monsoon Session of State Legislature" walked through it: `monsoon` in the
+  // headline, `monsoon` again in the body — so 3b was satisfied — and a
+  // parliamentary term went into physical geography. 3b asks whether the word
+  // is really there; this asks whether the word means anything.
+  //
+  // So a weak headline term needs a NON-WEAK partner somewhere in the article.
+  // A story genuinely about the monsoon says "rainfall" or "southwest monsoon"
+  // or "deficit" too; a story about a legislative session says none of them.
+  // Decided here rather than in the loop because the partner may be matched by
+  // an alias processed later.
+  for (const h of g2Hits) {
+    h.in_headline = h.headStrong || (h.headWeak && h.bodyStrong) ? 1 : 0;
+  }
+
   // Strongest first: a unit named in the headline, then one with more distinct
   // terms behind it. A single body mention of "hospital" is not a health-policy
   // article, and the ordering is what lets a caller take the top two and be
@@ -525,7 +647,17 @@ function score(article, ctx) {
   // So specificity is now recorded per alias rather than inferred from its
   // punctuation. See server/scripts/backfill-alias-standalone.js, which holds
   // the decision and can be re-run after a reseed.
-  const solid = g2Hits.filter((h) => h.in_headline || h.matched.length >= 2 || h.standalone);
+  // THE TWO-TERMS CLAUSE NEEDS ONE TERM THAT MEANS SOMETHING.
+  //
+  // Two distinct terms was a proxy for "more than a passing mention", and it
+  // holds only while the terms carry weight. `monsoon, census` filed a story
+  // about Adivasi employment under geography; `lift irrigation, canal` filed a
+  // school-bus accident there too. Both cleared the clause on two words that
+  // appear in 1-2% of the corpus apiece. At least one term must now be
+  // non-weak — see ref_unit_aliases.weak.
+  const solid = g2Hits.filter(
+    (h) => h.in_headline || h.standalone || (h.matched.length >= 2 && h.strongTerms >= 1)
+  );
 
   // The same foreign-domestic guard factor A already applies. A war report
   // naming a missile is not Indian defence technology, and letting the Group-II
