@@ -330,6 +330,7 @@ router.post('/:id/draft', (req, res) => {
   // Validated against THIS edition before anything is spawned: an id from
   // another edition, or one that does not exist, would otherwise reach the
   // worker and be silently skipped, which looks identical to drafting nothing.
+  let unmapped = [];
   const picked = String(req.query.articles || '')
     .split(',')
     .map((n) => Number(n.trim()))
@@ -351,6 +352,32 @@ router.post('/:id/draft', (req, res) => {
     }
     if (valid.length > 60) {
       return res.status(400).json({ error: 'Select at most 60 articles in one run.' });
+    }
+    // A HAND-PICKED LIST STAYS A DELIBERATE BYPASS, BUT NOT A SILENT ONE.
+    //
+    // The selector refuses an article that connects to no syllabus unit, and
+    // salvage now does too. Choosing one by hand overrides that on purpose —
+    // the admin can see what the score cannot. What they could not see is that
+    // the article they picked will produce an item with no paper mapping, no
+    // place in the syllabus index, and nothing to sort it by in the digest.
+    unmapped = db
+      .prepare(
+        `SELECT a.id, a.headline FROM np_articles a
+          WHERE a.id IN (${holes})
+            AND NOT EXISTS (
+                  SELECT 1 FROM np_article_units au
+                    JOIN ref_units ru ON ru.unit_code = au.unit_code
+                   WHERE au.article_id = a.id
+                     AND ru.format = 'objective' AND ru.broad = 0 AND ru.unfeedable = 0
+                )`
+      )
+      .all(...picked)
+      .map((r) => ({ id: r.id, headline: r.headline }));
+    if (unmapped.length) {
+      console.warn(
+        `[draft] ${unmapped.length} hand-picked article(s) feed no syllabus unit: ` +
+          unmapped.map((u) => u.id).join(', ')
+      );
     }
   }
 
@@ -456,7 +483,15 @@ router.post('/:id/draft', (req, res) => {
   });
   child.unref();
 
-  res.status(202).json({ started: true, id, waiting, runId });
+  res.status(202).json({
+    started: true,
+    id,
+    waiting,
+    runId,
+    // Surfaced rather than only logged: the admin screen can say which picks
+    // will come out with no paper mapping.
+    ...(unmapped.length ? { unmapped } : {}),
+  });
 });
 
 // ---------------------------------------------------------------------------
