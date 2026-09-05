@@ -4,6 +4,14 @@ server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
 server/data/*.backup*
+# Anything alongside the database is a copy of the database. The three patterns
+# above matched `ca.db` and `ca.db.backup-*` and not `ca.db.pre-trunc-230223`,
+# so a session's worth of ad-hoc `cp` backups — 24 files, 78 MB — went into the
+# repository and then onto the production server on the next `git pull`.
+# Take backups with server/scripts/backup.js, which writes to data/backups/.
+server/data/ca.db.*
+server/data/*.db.*
+server/data/backups/
 web/dist/
 content-pipeline/ca-daily/out/
 content-pipeline/ca-daily/state.jsonl
