@@ -152,6 +152,8 @@ const G1P_UNITS = [
       'Zonal Council', 'Inter-State Council', 'Gorkhaland',
     
       'Reorganisation Act', 'Reorganization Act', 'bifurcation', 'successor State', 'river water sharing',
+    
+      'river water dispute', 'inter-State river',
     ],
   },
   {
@@ -164,10 +166,12 @@ const G1P_UNITS = [
       'Election Commission', 'UPSC', 'Public Service Commission', 'CAG',
       'Comptroller and Auditor General', 'Attorney General', 'Advocate General', 'Governor',
       'panchayat', 'Panchayati Raj', 'Zilla Parishad', 'Mandal Parishad', 'gram sabha',
-      'municipal corporation', 'urban local bod', '73rd Amendment', '74th Amendment',
+      'municipal corporation', 'urban local body', '73rd Amendment', '74th Amendment',
       'good governance', 'public policy',
     
       'APPSC', 'Mega DSC',
+    
+      '74th Constitutional Amendment', '73rd Constitutional Amendment',
     ],
   },
   {
@@ -312,6 +316,8 @@ const G1P_UNITS = [
       'Dugarajapatnam', 'backward district', 'revenue deficit grant', 'e-governance',
     
       'Visakhapatnam Steel Plant', 'Rashtriya Ispat Nigam',
+    
+      'river water dispute',
     ],
   },
 
@@ -455,6 +461,8 @@ const G1P_UNITS = [
       'nanotechnology', 'genetic engineering', 'GM crop', 'public health', 'epidemic', 'vaccine',
     
       'National AYUSH Mission', 'AYUSH', 'fixed-dose combination', 'nursing personnel', 'cardiovascular',
+    
+      'pollution control',
     ],
   },
 

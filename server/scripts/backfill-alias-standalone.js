@@ -149,6 +149,9 @@ const NOT_STANDALONE = [
   // be non-standalone by the rule anyway — it is written here so the ruling is
   // visible rather than incidental.)
   'State expenditure', 'prehistoric',
+  // Ruled non-standalone when it was added: a real concept, but "emerging
+  // technology" is how any technology story describes itself.
+  'emerging technology',
   // 3 — names and descriptors that appear beside any subject
   'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
   'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',

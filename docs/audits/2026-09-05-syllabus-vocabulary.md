@@ -35,9 +35,9 @@ many aliases and none fired is untested, not broken — see
 | `G2-P1-U2` | G2-P1A | 18 | 0 | AP history — dynasties of the 11th to 16th centuries, Telu |
 | `G1P-B5` | G1P-Polity | 19 | 6 | Rights issues — human, women, SC/ST and child rights |
 | `G2-P1-U6` | G2-P1B | 19 | 8 | Constitution — nature, Preamble, Rights, DPSP, Duties, ame |
-| `G2-P1-U10` | G2-P1B | 20 | 6 | Decentralisation — panchayati raj, 73rd and 74th Amendment |
+| `G2-P1-U10` | G2-P1B | 20 | 8 | Decentralisation — panchayati raj, 73rd and 74th Amendment |
 | `G1P-A5` | G1P-History | 21 | 0 | 1857, reform movements and the freedom struggle |
-| `G1P-B3` | G1P-Polity | 21 | 9 | Constitutional authorities, panchayati raj, public policy  |
+| `G1P-B3` | G1P-Polity | 21 | 10 | Constitutional authorities, panchayati raj, public policy  |
 | `G1P-C5` | G1P-Economy | 21 | 12 | AP after bifurcation — Reorganisation Act 2014, special st |
 | `G2-P1-U9` | G2-P1B | 21 | 5 | Centre-State relations, federalism, parties, elections and |
 | `G2-P2-U7` | G2-P2B | 21 | 9 | Energy — policy, renewables, biofuels, Bharat Stage norms |
@@ -59,7 +59,7 @@ many aliases and none fired is untested, not broken — see
 | `G2-P2-U2` | G2-P2A | 38 | 15 | Money, banking, public finance, taxation, GST, budget, BOP |
 | `G2-P2-U3` | G2-P2A | 38 | 21 | Agriculture, industry and services in the Indian economy |
 | `G2-S2` | G2-Screening | 39 | 22 | Geography — physical, economic and human, India and AP |
-| `G2-S3` | G2-Screening | 39 | 13 | Indian Society — structure, social issues and welfare |
+| `G2-S3` | G2-Screening | 39 | 14 | Indian Society — structure, social issues and welfare |
 
 ## 2. Syllabus terms the map does not carry, ranked by corpus hits
 
@@ -67,7 +67,7 @@ Lifted from `ref_units.syllabus_text` — the commission's own words — minus
 everything already an alias. Only terms the corpus actually contains are listed;
 a term the paper never prints is not a gap worth filling this month.
 
-27 candidate term(s) appear in at least one article.
+19 candidate term(s) appear in at least one article.
 
 | term | corpus hits | named in |
 |---|---|---|
@@ -77,26 +77,18 @@ a term the paper never prints is not a gap worth filling this month.
 | Financial institutions | 2 | `G1P-C4` |
 | pollution control | 2 | `G2-P2-U9` |
 | river water | 2 | `G1P-C5` |
-| stock exchanges | 2 | `G1P-C4` |
 | 19th century | 1 | `G1P-A5` |
 | 74th Constitutional | 1 | `G2-P1-U10` |
-| 74th Constitutional Amendment | 1 | `G2-P1-U10` |
 | action plans | 1 | `G1P-S5` |
-| backward districts | 1 | `G1P-C5` |
 | British rule | 1 | `G2-P1-U3` |
 | Chandra Bose | 1 | `G1P-A6` |
-| Directive Principles | 1 | `G1P-B1` `G2-P1-U6` |
 | Dr. B.R | 1 | `G1P-A6` |
-| Dr. B.R. Ambedkar | 1 | `G1P-A6` |
 | financial markets | 1 | `G1P-C4` |
 | natural resources | 1 | `G1P-C5` `G2-S2` |
-| non-tax revenue | 1 | `G2-P2-U4` |
 | nuclear programme | 1 | `G2-P2-U6` |
 | revenue loss | 1 | `G1P-C5` |
 | space science | 1 | `G2-P2-U6` |
 | Subhas Chandra | 1 | `G1P-A6` |
-| Vijayanagara empire | 1 | `G1P-A3` |
-| Vizag railway | 1 | `G1P-C5` |
 | water sharing | 1 | `G1P-C5` |
 
 ## 3. Broken rows
@@ -105,10 +97,7 @@ An alias that matches nothing, where the alias PLUS a common ending matches
 something. That is a stem typed where a word belongs: `\b` anchors at the end of
 the alias and there is no word boundary inside a word, so the row can never fire.
 
-| alias | on | probably meant | its hits |
-|---|---|---|---|
-| `Backward Class` | `G2-S3` | `Backward Classes` | 2 |
-| `urban local bod` | `G2-P1-U10` | `urban local body` | 4 |
+None. (`disabilit` and `decentralis` were the two known cases and both are fixed.)
 
 ## 4. Aliases with no corpus match at all — 418
 

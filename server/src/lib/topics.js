@@ -57,8 +57,7 @@ function escapeRe(s) {
  *
  * Never a strict alias, and never an acronym: those are strict precisely
  * because a loose match fires on prose, and `SCs` is a different thing from
- * `SC`. Never an alias already stored plural, because +s on a plural is noise.
- * Never non-ASCII - Telugu does not form plurals by suffix.
+ * `SC`. Never non-ASCII - Telugu does not form plurals by suffix.
  */
 function stemmable(alias, strict) {
   if (strict) return false;
@@ -66,7 +65,19 @@ function stemmable(alias, strict) {
   if (a.length < 4) return false;
   if (/[^\x00-\x7F]/.test(a)) return false;
   if (a === a.toUpperCase()) return false; // MGNREGA, and any acronym stored loose
-  if (/s$/i.test(a)) return false; // census, exports, BrahMos
+  // NO BAIL FOR A TRAILING s.
+  //
+  // There used to be one — "an alias already stored plural does not need +s" —
+  // and it was wrong about English. `Backward Class`, `Indian National
+  // Congress`, `ease of doing business` and `census` are all singular words
+  // ending in s, and the bail made every one of them unstemmable: `Backward
+  // Class` matched nothing while "Backward Classes" sat in two articles.
+  //
+  // Letting them through costs nothing, because the suffix group is optional
+  // and `(?:e?s)?` is the correct plural for a sibilant ending — class/classes,
+  // congress/congresses, census/censuses. For an alias that really is plural,
+  // `exports(?:e?s)?` matches "exports" and then harmlessly fails to match
+  // "exportses", which no newspaper prints.
   return true;
 }
 

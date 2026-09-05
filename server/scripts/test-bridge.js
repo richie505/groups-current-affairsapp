@@ -1137,7 +1137,16 @@ const fakeDoc = () => ({
   check('the singular still matches', hit('fertilizer', 'fertilizer output falls'));
   check('an acronym is never stemmed', !hit('RTI', 'PARTIES met', true));
   check('a strict alias is never stemmed', !t.stemmable('SC', true));
-  check('an alias already plural is left alone', !t.stemmable('exports', false));
+  // A TRAILING s DOES NOT MEAN PLURAL. `Backward Class` matched nothing while
+  // "Backward Classes" sat in two articles, because the old rule refused to
+  // stem anything ending in s. Singular words ending in s are ordinary English.
+  check('a singular word ending in s is still stemmed', t.stemmable('Backward Class', false));
+  check('and reaches its plural', hit('Backward Class', 'Backward Classes were listed'));
+  check('census reaches censuses', hit('census', 'two censuses were held'));
+  check(
+    'an alias that really is plural gains nothing and loses nothing',
+    hit('exports', 'exports rose sharply') && !hit('exports', 'the export was cleared')
+  );
   check('a loose all-caps alias is not stemmed', !t.stemmable('MGNREGA', false));
   check(
     'stemming never reaches a different word',

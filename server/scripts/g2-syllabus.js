@@ -266,6 +266,8 @@ const G2_UNITS = [
       'APPSC', 'Inter-State Council',
     
       'river water sharing',
+    
+      'river water dispute', 'inter-State river',
     ],
   },
   {
@@ -293,10 +295,12 @@ const G2_UNITS = [
     aliases: [
       'panchayat', 'Panchayati Raj', 'Zilla Parishad', 'Zilla Praja Parishad', 'Mandal Parishad',
       'Mandal Praja Parishad', 'gram sabha', 'sarpanch', 'municipal corporation', 'municipality',
-      '73rd Amendment', '74th Amendment', 'Balwant Rai Mehta', 'Ashok Mehta', 'urban local bod',
+      '73rd Amendment', '74th Amendment', 'Balwant Rai Mehta', 'Ashok Mehta', 'urban local body',
       'ULB', 'mayor', 'ward member', 'local self-government',
     
       'decentralisation',
+    
+      '74th Constitutional Amendment', '73rd Constitutional Amendment',
     ],
   },
 
@@ -421,6 +425,8 @@ const G2_UNITS = [
       'nuclear power', 'radioisotope', 'DAE', 'ISRO chairman', 'science policy',
     
       'IT policy',
+    
+      'emerging technology',
     ],
   },
   {
@@ -468,6 +474,8 @@ const G2_UNITS = [
       'contaminated water', 'industrial effluent', 'toxic', 'groundwater contamination',
       'Pollution Control Board', 'CPCB', 'environmental clearance', 'EIA', 'National Green Tribunal',
       'NGT', 'transgenic', 'GM crop', 'bioremediation', 'emission norm',
+    
+      'pollution control',
     ],
   },
   {
