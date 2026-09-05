@@ -45,6 +45,9 @@ const T = require(path.join(__dirname, '..', 'src', 'lib', 'topics'));
 
 const apply = process.argv.includes('--apply');
 const includeMismatched = process.argv.includes('--include-mismatched');
+// Blank a mismatched code the evidence could not replace, keeping the old value
+// in unit_code_prior. Only meaningful alongside --include-mismatched.
+const blankUnresolved = process.argv.includes('--blank-unresolved');
 
 // Same vocabulary the scorer reads, same plural handling. Broad and unfeedable
 // units are excluded there and are excluded here.
@@ -133,10 +136,34 @@ for (const m of rows) {
 }
 
 const upd = db.prepare('UPDATE ca_mcqs SET unit_code = ? WHERE id = ?');
+// The old value moves rather than disappearing, so making the column true does
+// not erase the record that somebody once filed the question somewhere.
+const blank = db.prepare(
+  `UPDATE ca_mcqs SET unit_code = '', unit_code_prior = COALESCE(unit_code_prior, unit_code)
+    WHERE id = ?`
+);
+// noUnits belongs here too, and leaving it out is how 24 rows survived the
+// first pass: an item carrying NO units cannot justify any code, so a question
+// on it holding one is mismatched by definition and unresolvable by definition.
+const unresolved = blankUnresolved
+  ? [...out.noEvidence, ...out.tie, ...out.noUnits].filter((m) =>
+      String(m.unit_code || '').trim()
+    )
+  : [];
+
 if (apply) {
   db.transaction(() => {
     for (const a of out.assigned) upd.run(a.pick.unit_code, a.id);
+    for (const m of unresolved) blank.run(m.id);
   })();
+}
+
+if (blankUnresolved) {
+  console.log(
+    `${apply ? 'BLANKED' : 'WOULD BLANK'} ${unresolved.length} question(s) whose unit its ` +
+      `item does not carry and the evidence could not replace.\n` +
+      `Old value kept in unit_code_prior — one UPDATE puts it back.\n`
+  );
 }
 
 console.log(

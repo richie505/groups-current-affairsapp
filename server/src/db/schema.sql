@@ -289,7 +289,10 @@ CREATE TABLE IF NOT EXISTS ca_mcqs (
   -- its key was true, so a stale question is identifiable rather than just
   -- silently wrong at revision time.
   fact_as_of     TEXT,
-  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  -- The unit this question used to claim, when that unit was not one its item
+  -- carries. Kept so blanking an impossible value does not erase the record.
+  unit_code_prior TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mcqs_item ON ca_mcqs(item_id);
 CREATE INDEX IF NOT EXISTS idx_mcqs_keyword ON ca_mcqs(keyword);

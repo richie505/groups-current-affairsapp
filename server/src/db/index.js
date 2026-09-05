@@ -117,6 +117,19 @@ db.exec(schema);
     // articles and invisible on the thing a student actually practises.
     ca_mcqs: [
       ['unit_code', "TEXT NOT NULL DEFAULT ''"],
+      // WHAT THE UNIT USED TO SAY, WHEN IT SAID SOMETHING IMPOSSIBLE.
+      //
+      // `unit_code` may only hold a unit the question's item carries. 128
+      // questions written before that rule existed hold one their item does
+      // not, and no evidence in the question text chooses a replacement — the
+      // alias lookup resolved 60 of them and then stopped, and re-running it
+      // after 56 new syllabus mappings resolved none.
+      //
+      // Blanking is the only way to make the invariant true, and blanking alone
+      // would throw away the fact that somebody once filed the question
+      // somewhere. So the old value moves here. Nothing is lost, the column
+      // means what it claims again, and one UPDATE puts it back.
+      ['unit_code_prior', 'TEXT'],
       // Whether this particular QUESTION has been reviewed.
       //
       // Item status used to be the only gate, which was right while questions

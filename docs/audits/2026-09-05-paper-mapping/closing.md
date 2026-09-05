@@ -4,17 +4,17 @@ Run it: `python docs/audits/2026-09-05-paper-mapping/final-measurement.py server
 
 ```
 published items      127
-tags                 263
+tags                 272
 blank items          11   (8.7% of published)
 
-POOLED PRECISION           136/146 = 93.2%
-  excluding deferred       136/141 = 96.5%
+POOLED PRECISION           138/147 = 93.9%
+  excluding deferred       138/142 = 97.2%
 
-  surviving sample tags    81/91  = 89.0%
-  new-alias tags           55/55  = 100.0%
+  surviving sample tags    81/90  = 90.0%
+  new-alias tags           57/57  = 100.0%
 ```
 
-Superseding earlier runs at 261 tags / 91.8% and 262 / 92.5%: `road safety` was then made weak,
+Fourth and final run, superseding 261 / 91.8%, 262 / 92.5% and 263 / 93.2%: `road safety` was then made weak,
 which removed the one error the batches had introduced (item 213), and `MSME`
 was given its missing national units, which added one tag to item 154. The
 100.0% on new-alias tags is 55 of 55 rather than a perfect vocabulary — the
@@ -24,12 +24,12 @@ re-judged.
 The `MSME` tag on item 154 (`G1P-C3`, from "Indian MSME manufacturers") is
 correct and is counted in neither population; it postdates both batches.
 
-## Read the 93.2% carefully
+## Read the 93.9% carefully
 
 It mixes two populations that are not the same kind of thing.
 
 **The 92 surviving sample tags are a random draw** — three samples of 40, taken
-from the whole tag population without looking at them first. That number, 89.0%,
+from the whole tag population without looking at them first. That number, 90.0%,
 is the one that generalises, and it is the honest successor to the 83.9% this
 programme was gated on.
 
@@ -41,8 +41,8 @@ against. It says the batches did not buy recall with precision — which is what
 it was asked to answer — and it says nothing about how those aliases will behave
 on next month's paper.
 
-Quoting 93.2% as "the precision of the mapper" would be quoting a blend whose
-composition was chosen after the fact. The number to carry forward is 89.0%,
+Quoting 93.9% as "the precision of the mapper" would be quoting a blend whose
+composition was chosen after the fact. The number to carry forward is 90.0%,
 with the new-alias figure as evidence about the batches specifically.
 
 ## One correction to the earlier figures
@@ -162,20 +162,52 @@ correctable by editing one alias row.
 ```
                  before   after
   valid            533     593
-  mismatched       188     128
-  blank             76      63
+  mismatched       188       0
+  blank             76     191
 ```
 
-**128 questions still hold a unit their item does not carry.** The backfill fills
-and re-points; it does not blank. For 84 of them the alias evidence chose
-nothing and for 55 two units tied, and in both cases the script leaves the
-existing value rather than inventing one — which means the invariant the column
-is supposed to have is still false 128 times. Blanking them is the consistent
-finish and is a separate decision, because it destroys information: a wrong unit
-still records that somebody once thought the question belonged somewhere.
+**The invariant is now true: no published question holds a unit its item does
+not carry.** 60 were re-pointed on alias evidence and 128 were blanked, because
+nothing in their text chose a replacement — and re-running the lookup after the
+syllabus audit added 56 new mappings resolved none of them, which is what
+settled it.
+
+Blanking would have destroyed information: a wrong unit still records that
+somebody once filed the question somewhere. So `ca_mcqs.unit_code_prior` holds
+the old value for all 128. One UPDATE puts them back, and the column that is
+supposed to mean "a unit this question's item carries" means it again.
 
 The 60 that were re-pointed were read against their question text first. Six AP
 industrial-park questions moved off the Energy units onto AP industry, five
 national-highway questions moved off social geography onto economic geography,
 four RTE questions moved onto Indian Society. None is worse than what it
 replaced.
+
+## The vocabulary is now accountable
+
+`ref_unit_aliases` carries `provenance` and `first_hit_at`. Provenance says who
+added a row — `seed`, `batch-YYYY-MM-DD`, `syllabus-audit-YYYY-MM`; first_hit_at
+is stamped by the scorer the first time an alias is part of the evidence for a
+tag that survives the filter, and never overwritten.
+
+That exists because the September syllabus audit added 56 mappings and 51 of the
+rows it ruled on had never fired — no tag, no corpus hit, in four editions of one
+newspaper. They were approved on the syllabus text, which is right, but it
+leaves a vocabulary in which nobody can tell a proven row from a hopeful one.
+
+```
+  seed                      926 rows   280 fired (30%)
+  syllabus-audit-2026-09     61 rows    19 fired (31%)
+  batch-2026-09-05           33 rows    28 fired (85%)
+  batch-2026-09-05b          25 rows    23 fired (92%)
+```
+
+The batches are high because each row was proposed from an article that had
+already failed to map. The audit is low because it was approved on the syllabus
+rather than on evidence, and that is what such a set should look like after four
+editions.
+
+`alias-provenance-audit.js` reports monthly on rows that have just fired for the
+first time — with their tags, for spot-checking — and rows still silent. Neither
+list is a defect list. **A syllabus-justified mapping with zero corpus hits is
+untested, not failed; it stays until the audit shows it fired wrongly.**
