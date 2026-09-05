@@ -340,6 +340,8 @@ const G2_UNITS = [
       'services sector', 'IT industry', 'ITES', 'exports', 'imports', 'PLI', 'production linked',
     
       'stockholding limit', 'MMDR',
+    
+      'MSME',
     ],
   },
   {

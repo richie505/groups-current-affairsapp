@@ -191,6 +191,13 @@ const WEAK = [
   // stops one passing mention carrying a unit.
   // borderline, decided weak
   'summit', 'electricity', 'ecosystem', 'procurement', 'delta',
+  // The one error the batch-1 and batch-2 vocabulary introduced. `road safety`
+  // plus `transport` — already weak — carried a district awareness campaign
+  // into "Economic geography: sectors, industries, transport and trade". The
+  // unit is about transport as an economic sector; a helmet campaign is not.
+  // Two weak terms no longer satisfy the two-terms clause, so the tag goes and
+  // the alias keeps its value as a partner for a genuine roads story.
+  'road safety',
 ];
 
 const lower = (xs) => new Set(xs.map((x) => x.toLowerCase()));

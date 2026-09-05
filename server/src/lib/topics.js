@@ -101,9 +101,24 @@ function pluralise(body) {
  * about industrial heat under an Andhra Pradesh unit.
  *
  * So the rule costs a clause and buys one bad tag. The real defect it exposed
- * is in the vocabulary rather than the matcher: `MSME` has no national unit.
+ * is in the vocabulary rather than the matcher: `MSME` had no national unit.
+ *
+ * MEASURED AGAIN after `MSME` was given G1P-C3 and G2-P2-U3. The same one
+ * article now recovers three tags — the two national ones, both right, and
+ * G2-P2-U5 again, still wrong, because `MSME` is also an alias for "AP
+ * agriculture, industry, MSMEs..." and nothing in the match can tell a national
+ * story from an AP one. Two right and one wrong is worse than the corpus
+ * average, so the rule stays out.
+ *
+ * The blocker is one alias, not the rule: `MSME` on G2-P2-U5 earns exactly two
+ * tags across 411 articles and BOTH are wrong — item 154 (a White House report
+ * on Indian pump exports) and item 218 (India's industrial heat). It has never
+ * matched a genuine AP MSME story. Drop that one row and the recovery is 2 for
+ * 2 and this rule ships; that is a vocabulary decision for the reviewer, not
+ * one to take while wiring a matcher.
+ *
  * Re-enable by restoring the `strict && acronymPlural(alias)` branch in
- * aliasMatcher if a later corpus makes the case.
+ * aliasMatcher.
  */
 function acronymPlural(alias) {
   const a = String(alias || '');
