@@ -262,3 +262,26 @@ uncovered while every one of them was already in the table. Coverage now runs
 through the matcher and candidates are checked against alias windows: 27
 candidates became 19, then 4 — of which three were rejected on their merits and
 the fourth, `Dr. B.R`, is syllabus prose whose subject `Ambedkar` already covers.
+
+## Postscript, 6 September — what the app-wide audit found about this number
+
+**The 90.0% was measured on a corpus that does not contain most of production's
+blanks.** The local copy the samples were drawn from holds 127 published items
+and ZERO salvaged fact-cards. Production holds 266 of which 56 are salvaged, and
+they behave nothing like the items the samples saw:
+
+```
+  full items      16% blank
+  salvaged cards  68% blank      — 38 of production's 71 blanks
+  in the measured corpus            0
+```
+
+So the honest statement of the figure is **"precision on full items, on four of
+seven editions"**. It is not wrong and it is not the whole picture, and no
+further alias work will move the salvaged half: a fact card has prelims_facts
+and no notes, so there is almost nothing for the mapper to read.
+
+The fact cards were not a mapping failure at all — they were a rendering
+failure, and are now rendered as what they are. That leaves the question of what
+precision actually is on production genuinely open, and it needs a fresh sample
+drawn from all seven editions before any more vocabulary work.
