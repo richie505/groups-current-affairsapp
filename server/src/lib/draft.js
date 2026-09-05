@@ -978,7 +978,26 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         prelims_facts: r.prelims_facts || '',
         importance: Number(r.importance) || 2,
         relevance_g2: Number(r.relevance_g2) === 0 ? 0 : 1,
-        needs_verify: Number(r.needs_verify) ? 1 : 0,
+        // THE BADGE IS A PROPERTY OF THE SOURCE, NOT AN OPINION THE MODEL HOLDS.
+        //
+        // markProvenance sets this for opinion — an op-ed, an editorial, an
+        // interview, a column — where "confirm this against the record" is the
+        // literal thing a reviewer must do, because the record and the source
+        // genuinely differ. That is a minority of any edition and the badge
+        // discriminates.
+        //
+        // The model was ALSO asked, and it says yes to almost everything: 165
+        // of 236 published report items on the live database carried the flag,
+        // on notes like "as this is based on a single print report, verify the
+        // date". True of every newspaper story ever written. A warning that
+        // fires on seven items in ten is not a warning, and the comment above
+        // markProvenance says exactly that — the code just was not enforcing it.
+        //
+        // So a report never inherits the model's answer. The NOTE is kept
+        // either way: it often names a specific thing worth checking, and it
+        // costs nothing to leave in a column nothing renders unless the flag is
+        // set.
+        needs_verify: G.isOpinion(r._genre) && Number(r.needs_verify) ? 1 : 0,
         verify_note: r.verify_note || '',
         // Set by the salvage pass, which writes a fact card rather than a note.
         // Everything else that reaches here is a full item.

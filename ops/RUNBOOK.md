@@ -300,6 +300,17 @@ blanks the ones no evidence can place — keeping the old value in
 their text or status or questions — but `np_article_units`, `ca_item_units` and
 `ca_mcqs.unit_code`. Take the backup first and mean it.
 
+One more, once, after the deploy that introduces it:
+
+```bash
+node server/scripts/clear-report-verify-flags.js          # look first
+node server/scripts/clear-report-verify-flags.js --apply
+```
+
+It takes the "needs verifying" badge off items drafted from news reports and
+leaves it on opinion, which is what it was designed for. Only needed for rows
+written before draft.js stopped accepting the model's answer on a report.
+
 ---
 
 ## 4. Backups
