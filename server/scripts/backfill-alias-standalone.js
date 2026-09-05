@@ -126,6 +126,13 @@ const NOT_STANDALONE = [
   // blocklist is compared against the alias text rather than normalised text.
   'Governor’s assent', 'Presidential assent',
   'writ petition', 'joint statement', 'MoU signed', 'investment MoU',
+  // The batch-1 vocabulary rows the reviewer approved only as PARTNERS. Each
+  // names a real thing, but one that turns up beside any number of subjects:
+  // `rule of law` and `energy security` are what a speech is made of, `road
+  // safety` and `mining sector` are sector words, and `Mega DSC` is one
+  // recruitment round that any AP politics story can mention in passing. They
+  // earn a unit alongside a second term, not on their own.
+  'Mega DSC', 'rule of law', 'energy security', 'mining sector', 'road safety',
   // 3 — names and descriptors that appear beside any subject
   'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
   'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',

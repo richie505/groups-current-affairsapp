@@ -697,6 +697,33 @@ router.get('/days/:date/export.pdf', (req, res) => {
 // plausibly finishes in a sitting: twenty minutes of reading and forty-eight
 // questions. The archive still holds all 58 items and all 98 questions, and
 // both dials are on the admin screen for a thin day or a heavy one.
+// WHICH ITEMS ARE BLANK BECAUSE THEY ARE FOREIGN.
+//
+// An item with no paper line is normally a mapping failure — vocabulary the
+// filter is missing. A foreign story is the one case where blank is the correct
+// answer and no alias will ever fill it: Group-I gives it G1P-B6 or nothing,
+// and Group-II has no international unit at all, only the broad G2-S5. So the
+// two kinds of blank look identical on the screen and mean opposite things, and
+// the admin was left to tell them apart by reading headlines.
+//
+// The signal is the guard's own note rather than the bucket. Bucket is derived
+// from vocabulary counts and puts a CPC plenum in 'dynamic' and a Ukraine
+// strike in 'national'; the note is written by the thing that actually made the
+// decision, so it cannot disagree with it.
+const foreignBlankIds = (ids) => {
+  if (!ids.length) return new Set();
+  return new Set(
+    db
+      .prepare(
+        `SELECT a.item_id FROM np_articles a
+          WHERE a.item_id IN (${ids.map(() => '?').join(',')})
+            AND a.breakdown LIKE '%foreign-heavy%'`
+      )
+      .all(...ids)
+      .map((r) => r.item_id)
+  );
+};
+
 const CIRCULATION_DEFAULT = 12;
 const CIRCULATION_MAX = 40;
 
@@ -754,6 +781,7 @@ router.get('/days/:date/digest-plan', (req, res) => {
   if (!data) return res.status(404).json({ error: 'No digest for that date.' });
   const { day, items, byItem, draft, omitted, total, questionsDropped, all, pool } = data;
 
+  const foreignBlank = foreignBlankIds([...new Set(all.map((i) => i.id))]);
   const questions = items.reduce((n, i) => n + (byItem.get(i.id) || []).length, 0);
   // From the renderer, not recomputed here — see circulationWords() for why
   // the obvious pacing.wordsIn() answer is wrong for this edition.
@@ -795,6 +823,7 @@ router.get('/days/:date/digest-plan', (req, res) => {
         needs_verify: r.needs_verify,
         questions: Math.min(qCounts.get(r.id) || 0, qpi),
         papers: papersFor(r),
+        foreign_no_paper: foreignBlank.has(r.id) && !papersFor(r).length,
         section: sectionOf(r),
       });
     }
@@ -856,6 +885,7 @@ router.get('/days/:date/digest-plan', (req, res) => {
         needs_verify: i.needs_verify,
         questions: (byItem.get(i.id) || []).length,
         papers: papersFor(i),
+        foreign_no_paper: foreignBlank.has(i.id) && !papersFor(i).length,
       })),
     })),
   });

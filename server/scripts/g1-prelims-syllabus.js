@@ -124,6 +124,8 @@ const G1P_UNITS = [
       'Fundamental Right', 'Fundamental Duties', 'Directive Principle', 'Preamble', 'basic structure',
       'Kesavananda', 'constitutional amendment', 'Article 14', 'Article 19', 'Article 21',
       'Article 32', 'Article 226', 'writ petition', 'constitutional bench', 'constitutional validity',
+    
+      'rule of law',
     ],
   },
   {
@@ -138,6 +140,8 @@ const G1P_UNITS = [
       'Assembly session', 'Bills passed', 'Bill passed', 'money bill', 'privilege motion',
       'Centre-State', 'federal structure', 'Union List', 'State List', 'concurrent list',
       'Finance Commission', 'devolution', 'divisible pool',
+    
+      'Zonal Council', 'Inter-State Council', 'Gorkhaland',
     ],
   },
   {
@@ -152,6 +156,8 @@ const G1P_UNITS = [
       'panchayat', 'Panchayati Raj', 'Zilla Parishad', 'Mandal Parishad', 'gram sabha',
       'municipal corporation', 'urban local bod', '73rd Amendment', '74th Amendment',
       'good governance', 'public policy',
+    
+      'APPSC', 'Mega DSC',
     ],
   },
   {
@@ -175,7 +181,9 @@ const G1P_UNITS = [
       'human rights', 'NHRC', 'Human Rights Commission', 'crime against women',
       'National Commission for Women', 'Scheduled Caste', 'Scheduled Tribe', 'atrocities Act',
       'child rights', 'POCSO', 'child labour', 'juvenile justice', 'Right to Education',
-      'reservation', 'transgender', 'disabilit', 'manual scavenging',
+      'reservation', 'transgender', 'manual scavenging',
+    
+      'Scheduled Areas', 'disability',
     ],
   },
   {
@@ -237,6 +245,8 @@ const G1P_UNITS = [
       'industrial policy', 'Make in India', 'start-up', 'special economic zone', 'SEZ',
       'industrial corridor', 'energy policy', 'power policy', 'balance of payments', 'WTO',
       'exports', 'imports', 'production linked',
+    
+      'MMDR',
     ],
   },
   {
@@ -252,6 +262,8 @@ const G1P_UNITS = [
       'stock exchange', 'SEBI', 'GST', 'tax revenue', 'direct tax', 'income tax', 'cess',
       'Finance Commission', 'devolution', 'public debt', 'fiscal deficit', 'fiscal policy',
       'Union Budget', 'FRBM', 'banking reform',
+    
+      'Tariff Rate Quota',
     ],
   },
   {
@@ -301,6 +313,8 @@ const G1P_UNITS = [
       'monsoon', 'rainfall', 'drainage', 'river basin', 'earthquake', 'landslide', 'flood', 'drought',
       'Eastern Ghats', 'Western Ghats', 'national park', 'sanctuary', 'tiger reserve',
       'biosphere reserve', 'soil', 'mineral', 'bauxite', 'coal reserve', 'groundwater',
+    
+      'Jal Shakti',
     ],
   },
   {
@@ -324,6 +338,8 @@ const G1P_UNITS = [
     aliases: [
       'agro-based', 'mineral-based', 'industrial region', 'transport', 'railway', 'port',
       'highway', 'logistics', 'trade route', 'services sector', 'manufacturing hub',
+    
+      'national highway', 'Indian Roads Congress', 'South Coast Railway', 'mining sector', 'road safety',
     ],
   },
 
@@ -378,6 +394,8 @@ const G1P_UNITS = [
       'renewable energy', 'solar power', 'wind power', 'nuclear power', 'nuclear reactor',
       'green hydrogen', 'energy efficiency', 'installed capacity', 'thermal power', 'biofuel',
       'ethanol', 'battery storage', 'pumped storage',
+    
+      'energy security',
     ],
   },
   {

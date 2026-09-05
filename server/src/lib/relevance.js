@@ -721,14 +721,19 @@ function score(article, ctx) {
   const indianBody = countOf(INDIA_TERM, body);
   const foreignHeavy =
     !ap && FOREIGN_NAME.test(head) && foreignBody > FOREIGN_MARGIN * indianBody;
-  if (foreignHeavy && solid.length) {
+  //
+  // The note is written whenever the guard TRIGGERS, not only when it takes
+  // something away. A foreign story that matched no unit in the first place
+  // drops nothing, and if silence were the record of that, it would be
+  // indistinguishable from an ordinary mapping failure — which is exactly the
+  // distinction the admin screen needs to draw. Three of the four foreign
+  // blanks in this corpus are of that kind.
+  if (foreignHeavy) {
     const kept = solid.filter((h) => IR_UNITS.has(h.unit_code));
-    if (kept.length !== solid.length) {
-      notes.push(
-        `foreign-heavy (${foreignBody} foreign vs ${indianBody} Indian): dropped ` +
-          `${solid.length - kept.length} non-IR unit(s)`
-      );
-    }
+    notes.push(
+      `foreign-heavy (${foreignBody} foreign vs ${indianBody} Indian): dropped ` +
+        `${solid.length - kept.length} non-IR unit(s)`
+    );
     solid = kept;
   }
 

@@ -1074,6 +1074,77 @@ const fakeDoc = () => ({
   check('a new page does not inherit the previous page depth', doc.y < 200);
 }
 
+{
+  // THE FOREIGN-DOMESTIC GUARD, AND WHY IT MUST WRITE A NOTE EVEN WHEN IT TAKES
+  // NOTHING AWAY.
+  //
+  // The admin screen tells a blank paper line caused by missing vocabulary from
+  // one that is blank because the story is foreign, and the only signal it has
+  // is the note the guard leaves in `breakdown.why`. An earlier version wrote
+  // that note only when it actually dropped a unit, so three of the four
+  // foreign blanks in the corpus looked exactly like mapping failures.
+  const fctx = R.loadContext(db);
+  const foreign = R.score(
+    {
+      headline: "Xi Jinping's doctrine for a self-governing party",
+      standfirst: '',
+      body:
+        'The Communist Party of China opened its plenary session in Beijing. Xi Jinping ' +
+        'told delegates that China must hold to self-governance. Chinese officials said ' +
+        'the Beijing meeting would run four days. Russia and Pakistan sent observers. ' +
+        'India was not represented.',
+    },
+    fctx
+  );
+  check('foreign-heavy story is flagged', /foreign-heavy/.test(foreign.why));
+  check(
+    'and reports the counts it decided on',
+    /\d+ foreign vs \d+ Indian/.test(foreign.why)
+  );
+  check(
+    'a foreign story keeps no non-IR unit',
+    foreign.g2_units.every((u) => u.unit_code === 'G1P-B6')
+  );
+
+  // The margin is the whole judgement: a domestic story with a foreign subject
+  // names both sides at close to parity and must survive untouched.
+  const domestic = R.score(
+    {
+      headline: 'Rashtrapati Bhavan withdraws email on Bangladesh PM visit',
+      standfirst: '',
+      body:
+        'Rashtrapati Bhavan withdrew an email about the Bangladesh Prime Minister. ' +
+        'The Centre said the India visit stands. Parliament was informed. Bangladesh ' +
+        'has not commented.',
+    },
+    fctx
+  );
+  check('a domestic story about a foreign subject is spared', !/foreign-heavy/.test(domestic.why));
+}
+
+{
+  // PLURALS. Each of these is a real miss from the 5 September audit.
+  const t = require(path.join(__dirname, '..', 'src', 'lib', 'topics'));
+  const hit = (alias, text, strict) => {
+    const m = t.aliasMatcher(alias, !!strict, true);
+    return m.test(text, t.norm(text));
+  };
+  check('a single-word alias matches its plural', hit('fertilizer', 'the fertilizers sector contracted'));
+  check('a sibilant plural takes -es', hit('direct tax', 'direct taxes rose sharply'));
+  check('a three-letter alias is too short to stem', !t.stemmable('tax', false));
+  check('consonant-y takes -ies', hit('municipality', 'the municipalities were merged'));
+  check('a phrase pluralises on its last word', hit('industrial park', 'six industrial parks proposed'));
+  check('the singular still matches', hit('fertilizer', 'fertilizer output falls'));
+  check('an acronym is never stemmed', !hit('RTI', 'PARTIES met', true));
+  check('a strict alias is never stemmed', !t.stemmable('SC', true));
+  check('an alias already plural is left alone', !t.stemmable('exports', false));
+  check('a loose all-caps alias is not stemmed', !t.stemmable('MGNREGA', false));
+  check(
+    'stemming never reaches a different word',
+    !hit('port', 'the airport was closed') && !hit('mine', 'the ministry replied')
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 let failed = 0;

@@ -53,6 +53,13 @@ export default function CirculationPanel({ date, status }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState('');
   const [showPool, setShowPool] = useState(false);
+  // FOREIGN-ONLY VIEW OF THE LEFTOVERS.
+  //
+  // A topic with no paper line is usually vocabulary the mapper is missing, and
+  // worth chasing. A foreign one is blank on purpose — Group-II has no
+  // international unit — and chasing it is wasted work. The filter separates
+  // the two so the list of real gaps stays honest.
+  const [foreignOnly, setForeignOnly] = useState(false);
 
   const query =
     `max=${max}&questions=${perItem}` + (selection ? `&items=${selection.join(',')}` : '');
@@ -114,6 +121,7 @@ export default function CirculationPanel({ date, status }) {
 
   const draft = status !== 'published';
   const topicCount = plan ? plan.sections.reduce((n, s) => n + s.items.length, 0) : 0;
+  const foreignCount = plan ? (plan.excluded || []).filter((i) => i.foreign_no_paper).length : 0;
 
   return (
     <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 p-4">
@@ -253,9 +261,24 @@ export default function CirculationPanel({ date, status }) {
                 </span>
                 <span className="text-slate-500">{showPool ? 'Hide' : 'Show'}</span>
               </button>
+              {showPool && foreignCount ? (
+                <label className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={foreignOnly}
+                    onChange={(e) => setForeignOnly(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-400"
+                  />
+                  Only foreign topics with no paper line ({foreignCount}) — blank by
+                  design, not a mapping gap
+                </label>
+              ) : null}
               {showPool ? (
                 <ul className="mt-2 space-y-1">
-                  {plan.excluded.map((it) => (
+                  {(foreignOnly
+                    ? plan.excluded.filter((it) => it.foreign_no_paper)
+                    : plan.excluded
+                  ).map((it) => (
                     <TopicRow key={it.id} item={it} checked={false} onToggle={() => toggle(it.id)} />
                   ))}
                 </ul>
@@ -321,7 +344,11 @@ function TopicRow({ item, number, checked, onToggle }) {
           ) : null}
         </span>
         <span className="mt-0.5 block font-mono text-[10px] text-slate-500">
-          {item.papers?.length ? item.papers.join('  ·  ') : 'no paper mapping'}
+          {item.papers?.length
+            ? item.papers.join('  ·  ')
+            : item.foreign_no_paper
+              ? 'foreign — no paper line'
+              : 'no paper mapping'}
         </span>
       </span>
       <span className="shrink-0 font-mono text-slate-500">{item.questions}Q</span>
