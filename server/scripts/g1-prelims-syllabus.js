@@ -45,6 +45,8 @@ const G1P_UNITS = [
       'Indus Valley', 'Harappan', 'Mohenjo', 'Vedic', 'Mahajanapada', 'Jainism', 'Buddhism', 'Magadha',
       'Mauryan', 'Ashoka', 'Kushana', 'Satavahana', 'Sangam age', 'Gupta empire', 'Nalanda',
       'archaeological', 'excavation', 'rock edict', 'inscription', 'stupa', 'Archaeological Survey',
+    
+      'Buddhist site', 'megalith', 'prehistoric',
     ],
   },
   {
@@ -68,6 +70,8 @@ const G1P_UNITS = [
     aliases: [
       'Delhi Sultanate', 'Vijayanagara', 'Krishnadevaraya', 'Hampi', 'Mughal', 'Akbar', 'Aurangzeb',
       'Bhakti', 'Sufi', 'Qutb Shahi', 'Golconda', 'Charminar', 'Taj Mahal', 'medieval architecture',
+    
+      'temple architecture',
     ],
   },
   {
@@ -94,6 +98,8 @@ const G1P_UNITS = [
       'Non-Cooperation', 'Civil Disobedience', 'Swadeshi', 'Home Rule', 'revolutionary',
       'social reform', 'Brahmo Samaj', 'Arya Samaj', 'Veeresalingam', 'Alluri Sitarama Raju',
       'Rampa rebellion', 'Indian National Congress', 'partition of Bengal',
+    
+      'Justice Party', 'Self-Respect Movement', 'Library Movement',
     ],
   },
   {
@@ -108,6 +114,8 @@ const G1P_UNITS = [
       'Mahatma Gandhi', 'satyagraha', 'Sardar Patel', 'Subhas Chandra Bose', 'Netaji',
       'B.R. Ambedkar', 'Ambedkar', 'Constituent Assembly', 'States Reorganisation',
       'linguistic state', 'Potti Sriramulu', 'integration of princely', 'Gandhi Jayanti',
+    
+      'States Reorganisation Commission', 'Fazal Ali',
     ],
   },
 
@@ -142,6 +150,8 @@ const G1P_UNITS = [
       'Finance Commission', 'devolution', 'divisible pool',
     
       'Zonal Council', 'Inter-State Council', 'Gorkhaland',
+    
+      'Reorganisation Act', 'Reorganization Act', 'bifurcation', 'successor State', 'river water sharing',
     ],
   },
   {
@@ -203,6 +213,8 @@ const G1P_UNITS = [
       'defence cooperation', 'maritime security', 'free trade agreement',
     
       'fuel supply agreement',
+    
+      'ADB loan', 'AIIB',
     ],
   },
 
@@ -236,6 +248,8 @@ const G1P_UNITS = [
       'urban development', 'AMRUT', 'smart city', 'PMAY', 'inequality',
     
       'Sample Registration System',
+    
+      'GSDP',
     ],
   },
   {
@@ -257,6 +271,8 @@ const G1P_UNITS = [
       'MMDR',
     
       'MSME',
+    
+      'cooperative bank', 'assigned land', 'land acquisition', 'industrial park', 'BHAVYA', 'Bharat Audyogik Vikas Yojana',
     ],
   },
   {
@@ -274,6 +290,8 @@ const G1P_UNITS = [
       'Union Budget', 'FRBM', 'banking reform',
     
       'Tariff Rate Quota',
+    
+      'State budget', 'borrowing limit', 'Finance Commission grant', 'revenue deficit grant', 'special status', 'central assistance',
     ],
   },
   {
@@ -329,6 +347,8 @@ const G1P_UNITS = [
       'biosphere reserve', 'soil', 'mineral', 'bauxite', 'coal reserve', 'groundwater',
     
       'Jal Shakti',
+    
+      'Krishna water', 'Godavari water',
     ],
   },
   {
@@ -387,6 +407,8 @@ const G1P_UNITS = [
       'Digital India', 'e-governance', 'cyber security', 'cybersecurity', 'cyber crime',
       'data protection', 'artificial intelligence', 'data centre', 'data center', 'UPI',
       'Aadhaar', 'digital payment', 'broadband', '5G', 'semiconductor',
+    
+      'IT policy',
     ],
   },
   {

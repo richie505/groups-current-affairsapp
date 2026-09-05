@@ -72,6 +72,8 @@ const G2_UNITS = [
       '1857 Revolt', 'sepoy mutiny', 'freedom struggle', 'national movement', 'Quit India',
       'Mahatma Gandhi', 'Ambedkar', 'Jawaharlal Nehru', 'Sardar Patel', 'princely state',
       'archaeological', 'excavation', 'inscription', 'ASI', 'monument', 'heritage site',
+    
+      'Buddhist site',
     ],
   },
   {
@@ -117,6 +119,8 @@ const G2_UNITS = [
       'disability',
     
       'Integrated Tribal Development Agency',
+    
+      'tribal culture',
     ],
   },
   {
@@ -207,6 +211,8 @@ const G2_UNITS = [
       'Visalandhra', 'States Reorganisation Commission', "Gentlemen's Agreement",
       'Fazal Ali', 'bifurcation', 'Reorganisation Act', 'Reorganization Act', 'successor State',
       'Telangana movement', 'Jai Andhra',
+    
+      'States Reorganisation',
     ],
   },
 
@@ -258,6 +264,8 @@ const G2_UNITS = [
       'RTI', 'Lokpal', 'Lok Ayukta', 'Attorney General', 'Advocate General',
     
       'APPSC', 'Inter-State Council',
+    
+      'river water sharing',
     ],
   },
   {
@@ -306,6 +314,8 @@ const G2_UNITS = [
       'GDP', 'gross domestic product', 'national income', 'per capita income', 'economic growth',
       'economic survey', 'NITI Aayog', 'Five Year Plan', 'liberalisation', 'liberalization',
       'economic reform', 'sectoral', 'nominal GDP', 'real GDP', 'growth rate',
+    
+      'GSDP',
     ],
   },
   {
@@ -323,6 +333,8 @@ const G2_UNITS = [
       'disinvestment proceeds', 'dividend', 'Finance Ministry', 'CGA',
     
       'Tariff Rate Quota',
+    
+      'State budget', 'State debt', 'State expenditure', 'State revenue', 'borrowing limit', 'FRBM limit',
     ],
   },
   {
@@ -342,6 +354,8 @@ const G2_UNITS = [
       'stockholding limit', 'MMDR',
     
       'MSME',
+    
+      'agricultural marketing', 'animal husbandry', 'aqua', 'fisheries', 'industrial park', 'industrial incentive', 'single window', 'electronics manufacturing', 'BHAVYA', 'Bharat Audyogik Vikas Yojana', 'dairy',
     ],
   },
   {
@@ -353,7 +367,7 @@ const G2_UNITS = [
       'central assistance; externally assisted projects; the recent AP Budget.',
     aliases: [
       'GSDP', 'State budget', 'AP budget', 'State revenue', 'State expenditure', 'State debt',
-      'central assistance', 'externally aided', 'AIIB', 'World Bank', 'ADB loan',
+      'externally aided', 'AIIB', 'World Bank', 'ADB loan',
       'Finance Commission grant', 'special assistance', 'FRBM limit', 'borrowing limit',
     ],
   },
@@ -369,8 +383,8 @@ const G2_UNITS = [
     aliases: [
       'industrial park', 'industrial corridor', 'single window', 'industrial incentive',
       'AP Industrial', 'IT policy', 'electronics manufacturing', 'data centre', 'data center',
-      'fisheries', 'aqua', 'animal husbandry', 'dairy', 'horticulture', 'agricultural marketing',
-      'rythu', 'cooperative bank', 'APIIC', 'Sunrise', 'investment MoU', 'MoU signed',
+      'fisheries', 'aqua', 'animal husbandry', 'horticulture', 'agricultural marketing',
+      'rythu', 'cooperative bank', 'APIIC', 'investment MoU', 'MoU signed',
       'land pooling', 'land acquisition', 'assigned land', 'capital region', 'CRDA',
     
       'Bharat Audyogik Vikas Yojana', 'BHAVYA', 'South Coast Railway',
@@ -382,6 +396,8 @@ const G2_UNITS = [
       // caught an AP MSME story, because a newspaper writing about AP MSMEs
       // says so. These do.
       'AP MSME', 'Andhra Pradesh MSME', 'MSME in Andhra Pradesh',
+    
+      'Sunrise Andhra Pradesh',
     ],
   },
 
@@ -403,6 +419,8 @@ const G2_UNITS = [
       'Digital India', 'e-governance', 'cyber security', 'cybersecurity', 'data protection',
       'artificial intelligence', 'semiconductor', '5G', '6G', 'quantum', 'nuclear reactor',
       'nuclear power', 'radioisotope', 'DAE', 'ISRO chairman', 'science policy',
+    
+      'IT policy',
     ],
   },
   {

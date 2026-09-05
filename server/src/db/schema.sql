@@ -88,6 +88,11 @@ CREATE TABLE IF NOT EXISTS ref_unit_aliases (
   -- 1 or 0 is copied through by the backfill and preserved across a reseed.
   -- For the unique proper nouns the phrase-or-acronym rule cannot recognise.
   standalone_override INTEGER,
+  -- Who added this row: 'seed', 'batch-YYYY-MM-DD', 'syllabus-audit-YYYY-MM'.
+  provenance TEXT NOT NULL DEFAULT 'seed',
+  -- Stamped by the scorer the first time this alias is part of the evidence for
+  -- a surviving tag. NULL means it has never earned one — untested, not failed.
+  first_hit_at TEXT,
   PRIMARY KEY (unit_code, alias)
 );
 CREATE INDEX IF NOT EXISTS idx_ref_unit_aliases_code ON ref_unit_aliases(unit_code);

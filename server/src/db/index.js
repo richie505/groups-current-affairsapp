@@ -221,6 +221,24 @@ db.exec(schema);
       // copies through untouched, and seed-g2-syllabus.js carries it across the
       // clear-and-rebuild so a reseed does not silently discard it.
       ['standalone_override', 'INTEGER'],
+      // WHERE THIS ROW CAME FROM, AND WHETHER IT HAS EVER DONE ANYTHING.
+      //
+      // The syllabus audit added 56 mappings, and 51 of the rows it ruled on
+      // had never fired: no tag earned, no corpus hit, in four editions of one
+      // newspaper. They were approved on the syllabus text, which is the right
+      // call — an untested mapping is not a failed one — but it leaves a
+      // vocabulary in which nobody can tell a proven row from a hopeful one.
+      //
+      // `provenance` says who put it here: 'seed' for the original syllabus
+      // vocabulary, 'batch-YYYY-MM-DD' for a reviewed alias batch,
+      // 'syllabus-audit-YYYY-MM' for a mapping added by an audit pass.
+      //
+      // `first_hit_at` is stamped by the scorer the first time the alias is
+      // part of the evidence for a tag that survives the filter, and never
+      // again. NULL means "has never earned anything yet", which is the number
+      // the monthly audit exists to keep visible.
+      ['provenance', "TEXT NOT NULL DEFAULT 'seed'"],
+      ['first_hit_at', 'TEXT'],
       // A COMMON NOUN THAT NAMES A DOMAIN BUT NOT A TOPIC.
       //
       // `monsoon`, `census`, `port`, `transport`, `regulator` each appear in

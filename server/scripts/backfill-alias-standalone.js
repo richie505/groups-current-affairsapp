@@ -142,6 +142,13 @@ const NOT_STANDALONE = [
   // about a 3.5-billion-year-old rock — the subject is the biosignature, not
   // the survey.
   'nursing personnel', 'research integrity', 'Geological Survey of India',
+  // The syllabus audit's two flagged rows. `State expenditure` matched China's
+  // state expenditure in a Xi Jinping op-ed, and `prehistoric` matched a
+  // food-history piece; both are real concepts loosely worded, so each needs a
+  // partner term rather than removal. (`prehistoric` is a single word and would
+  // be non-standalone by the rule anyway — it is written here so the ruling is
+  // visible rather than incidental.)
+  'State expenditure', 'prehistoric',
   // 3 — names and descriptors that appear beside any subject
   'Mahatma Gandhi', 'Sardar Patel', 'Subhas Chandra Bose', 'Jawaharlal Nehru',
   'B.R. Ambedkar', 'Scheduled Caste', 'Scheduled Tribe', 'Backward Class',

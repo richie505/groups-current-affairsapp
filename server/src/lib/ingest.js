@@ -515,6 +515,22 @@ function scoreEdition(editionId, { log } = {}) {
      VALUES (?, ?, ?, ?, ?, ?)`
   );
 
+  // THE FIRST TIME AN ALIAS EARNS ANYTHING.
+  //
+  // Stamped once and never overwritten, so it records when a mapping first
+  // justified itself rather than when it last fired. NULL is the interesting
+  // value: 56 mappings were added by the September syllabus audit on the
+  // strength of the syllabus text alone, and none of them had ever produced a
+  // tag. That is untested, not failed — but only if somebody can still tell
+  // which rows they are, months later, when the vocabulary looks uniform.
+  //
+  // Written for the SURVIVING tags only. An alias that matched and was thrown
+  // out by the evidence filter has not earned anything.
+  const stampHit = db.prepare(
+    `UPDATE ref_unit_aliases SET first_hit_at = datetime('now')
+      WHERE unit_code = ? AND alias = ? AND first_hit_at IS NULL`
+  );
+
   const bands = {};
   let scored = 0;
 
@@ -573,6 +589,7 @@ function scoreEdition(editionId, { log } = {}) {
           u.in_headline || 0, u.in_standfirst || 0,
           (u.matched || []).join(', ')
         );
+        for (const alias of u.matched || []) stampHit.run(u.unit_code, alias);
       }
     }
   })();
