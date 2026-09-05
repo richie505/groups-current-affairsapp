@@ -90,10 +90,14 @@ Rules:
     question for each one; writing "(a) ... (b) ... (c) ... (d) ..." into the
     question text as well prints the same four choices twice on the page.
   - "unit_code" must be one of the codes in the SYLLABUS UNITS block, copied
-    exactly. If that block is absent, leave it as "". Do not invent a code and
-    do not guess one that looks plausible: a question filed under a unit it does
-    not test is worse than one filed under none, because it answers "what covers
-    this unit" with the wrong thing.
+    exactly, or "" for none of them. Those are the only permitted values. The
+    block lists every unit this article was mapped to and there are no others to
+    choose from — a code from outside it is discarded on the way into the
+    database, so inventing one loses the tag rather than widening it.
+    "" is a real answer and not a failure. A question can be worth asking and
+    still not test any of the units listed; say so by leaving it empty. A
+    question filed under a unit it does not test is worse than one filed under
+    none, because it answers "what covers this unit" with the wrong thing.
   - Spread the questions across the units supplied. Three units and four
     questions means roughly one or two each, not four on the first.
   - Ask only what the supplied notes actually support. Do not introduce facts

@@ -1031,6 +1031,15 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         insSource.run(itemId, s.url || '', s.publisher || '', s.is_primary ? 1 : 0,
           s.fetched_at || null);
       }
+      // What this item was actually mapped to — the set a question is allowed
+      // to be filed under. Read back from the table rather than from `r`,
+      // because the insert above is what decided it.
+      const itemUnits = new Set(
+        db
+          .prepare('SELECT unit_code FROM ca_item_units WHERE item_id = ?')
+          .all(itemId)
+          .map((x) => x.unit_code)
+      );
       for (const m of r.mcqs || []) {
         insMcq.run({
           item_id: itemId,
@@ -1050,10 +1059,29 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
           // This is now the ONLY place a model-supplied unit code enters the
           // database — the item's own units come from the scorer — so it is
           // also the only place left that can report an unresolvable one.
+          // TWICE, ON PURPOSE.
+          //
+          // generateMcqs already restricts the model to this article's own
+          // units and blanks anything else, so in the current callers this can
+          // only narrow what is already narrow. It is here because it is the
+          // WRITE boundary: `unitOf` alone accepts any code in ref_units, so
+          // the day something hands this function a record it did not build —
+          // an import, a repair script, a new caller — an arbitrary unit would
+          // go straight into the table. 192 questions in this database are
+          // filed under a unit their item does not carry, all of them written
+          // before the restriction existed, and the way that stops recurring is
+          // for the check to live where the row is written rather than only
+          // where it is generated.
           unit_code: (() => {
             const code = unitOf(m.unit_code);
-            if (!code && String(m.unit_code || '').trim()) {
-              droppedUnits.push(String(m.unit_code).trim().slice(0, 70));
+            const raw = String(m.unit_code || '').trim();
+            if (!code && raw) {
+              droppedUnits.push(raw.slice(0, 70));
+              return '';
+            }
+            if (code && itemUnits.size && !itemUnits.has(code)) {
+              droppedUnits.push(`${code} (not a unit of this article)`);
+              return '';
             }
             return code || '';
           })(),

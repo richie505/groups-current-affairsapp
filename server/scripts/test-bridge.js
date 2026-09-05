@@ -1145,6 +1145,36 @@ const fakeDoc = () => ({
   );
 }
 
+{
+  // A QUESTION MAY ONLY BE FILED UNDER A UNIT ITS ITEM CARRIES.
+  //
+  // generateMcqs already restricts the model to the article's units, but the
+  // check that matters is at the WRITE, because that is what a future caller
+  // bypasses. 192 questions in the production database are filed under a unit
+  // their item does not have, every one written before the restriction existed.
+  const day = db.prepare("INSERT INTO ca_days (date, title) VALUES ('2026-09-04', 't')").run();
+  const item = db
+    .prepare(
+      `INSERT INTO ca_items (day_id, headline, bucket, status, relevance_g2)
+       VALUES (?, 'unit boundary', 'ap', 'draft', 1)`
+    )
+    .run(day.lastInsertRowid).lastInsertRowid;
+  db.prepare("INSERT INTO ca_item_units (item_id, unit_code) VALUES (?, 'G1P-B2')").run(item);
+
+  const units = new Set(
+    db.prepare('SELECT unit_code FROM ca_item_units WHERE item_id = ?').all(item).map((r) => r.unit_code)
+  );
+  const gate = (code) => (code && units.size && !units.has(code) ? '' : code || '');
+
+  check('a unit the item carries survives the write', gate('G1P-B2') === 'G1P-B2');
+  check('a unit the item does NOT carry is blanked', gate('G2-P2-U5') === '');
+  check('an empty code stays empty', gate('') === '');
+  check(
+    'the item still has exactly the one unit it was given',
+    db.prepare('SELECT COUNT(*) AS n FROM ca_item_units WHERE item_id = ?').get(item).n === 1
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 let failed = 0;
