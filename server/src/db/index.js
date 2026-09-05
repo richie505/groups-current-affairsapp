@@ -149,6 +149,19 @@ db.exec(schema);
     // shipped with a single angle field, so existing rows keep their fact and
     // angle and simply have the new sections empty until edited or redrafted.
     ca_items: [
+      // THE RETENTION LAYER, for the compendium template in pdf-template/.
+      //
+      // `hook` is one line built from the most examinable tokens — not a
+      // sentence — and `recap` is exactly three bullets: what happened, the
+      // numbers, the static link. They sit ABOVE the note in the PDF on
+      // purpose: first pass is hooks and recaps only, second pass the notes.
+      //
+      // Written by the drafter from now on. Items drafted before this existed
+      // have them derived at export time from prelims_facts, which is
+      // serviceable on institution stories and mechanical on number-heavy ones
+      // — see server/scripts/export-compendium-json.js.
+      ['hook', 'TEXT'],
+      ['recap', 'TEXT'],
       // A FACT SALVAGED FROM AN ARTICLE THAT WAS NOT ITSELF EXAMINABLE.
       //
       // "Adani calls on Karnataka CM" is a routine political statement and the

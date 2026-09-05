@@ -256,6 +256,20 @@ curl -fsS localhost:4100/api/health
 ships the previous frontend against the new API and every symptom looks like a
 backend bug. Preflight fails if `web/src` is newer than `web/dist`.
 
+**The compendium needs Chromium.** The daily PDF is rendered by
+`pdf-template/` through Playwright, so the deploy above also has to run
+
+```bash
+npm --prefix server exec -- playwright install chromium
+```
+
+`npm run build` at the repo root does it for you. It downloads ~150 MB once and
+is a no-op afterwards; on a bare server add `--with-deps` the first time to pull
+the shared libraries Chromium needs. Nothing else on the server uses it, and if
+it is missing every route still works except `GET /days/:date/digest.pdf`, which
+answers 500 with the install command in the message rather than failing
+silently.
+
 Schema changes need no migration step. `server/src/db/index.js` adds missing
 columns on boot, guarded by reading the table's actual shape, so it is a no-op
 after the first run.

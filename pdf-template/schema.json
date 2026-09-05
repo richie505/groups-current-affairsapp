@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APPSC Current Affairs compendium (retention template)",
+  "type": "object",
+  "required": ["meta", "sections"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["title", "date"],
+      "properties": {
+        "title": {"type": "string"}, "subtitle": {"type": "string"}, "date": {"type": "string"}, "weekday": {"type": "string"},
+        "exams": {"type": "array", "items": {"type": "string"}}, "source": {"type": "string"}, "reading_time": {"type": "string"},
+        "disclaimer": {"type": "string"}, "footer": {"type": "string"}
+      }
+    },
+    "sections": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["label", "title", "topics"],
+        "properties": {
+          "label": {"type": "string"}, "title": {"type": "string"},
+          "topics": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/topic"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "table": {
+      "type": "object", "required": ["type", "rows"],
+      "properties": {
+        "type": {"const": "table"},
+        "header": {"type": ["array", "null"], "items": {"type": "string"}, "minItems": 2, "maxItems": 2},
+        "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2}}
+      }
+    },
+    "para": {"type": "object", "required": ["type", "text"], "properties": {"type": {"const": "p"}, "text": {"type": "string"}}},
+    "question": {
+      "type": "object", "required": ["q", "stem", "options", "answer"],
+      "properties": {
+        "q": {"type": "integer"}, "stem": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4},
+        "answer": {"type": "string", "pattern": "^[A-D]$"},
+        "explanation": {"type": "string"}, "as_of": {"type": ["string", "null"]}
+      }
+    },
+    "topic": {
+      "type": "object",
+      "required": ["n", "title", "hook", "recap", "why_in_news", "prelims_facts", "questions"],
+      "properties": {
+        "n": {"type": "integer"}, "title": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "hook": {"type": "string", "maxLength": 130},
+        "recap": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "why_in_news": {"type": "array", "items": {"type": "string"}},
+        "key_details": {"type": "array", "items": {"oneOf": [{"$ref": "#/$defs/table"}, {"$ref": "#/$defs/para"}]}},
+        "static_linkage": {
+          "type": "object",
+          "properties": {
+            "summary": {"type": "string"},
+            "blocks": {"type": "array", "items": {
+              "type": "object", "required": ["title", "type"],
+              "properties": {
+                "title": {"type": "string", "enum": ["What it is", "Key facts", "The provisions that get asked", "Easily confused with", "Andhra Pradesh"]},
+                "type": {"type": "string", "enum": ["p", "list", "table"]},
+                "items": {"type": "array", "items": {"type": "string"}},
+                "header": {"type": ["array", "null"]}, "rows": {"type": "array"}
+              }
+            }}
+          }
+        },
+        "prelims_facts": {"type": "array", "items": {"type": "string"}},
+        "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}, "minItems": 4, "maxItems": 4}
+      }
+    }
+  }
+}

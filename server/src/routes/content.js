@@ -1,3 +1,7 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
@@ -17,6 +21,8 @@ const {
   monthName,
 } = require('../lib/compendiumPdf');
 const { groupIntoSections, papersFor, sectionOf, SECTIONS } = require('../lib/sections');
+const { buildCompendiumData } = require('../lib/compendiumData');
+const { renderCompendium } = require('../lib/compendiumRender');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -745,26 +751,50 @@ router.get('/days/:date/digest.pdf', (req, res) => {
     });
   }
 
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${compendiumFilename(day.date)}"`);
-
-  const doc = renderCompendiumPdf(items, byItem, {
-    // NO "12 of 58 topics" ON THE COVER.
-    //
-    // It was put there so a reader would know this is a selection rather than
-    // the whole paper. But this file is not an extract of a longer document a
-    // student can ask for — it IS the publication, and the archive it is drawn
-    // from is an internal working store nobody outside the app can reach. So
-    // the number told a candidate nothing they could act on and read as an
-    // apology for the thing they were being handed.
-    subtitle: `Daily Compendium — ${new Date(`${day.date}T00:00:00Z`).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-    })}`,
-    date: day.date,
-    draft,
-    minutes: circulationMinutes(items),
+  // RENDERED BY THE TEMPLATE IN pdf-template/, NOT BY PDFKIT.
+  //
+  // The layout is now HTML and CSS the reviewer can edit without touching
+  // server code, printed through Chromium. That buys the retention design the
+  // kit is built around — memory hook and 30-second recap above the notes, a
+  // hook sheet, a grouped answer key — which is a document structure rather
+  // than a drawing, and drawing it in PDFKit is what the old renderer spent
+  // most of its lines on.
+  //
+  // Async, so the errors have to be caught here: an exception after the headers
+  // are sent leaves the client holding a truncated PDF, and one before they are
+  // sent should be JSON like every other failure on this route.
+  const unitsOf = db.prepare(
+    `SELECT u.unit_code, r.label, r.paper, r.exam FROM ca_item_units u
+       JOIN ref_units r ON r.unit_code = u.unit_code WHERE u.item_id = ?`
+  );
+  const built = buildCompendiumData(items, byItem, {
+    day,
+    unitsOf: (id) => unitsOf.all(id),
   });
-  doc.pipe(res);
+  if (draft) built.data.meta.subtitle = 'Daily Compendium — DRAFT';
+
+  const tmp = path.join(
+    os.tmpdir(),
+    `appsc-compendium-${day.date}-${process.pid}-${Date.now()}.pdf`
+  );
+  renderCompendium(built.data, tmp)
+    .then(() => {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${compendiumFilename(day.date)}"`);
+      const stream = fs.createReadStream(tmp);
+      stream.pipe(res);
+      // The file is the renderer's only output channel, so it cannot be
+      // unlinked before the response has read it. Removed on close either way,
+      // including when the client disconnects halfway.
+      const done = () => fs.unlink(tmp, () => {});
+      stream.on('close', done);
+      stream.on('error', done);
+    })
+    .catch((e) => {
+      fs.unlink(tmp, () => {});
+      if (res.headersSent) return res.end();
+      res.status(500).json({ error: `Could not build the file — ${e.message}` });
+    });
 });
 
 // What that file WOULD contain, without building it — so the admin screen can

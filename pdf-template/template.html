@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APPSC Current Affairs — Retention Template</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div id="doc"></div>
+
+<!-- Data is injected by render.js as window.DATA; when opened directly in a browser it falls back to fetching data.json -->
+<script src="build.js"></script>
+<script>
+(async () => {
+  if (!window.DATA) {
+    try { window.DATA = await (await fetch('data.json')).json(); } catch (e) { document.body.innerHTML = '<p style="padding:2rem;font-family:sans-serif">No data. Run <code>node render.js data.json out.pdf</code> or serve this folder over HTTP.</p>'; return; }
+  }
+  buildDocument(window.DATA, document.getElementById('doc'));
+  document.body.dataset.ready = '1';
+})();
+</script>
+</body>
+</html>

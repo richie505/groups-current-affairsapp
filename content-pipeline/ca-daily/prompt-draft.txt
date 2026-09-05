@@ -37,6 +37,20 @@ property that matters.
                   Geography | Environment | Science & Technology | Society.
                   Empty string otherwise.",
 
+  "hook": "THE ONE LINE A READER CARRIES AWAY. At most 110 characters, and not
+      a sentence. Build it from the three to five most examinable tokens in the
+      story — numbers, names, places, dates — joined with the separators
+      '·' '→' '=' '+'. Pair a token with what it IS wherever the number alone
+      would mean nothing: '$72.85 bn' says less than 'swap inflows = $72.85 bn'.
+      Do not repeat the headline. Example:
+      '3 hubs on one map: Vizag = network · Amaravati = sports city · Nellore = equipment factory'",
+
+  "recap": ["EXACTLY THREE bullets, each at most 40 words, in this order and no
+      other. (1) what happened — who, where, when. (2) the numbers and names an
+      examiner would lift straight into options. (3) the static-syllabus link,
+      or why it matters. This is the skeleton somebody re-reads the next
+      morning without re-reading the note."],
+
   "notes_markdown": "The exam-oriented note. Bold every name, date, figure,
       place and scheme/report title. Use a markdown table wherever there is a
       natural pairing (award↔recipient, summit↔host, scheme↔ministry,

@@ -899,11 +899,11 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
     const insItem = db.prepare(
       `INSERT INTO ca_items (day_id, headline, event_date, bucket, subject_tag,
          notes_markdown, static_linkage, static_notes, prelims_facts,
-         importance, relevance_g2, needs_verify, verify_note,
+         importance, relevance_g2, needs_verify, verify_note, hook, recap,
          source_genre, source_author, order_index, salvaged, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
          @notes_markdown, @static_linkage, @static_notes, @prelims_facts,
-         @importance, @relevance_g2, @needs_verify, @verify_note,
+         @importance, @relevance_g2, @needs_verify, @verify_note, @hook, @recap,
          @source_genre, @source_author, @order_index, @salvaged, 'draft')`
     );
     const insKeyword = db.prepare(
@@ -972,6 +972,13 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         event_date: r.event_date || null,
         bucket: r.bucket || 'national',
         subject_tag: r.subject_tag || '',
+        // The retention layer, written by the drafter. `recap` arrives as an
+        // array and is stored one bullet per line — the same shape
+        // prelims_facts uses, so the same splitting works on it.
+        hook: String(r.hook || '').trim().slice(0, 200),
+        recap: Array.isArray(r.recap)
+          ? r.recap.map((x) => String(x).trim()).filter(Boolean).slice(0, 3).join('\n')
+          : String(r.recap || '').trim(),
         notes_markdown: r.notes_markdown || '',
         static_linkage: r.static_linkage || '',
         static_notes: r.static_notes || '',
