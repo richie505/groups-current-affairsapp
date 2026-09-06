@@ -110,6 +110,9 @@ const cleanup = () => {
 
 const checks = [];
 const check = (name, ok) => checks.push([name, !!ok]);
+// Asynchronous checks — the MCQ self-check is the only one, and it is
+// stubbed rather than calling a model. Awaited before the summary.
+const pending = [];
 
 // ---------------------------------------------------------------------------
 // fixtures
@@ -1559,11 +1562,145 @@ check('an empty digest renders rather than throwing', mdEmpty.includes('no publi
 
 // ---------------------------------------------------------------------------
 
-let failed = 0;
-for (const [name, ok] of checks) {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
-  if (!ok) failed += 1;
+
+// ---------------------------------------------------------------------------
+// the MCQ self-check, with a stubbed model — server/src/lib/mcqQuality.js
+// ---------------------------------------------------------------------------
+//
+// The reject and rewrite paths are the ones that matter and the ones a real run
+// does not reliably exercise: on the two articles drafted from the 6 September
+// edition the model kept all twelve questions, which proves it runs and proves
+// nothing about what happens when it does not.
+{
+  const Q = require(path.join(__dirname, '..', 'src', 'lib', 'mcqQuality'));
+  const mk = (n) => ({
+    question: `Which body was given mandate ${n}?`,
+    option_a: 'The 12th Pay Revision Commission',
+    option_b: 'The 11th Pay Revision Commission',
+    option_c: 'The State Finance Commission',
+    option_d: 'The Public Accounts Committee',
+    correct_option: 'a',
+    explanation: 'Announced on 6 September 2026.',
+    format: 'direct_recall',
+    fact_as_of: '2026-09-06',
+  });
+  const record = { headline: 'H', notes_markdown: 'notes', prelims_facts: 'facts' };
+  const run = (reply) =>
+    Q.selfCheck({
+      record,
+      mcqs: [mk(1), mk(2), mk(3)],
+      model: 'stub',
+      prompt: 'stub',
+      complete: async () => reply,
+      parseJson: (raw) => JSON.parse(raw),
+    });
+
+  pending.push(
+    (async () => {
+      const keepAll = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          { n: 3, verdict: 'keep' },
+        ])
+      );
+      check('a clean second reading keeps every question', keepAll.kept.length === 3);
+
+      const rejected = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'reject', reason: 'the figure is not in the notes' },
+          { n: 3, verdict: 'keep' },
+        ])
+      );
+      check('a rejected question is dropped', rejected.kept.length === 2);
+      check('and its reason is kept, for the log', /not in the notes/.test(rejected.rejected[0].reason));
+
+      const rewritten = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          {
+            n: 3,
+            verdict: 'rewrite',
+            reason: 'two options were true',
+            question: 'Which body was constituted to revise pay scales in September 2026?',
+            option_a: 'The 12th Pay Revision Commission',
+            option_b: 'The State Finance Commission',
+            option_c: 'The Public Accounts Committee',
+            option_d: 'The Estimates Committee',
+            correct_option: 'a',
+            explanation: 'The 12th PRC, announced 6 September 2026.',
+          },
+        ])
+      );
+      check(
+        'a rewrite is applied rather than dropped',
+        rewritten.kept.length === 3 && rewritten.rewritten === 1
+      );
+      check('and the rewritten text replaces the original', /revise pay scales/.test(rewritten.kept[2].question));
+
+      // A REWRITE GOES BACK THROUGH THE FREE LAYER. Nothing else would catch a
+      // "fix" that reintroduces exactly what the first pass removed.
+      const badRewrite = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          {
+            n: 3,
+            verdict: 'rewrite',
+            reason: 'tightened',
+            question: 'Which body was constituted in September 2026?',
+            option_a: 'The 12th Pay Revision Commission',
+            option_b: 'The State Finance Commission',
+            option_c: 'The Public Accounts Committee',
+            option_d: 'All of the above',
+            correct_option: 'a',
+            explanation: 'The 12th PRC.',
+          },
+        ])
+      );
+      check('a rewrite that reintroduces a banned option is dropped, not kept', badRewrite.kept.length === 2);
+
+      // A model that returned one verdict for three questions has not judged the
+      // other two. Dropping them would make an omission look like a decision.
+      const partial = await run(JSON.stringify([{ n: 1, verdict: 'reject', reason: 'x' }]));
+      check('questions the model did not judge are kept, not dropped', partial.kept.length === 2);
+
+      // And a failed call must not throw away questions that already passed the
+      // deterministic layer.
+      const broken = await Q.selfCheck({
+        record,
+        mcqs: [mk(1), mk(2)],
+        model: 'stub',
+        prompt: 'stub',
+        complete: async () => {
+          throw new Error('502 from the provider');
+        },
+        parseJson: JSON.parse,
+      });
+      check(
+        'a failed second reading keeps the questions and says so',
+        broken.kept.length === 2 && broken.checked === false
+      );
+    })()
+  );
 }
-console.log(`\n${checks.length - failed}/${checks.length} passed`);
-cleanup();
-process.exit(failed ? 1 : 0);
+
+
+Promise.all(pending)
+  .catch((e) => {
+    console.error('an asynchronous check threw:', e);
+    check('asynchronous checks completed', false);
+  })
+  .then(() => {
+    let failed = 0;
+    for (const [name, ok] of checks) {
+      console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
+      if (!ok) failed += 1;
+    }
+    console.log(`
+${checks.length - failed}/${checks.length} passed`);
+    cleanup();
+    process.exit(failed ? 1 : 0);
+  });
