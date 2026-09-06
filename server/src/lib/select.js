@@ -180,8 +180,17 @@ function selectForDrafting(rows, opts = {}) {
     // pool is everything worth keeping at all, most of which is worth a short
     // entry rather than 250 words, and taking all of it would make `partial`
     // mean nothing.
+    //
+    // THE BAND COUNTS WHAT IS ALREADY DRAFTED, and that matters the moment a
+    // run is resumed. Articles with an item are filtered out before they reach
+    // here, so on a second pass the floor of 12 would be applied to the
+    // REMAINDER — two drafted this morning plus twelve more this afternoon is
+    // fourteen, from a day the triage sized at twelve. The band is a budget for
+    // the day, so it has to be spent against the day's total.
+    const already = Math.max(0, Number(cfg.alreadyDrafted) || 0);
     const wanted = pool.filter((r) => r.triage_class_model === 'high').length;
-    const n = Math.min(pool.length, Math.max(cfg.minItems, Math.min(cfg.maxItems, wanted)));
+    const target = Math.max(cfg.minItems, Math.min(cfg.maxItems, wanted + already));
+    const n = Math.min(pool.length, Math.max(0, target - already));
     return {
       picked: pool.slice(0, n),
       rejected: [...pool.slice(n), ...triaged.filter((r) => r.triage_class === 'drop')],

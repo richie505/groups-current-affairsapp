@@ -228,7 +228,11 @@ router.get('/:id/plan', (req, res) => {
   );
 
   const rows = SELECT.candidateRows(db, id).filter((r) => redraft || !drafted.has(r.id));
-  const { picked, rejected, config, source } = SELECT.selectForDrafting(rows, opts);
+  // The preview has to agree with the run, so it counts what is drafted too.
+  const { picked, rejected, config, source } = SELECT.selectForDrafting(rows, {
+    ...opts,
+    alreadyDrafted: redraft ? 0 : drafted.size,
+  });
 
   // The evidence behind each pick, fetched in two queries rather than two per
   // article. This is what turns "25 articles" into something a person can audit:

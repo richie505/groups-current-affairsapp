@@ -174,7 +174,16 @@ async function main() {
           const rows = SELECT.candidateRows(db, edition.id).filter(
             (r) => args.redraft || !db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(r.id).item_id
           );
+          // What this edition has already produced. The band is a budget for
+          // the DAY, so a resumed run has to spend it against the day's total
+          // rather than starting the floor again on the remainder.
+          const alreadyDrafted = db
+            .prepare(
+              'SELECT COUNT(*) AS n FROM np_articles WHERE edition_id = ? AND item_id IS NOT NULL'
+            )
+            .get(edition.id).n;
           selection = SELECT.selectForDrafting(rows, {
+            alreadyDrafted,
             ...(args.maxItems ? { maxItems: args.maxItems } : {}),
             ...(args.minItems ? { minItems: args.minItems } : {}),
           });
