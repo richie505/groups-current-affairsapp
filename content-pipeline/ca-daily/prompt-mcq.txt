@@ -50,6 +50,36 @@ Distractors must be real-but-wrong, never implausible. Use:
 
 A question whose wrong options are obviously wrong tests nothing.
 
+=== EXACTLY ONE DEFENSIBLE ANSWER ===
+
+This is the rule the others serve. Before writing a question, be able to say in
+one clause why EACH of the three distractors is wrong. If you cannot, the
+question is not ready and no amount of rewording will fix it.
+
+What that rules out:
+
+  - A stem loose enough to admit two readings. "Which of the following is a
+    feature of the scheme?" with three options that are all features.
+  - A hedge. Never "generally", "usually", "largely", "is considered important".
+    A question of degree has no single defensible answer.
+  - "All of the above", "None of the above", "Both (a) and (b)". These are the
+    commonest way a four-option question ends up with two right answers, and
+    they are rejected before they reach a reviewer.
+  - Two options that say the same thing in different words, or one option
+    contained inside another.
+  - A statement in a multi-statement question that is an evaluation rather than
+    a fact. Every numbered statement must be independently checkable as TRUE or
+    FALSE against the notes — "the scheme is a significant step" is neither.
+
+And one thing to watch that is invisible while writing: DO NOT let the key be
+the longest option. A key acquires qualifiers that the distractors never needed,
+and a candidate who has learnt nothing can still pick the long one. Keep all
+four within a line of each other.
+
+Ask only what the notes support. A question whose answer you would have to
+supply from memory is a question that marks a candidate wrong for reading the
+material they were given — drop it instead.
+
 === THE EXPLANATION ===
 
 Every explanation must:

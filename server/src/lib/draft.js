@@ -49,6 +49,7 @@ const PIPELINE = path.join(ROOT, 'content-pipeline', 'ca-daily');
 // rediscovering it here.
 const L = require(path.join(PIPELINE, 'lib'));
 const G = require(path.join(ROOT, 'content-pipeline', 'np-daily', 'genre'));
+const Q = require('./mcqQuality');
 
 // ---------------------------------------------------------------------------
 // the model input
@@ -1369,7 +1370,20 @@ function canonicalUnit(raw, valid) {
 
 async function generateMcqs(
   db,
-  { record, index, count = 4, model, mcqPrompt, seenHashes, fallbackDate, onLog = () => {} }
+  {
+    record,
+    index,
+    count = 4,
+    model,
+    mcqPrompt,
+    // The second-reading prompt. Optional so a caller can turn the pass off —
+    // the CLI's --no-mcq-check — but the default is on, because a question that
+    // has not been read twice is a question nobody has checked at all.
+    checkPrompt,
+    seenHashes,
+    fallbackDate,
+    onLog = () => {},
+  }
 ) {
   const { validateMcq } = L.serverValidators();
   const units = objectiveUnitsFor(db, record._articleId);
@@ -1426,6 +1440,21 @@ async function generateMcqs(
         onLog(`    dropped a question — ${errors.join(' ')}`);
         continue;
       }
+      // THE FREE LAYER, BEFORE ANY SECOND OPINION IS PAID FOR.
+      //
+      // validateMcq asks whether this is structurally a question. This asks
+      // whether it has one defensible answer, as far as that can be told from
+      // the string: an option that answers with other options, a hedged stem, a
+      // key three times longer than every distractor, a multi-statement stem
+      // whose options count statements that are not there. None of those are
+      // judgement calls and a model should not be billed for an opinion on them.
+      const { fatal, soft } = Q.inspect(m);
+      if (fatal.length) {
+        onLog(`    dropped a question — ${fatal[0]}`);
+        continue;
+      }
+      for (const s of soft) onLog(`    note on a question — ${s}`);
+
       const hash = L.questionHash(m.question);
       if (seenHashes && seenHashes.has(hash)) {
         onLog('    dropped a duplicate question');
@@ -1449,14 +1478,47 @@ async function generateMcqs(
   } catch (e) {
     onLog(`    MCQ generation failed (${e.message}) — item kept without questions`);
   }
+
+  // THE SECOND READING.
+  //
+  // One call, all of the item's questions at once, re-read against the notes
+  // they came from. It catches the two faults the free layer cannot see because
+  // they are not in the string: a question whose answer is not actually in the
+  // source, and a stem with two defensible answers.
+  //
+  // One call rather than one per question, for two reasons. It is eight times
+  // cheaper. And part of the judgement is comparative — two questions on one
+  // item can each be sound alone and ask the same thing — which a per-question
+  // call cannot see at all.
+  let final = out;
+  if (checkPrompt && out.length) {
+    const res = await Q.selfCheck({
+      record,
+      mcqs: out,
+      model,
+      prompt: checkPrompt,
+      complete: L.complete,
+      parseJson: L.parseJson,
+      onLog,
+    });
+    final = res.kept;
+    if (res.checked) {
+      onLog(
+        `    second reading: ${res.kept.length} kept` +
+          `${res.rewritten ? `, ${res.rewritten} rewritten` : ''}` +
+          `${res.rejected.length ? `, ${res.rejected.length} rejected` : ''}`
+      );
+    }
+  }
+
   if (units.length) {
-    const covered = new Set(out.map((m) => m.unit_code).filter(Boolean));
+    const covered = new Set(final.map((m) => m.unit_code).filter(Boolean));
     onLog(
-      `    ${out.length} question(s) covering ${covered.size} of ${units.length} unit(s) ` +
+      `    ${final.length} question(s) covering ${covered.size} of ${units.length} unit(s) ` +
         `(${units.map((u) => u.unit_code).join(', ')})`
     );
   }
-  return out;
+  return final;
 }
 
 module.exports = {

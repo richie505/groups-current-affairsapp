@@ -17,6 +17,9 @@
 //                        feeds — see mcqCountFor in src/lib/draft.js. Three of
 //                        the four APPSC papers are answered by ticking a box.
 //     --no-mcqs          draft the notes only, skip question generation
+//     --no-mcq-check     skip the second reading of each question. One call per
+//                        item cheaper, and nothing then checks that a question
+//                        can be answered from the notes it came from.
 //     --article ID,ID    redraft these specific articles, whatever they score
 //     --redraft          include articles that already produced an item
 //     --plan             print the SELECTION and stop — no model calls, no cost
@@ -111,6 +114,7 @@ function parseArgs(argv) {
     else if (a === '--model') args.model = argv[++i];
     else if (a === '--mcqs-per') args.mcqsPer = Number(argv[++i]);
     else if (a === '--no-mcqs') args.noMcqs = true;
+    else if (a === '--no-mcq-check') args.noMcqCheck = true;
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--plan') args.plan = true;
@@ -324,6 +328,9 @@ async function main() {
   // touched the item. One file, read by both, is the fix.
   const prompt = `${L.readPrompt('prompt-draft.txt')}\n\n${L.readPrompt('prompt-static.txt')}`;
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
+  // The second reading. One extra call per item, and the only thing in the
+  // pipeline that reads a question after it is written — see mcqQuality.js.
+  const checkPrompt = args.noMcqCheck ? null : L.readPrompt('prompt-mcq-check.txt');
   // Shared across the whole run and across the whole corpus, so a question
   // already asked of another item is not asked again here.
   const seenHashes = L.existingQuestionHashes(db);
@@ -521,19 +528,27 @@ async function main() {
     // Questions, in the formats the PYQ evidence for this item's primary angle
     // actually asks for. Without these the Group-II lane gets notes and no
     // practice, which is half a lane.
-    record.mcqs =
-      args.noMcqs || Number(record.relevance_g2) === 0
-        ? []
-        : await D.generateMcqs(db, {
-            record,
-            index: i,
-            count: args.mcqsPer,
-            model: args.model,
-            mcqPrompt,
-            seenHashes,
-            fallbackDate: edition.date,
-            onLog: say,
-          });
+    // EVERY DRAFTED ITEM GETS QUESTIONS.
+    //
+    // This used to skip any item the model marked relevance_g2 = 0, which was
+    // the one path by which a drafted item could reach the queue with nothing
+    // to practise against. It is not a defensible exclusion: all three papers
+    // this app serves are answered by ticking a box, so "not relevant to Group
+    // II" does not mean "not testable" — it means the item is testable in the
+    // Group-I Prelims lane instead, and the questions are the point either way.
+    record.mcqs = args.noMcqs
+      ? []
+      : await D.generateMcqs(db, {
+          record,
+          index: i,
+          count: args.mcqsPer,
+          model: args.model,
+          mcqPrompt,
+          checkPrompt,
+          seenHashes,
+          fallbackDate: edition.date,
+          onLog: say,
+        });
 
     drafted.push(record);
     say(

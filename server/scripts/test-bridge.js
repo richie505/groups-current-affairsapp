@@ -1283,6 +1283,280 @@ check('an empty digest renders rather than throwing', mdEmpty.includes('no publi
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// ligature repair — content-pipeline/np-daily/ligatures.js
+// ---------------------------------------------------------------------------
+//
+// The ePaper's font map returns every ff/fi/fl/ffi/ffl ligature as a bare "f".
+// layout.py finds them by glyph width and marks the two cases width cannot
+// settle; this resolves those from what follows. Tested here rather than
+// against a PDF because the decision is pure string work and the PDF is 10 MB.
+{
+  const LIG = require(path.join(__dirname, '..', '..', 'content-pipeline', 'np-daily', 'ligatures'));
+  const A = LIG.MARK_LIG2;
+  const B = LIG.MARK_LIG3;
+
+  const cases = [
+    // fi — the default, and right about four times in five
+    [`bene${A}ts`, 'benefits'],
+    [`${A}rst`, 'first'],
+    [`${A}nancial`, 'financial'],
+    [`identi${A}ed`, 'identified'],
+    [`noti${A}ed`, 'notified'],
+    [`scienti${A}c`, 'scientific'],
+    [`gasi${A}cation`, 'gasification'],
+    [`cease${A}re`, 'ceasefire'],
+    [`${A}ght`, 'fight'],
+    [`pro${A}le`, 'profile'],
+    // fl — only where the continuation says so
+    [`con${A}ict`, 'conflict'],
+    [`in${A}uence`, 'influence'],
+    [`${A}ood`, 'flood'],
+    [`${A}eet`, 'fleet'],
+    [`${A}ourish`, 'flourish'],
+    [`${A}ight`, 'flight'],
+    [`in${A}ation`, 'inflation'],
+    [`re${A}ect`, 'reflect'],
+    [`dragon${A}ies`, 'dragonflies'],
+    [`${A}ying`, 'flying'],
+    // ffi / ffl
+    [`o${B}ce`, 'office'],
+    [`o${B}cials`, 'officials'],
+    [`a${B}davit`, 'affidavit'],
+    [`tra${B}c`, 'traffic'],
+    [`insu${B}cient`, 'insufficient'],
+    [`reshu${B}e`, 'reshuffle'],
+    [`scu${B}e`, 'scuffle'],
+  ];
+  let ligBad = 0;
+  for (const [input, want] of cases) if (LIG.resolve(input) !== want) ligBad += 1;
+  check(`every ligature case resolves (${cases.length})`, ligBad === 0);
+
+  // THE ONE COLLISION IN THE SET, and the reason FL_AFTER_WORD_INITIAL exists.
+  // "fled" is fl+ed. Every other word ending that way is fi+ed, and there are
+  // eight of those in one edition against a single "fled".
+  check('"fled" resolves as fl when the ligature opens the word', LIG.resolve(`${A}ed`) === 'fled');
+  check('"filed" wins over "flled" — the continuation is not an fl one', LIG.resolve(`${A}led`) === 'filed');
+  check(
+    'and the same tail INSIDE a word reads as fi, not fl',
+    LIG.resolve(`identi${A}ed`) === 'identified' && LIG.resolve(`clari${A}ed`) === 'clarified'
+  );
+
+  check('capitals follow the word, not the marker', LIG.resolve(`${A}OOD ALERT`) === 'FLOOD ALERT');
+  check('a marker mid-sentence keeps its neighbours', LIG.resolve(`The ${A}ood hit`) === 'The flood hit');
+  // A marker that survives into the database is an invisible box in the middle
+  // of a word — worse than the broken spelling it replaced.
+  check('nothing is left behind', !LIG.hasMarkers(LIG.resolve(`a${A}b${B}c`)));
+  check('text with no markers is returned untouched', LIG.resolve('plain text') === 'plain text');
+
+  // The segmenter has to run the repair AFTER de-hyphenation, or a word broken
+  // across two column lines is judged on half its letters.
+  check(
+    'clean() resolves markers, after joining a word broken across lines',
+    SEG.clean(`noti${A}ca- tion issued`) === 'notification issued'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// relevance triage — server/src/lib/triage.js
+// ---------------------------------------------------------------------------
+//
+// The gate every article now passes before anything is spent on it. What is
+// tested here is the part that has to be right when the model is not: parsing a
+// reply, refusing a verdict about an article that was not in the batch, and
+// noticing the ones it forgot.
+{
+  const T = require(path.join(__dirname, '..', 'src', 'lib', 'triage'));
+
+  const good = JSON.stringify([
+    { id: 11, class: 'high', score: 84, reason: 'Cabinet decision with an outlay', areas: ['National', 'schemes'] },
+    { id: 12, class: 'partial', score: 45, reason: 'routine inauguration, but names the outlay' },
+    { id: 13, class: 'drop', score: 8, reason: 'road accident' },
+  ]);
+  const parsed = T.parseVerdicts(good, [11, 12, 13]);
+  check('a clean reply parses to three verdicts', parsed.verdicts.length === 3);
+  check('nothing is reported missing', parsed.missing.length === 0);
+  check('areas are flattened to a label', parsed.verdicts[0].areas === 'National, schemes');
+
+  // A verdict for an article that was not in the batch is a hallucinated id, and
+  // writing it would file one article's judgement onto another.
+  const stray = T.parseVerdicts(JSON.stringify([{ id: 999, class: 'high', score: 90 }]), [11]);
+  check('a verdict for an id outside the batch is refused', stray.verdicts.length === 0);
+  check('and the id that WAS asked about is reported missing', stray.missing.join() === '11');
+
+  // A silently missing verdict is an article nothing ever judged. It has to be
+  // visible, because it looks exactly like a deliberate drop otherwise.
+  const short = T.parseVerdicts(JSON.stringify([{ id: 11, class: 'high', score: 70 }]), [11, 12]);
+  check('a forgotten article is reported, not defaulted', short.missing.join() === '12');
+
+  check('an unparseable reply loses no ids', T.parseVerdicts('not json', [1, 2]).missing.length === 2);
+
+  // Models say "dropped", "reject" and "low" when asked for "drop". A strict
+  // match would throw those away silently.
+  check('class words are normalised', T.normaliseClass('Dropped') === 'drop' && T.normaliseClass('FULL') === 'high');
+  check('an unknown class is refused rather than guessed', T.normaliseClass('maybe') === '');
+  check('a missing score falls back by class', T.parseVerdicts(JSON.stringify([{ id: 1, class: 'high' }]), [1]).verdicts[0].score === 70);
+  check('a score outside 0-100 is clamped', T.parseVerdicts(JSON.stringify([{ id: 1, class: 'high', score: 480 }]), [1]).verdicts[0].score === 100);
+
+  // The no-syllabus-unit VETO is gone — it fired on 6 of the model's 9 high
+  // verdicts on the first real edition and every one was core material. What
+  // remains is the flag.
+  const gapRow = { unit_codes: null };
+  const routed = T.routeVerdict({ id: 1, class: 'high', score: 88, reason: '', areas: '' }, gapRow);
+  check('a high article with no syllabus unit is still high', routed.class === 'high');
+  check('and is flagged as a vocabulary gap', routed.vocabulary_gap === true);
+  check(
+    'an article that does match a unit is not flagged',
+    T.routeVerdict({ id: 2, class: 'high' }, { unit_codes: 'G2-P1-U7' }).vocabulary_gap === false
+  );
+
+  check('the article renders with its evidence, for the prompt', /units G2-P1-U7/.test(
+    T.renderArticle({ id: 5, page: 3, headline: 'H', body: 'B', score: 41, unit_codes: 'G2-P1-U7' })
+  ));
+  check('an unmatched article says so rather than omitting the line', /units none/.test(
+    T.renderArticle({ id: 6, page: 1, headline: 'H', body: 'B', score: 20, unit_codes: null })
+  ));
+}
+
+// ---------------------------------------------------------------------------
+// the digest band, over triage verdicts — server/src/lib/select.js
+// ---------------------------------------------------------------------------
+//
+// The model judges an article; the app decides how many articles a day yields.
+// Asked to do both, the model produced three `high` on a 93-article edition,
+// because each call sees twelve and cannot calibrate against the rest.
+{
+  const S = require(path.join(__dirname, '..', 'src', 'lib', 'select'));
+  const rows = [];
+  for (let i = 1; i <= 30; i += 1) {
+    rows.push({
+      id: i,
+      score: 50,
+      units: 1,
+      headlineUnits: 0,
+      bucket: 'national',
+      triage_class: i <= 26 ? 'partial' : 'drop',
+      triage_class_model: i <= 4 ? 'high' : i <= 26 ? 'partial' : 'drop',
+      triage_score: 100 - i,
+    });
+  }
+
+  const band = S.selectForDrafting(rows);
+  check('triage replaces the leverage ranking where it has run', band.source === 'triage');
+  check('a thin verdict set is lifted to the floor', band.picked.length === 12);
+  check('the best-scoring articles are the ones lifted', band.picked[0].id === 1);
+  check('dropped articles are never promoted to fill the band', band.picked.every((r) => r.triage_class !== 'drop'));
+  check('the rest become short entries rather than vanishing', band.rejected.length === 18);
+
+  check('a smaller dial re-draws the line with no model call', S.selectForDrafting(rows, { maxItems: 8, minItems: 8 }).picked.length === 8);
+  check('and a larger one reaches further down the ranking', S.selectForDrafting(rows, { minItems: 20 }).picked.length === 20);
+
+  const rich = rows.map((r) => ({ ...r, triage_class_model: r.triage_class === 'drop' ? 'drop' : 'high' }));
+  check('a rich day is held at the cap', S.selectForDrafting(rich, { maxItems: 15 }).picked.length === 15);
+
+  // An edition processed before triage existed has '' on every row and must
+  // take the original path untouched.
+  const old = rows.map(({ triage_class, triage_class_model, triage_score, ...r }) => ({ ...r, triage_class: '' }));
+  check('an untriaged edition still uses the deterministic ranking', S.selectForDrafting(old).source !== 'triage');
+}
+
+// ---------------------------------------------------------------------------
+// MCQ quality — server/src/lib/mcqQuality.js
+// ---------------------------------------------------------------------------
+//
+// validateMcq asks whether this is structurally a question. Every one of the
+// questions below passes that and is still unanswerable.
+{
+  const Q = require(path.join(__dirname, '..', 'src', 'lib', 'mcqQuality'));
+  const base = {
+    question: 'Which body was given the mandate to revise pay scales?',
+    option_a: 'The 12th Pay Revision Commission',
+    option_b: 'The 11th Pay Revision Commission',
+    option_c: 'The State Finance Commission',
+    option_d: 'The Public Accounts Committee',
+    correct_option: 'a',
+    explanation: 'The 12th PRC was announced on 6 September 2026.',
+    format: 'direct_recall',
+    fact_as_of: '2026-09-06',
+  };
+  const fatalOf = (over) => Q.inspect({ ...base, ...over }).fatal;
+
+  check('a sound question passes', Q.isSound(base));
+  check('and reports nothing soft either', Q.inspect(base).soft.length === 0);
+
+  check('"All of the above" is refused', fatalOf({ option_d: 'All of the above' }).length > 0);
+  check('"None of the above" too', fatalOf({ option_d: 'None of the above' }).length > 0);
+  check('and "Both (a) and (b)"', fatalOf({ option_d: 'Both (a) and (b)' }).length > 0);
+
+  check('a hedged stem is refused', fatalOf({ question: 'Which body is generally responsible for pay revision?' }).length > 0);
+  check(
+    'but the paper’s own house stems are not',
+    Q.isSound({ ...base, question: 'Which of the following best describes the mandate of the 12th PRC?' })
+  );
+
+  check('a stem that asks nothing is refused', fatalOf({ question: 'The 12th Pay Revision Commission was announced.' }).length > 0);
+
+  check(
+    'two options that differ only in punctuation are one option twice',
+    fatalOf({ option_b: 'the 12TH pay revision commission.' }).length > 0
+  );
+
+  check('a question with no explanation is refused', fatalOf({ explanation: '  ' }).length > 0);
+  check('a missing fact_as_of is a note, not a rejection', (() => {
+    const r = Q.inspect({ ...base, fact_as_of: '' });
+    return r.fatal.length === 0 && r.soft.some((s) => /fact_as_of/.test(s));
+  })());
+
+  // The length tell: a key written to be defensible acquires qualifiers the
+  // distractors never needed, and it can be picked without knowing anything.
+  check(
+    'a key far longer than every distractor is flagged',
+    Q.inspect({
+      ...base,
+      option_a: 'The 12th Pay Revision Commission, constituted by the State government in September 2026 to revise scales',
+    }).soft.some((s) => /length alone/.test(s))
+  );
+
+  // Assertion-Reason has four fixed options set by the paper, not by us.
+  const ar = {
+    ...base,
+    format: 'assertion_reason',
+    question: 'Assertion (A): The 12th PRC was constituted.\nReason (R): Two DAs were pending.',
+    option_a: 'Both A and R are true, and R correctly explains A',
+    option_b: 'Both A and R are true, but R does not correctly explain A',
+    option_c: 'A is true but R is false',
+    option_d: 'A is false but R is true',
+  };
+  check('a well-formed assertion-reason question passes', Q.isSound(ar));
+  check('one with free-form options is refused', fatalOf({ ...ar, option_d: 'None of these' }).length > 0);
+  check('and one whose stem states no Assertion is refused', fatalOf({ ...ar, question: 'Which is true of the PRC?' }).length > 0);
+
+  // A multi-statement question whose options count statements the stem does not
+  // list cannot be answered at all.
+  const multi = {
+    ...base,
+    format: 'multi_statement',
+    question: 'Consider the following statements:\n1. The 12th PRC was announced.\n2. Two DAs were released.\nWhich are correct?',
+    option_a: '1 only',
+    option_b: '2 only',
+    option_c: '1 and 2',
+    option_d: 'Neither 1 nor 2',
+  };
+  check('a well-formed multi-statement question passes', Q.isSound(multi));
+  check(
+    'options referring to a statement the stem never listed are refused',
+    fatalOf({ ...multi, option_c: '1, 2 and 3' }).length > 0
+  );
+  check('a multi-statement stem with no numbered statements is refused', fatalOf({ ...multi, question: 'Which are correct?' }).length > 0);
+  check('the statement counter reads the stem', Q.statementCount(multi.question) === 2);
+
+  // Combination options CONTAIN one another by design — that is the format, not
+  // a defect, and flagging it would make the check useless on the paper's most
+  // common shape.
+  check('a combination option inside another is not flagged in a multi-statement', Q.inspect(multi).soft.length === 0);
+}
+
 // ---------------------------------------------------------------------------
 
 let failed = 0;
