@@ -228,7 +228,7 @@ router.get('/:id/plan', (req, res) => {
   );
 
   const rows = SELECT.candidateRows(db, id).filter((r) => redraft || !drafted.has(r.id));
-  const { picked, rejected, config } = SELECT.selectForDrafting(rows, opts);
+  const { picked, rejected, config, source } = SELECT.selectForDrafting(rows, opts);
 
   // The evidence behind each pick, fetched in two queries rather than two per
   // article. This is what turns "25 articles" into something a person can audit:
@@ -266,6 +266,15 @@ router.get('/:id/plan', (req, res) => {
   res.json({
     edition: { id: ed.id, date: ed.date, publication: ed.publication },
     config,
+    // Which rule chose these. The screen has to say a different thing in each
+    // case, and it used to say only one — claiming "all of them feed a syllabus
+    // unit" on an edition where five of twelve do not, because that claim was
+    // true of the ranking it replaced.
+    source: source || 'deterministic',
+    // Articles going to full drafting with no unit behind them. Under the old
+    // rule this was impossible; under triage it is a vocabulary gap, and the
+    // number belongs where the claim about units used to be.
+    gaps: picked.filter((r) => !(unitsBy.get(r.id) || []).length).length,
     // Everything the selector considered, so the screen can say what was left.
     considered: rows.length,
     alreadyDrafted: drafted.size,
