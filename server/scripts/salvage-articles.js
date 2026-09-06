@@ -121,6 +121,10 @@ async function main() {
 
   const prompt = `${L.readPrompt('prompt-salvage.txt')}\n\n${vocabulary}`;
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
+  // The second reading, same as the drafting lane. A salvaged card is nothing
+  // BUT its facts and the questions on them, so an unanswerable question here
+  // is a larger share of what the student gets, not a smaller one.
+  const checkPrompt = L.readPrompt('prompt-mcq-check.txt');
   const seenHashes = L.existingQuestionHashes(db);
 
   const kept = [];
@@ -182,19 +186,20 @@ async function main() {
     record.static_notes = '';
     record.event_date = record.event_date || edition.date;
 
-    record.mcqs =
-      Number(record.relevance_g2) === 0
-        ? []
-        : await D.generateMcqs(db, {
-            record,
-            index: i,
-            count: 2,
-            model: args.model,
-            mcqPrompt,
-            seenHashes,
-            fallbackDate: edition.date,
-            onLog: say,
-          });
+    // A salvaged card with no questions is a card with nothing on it — it has
+    // no notes by construction, so the questions ARE the card. The
+    // relevance_g2 gate that used to sit here could empty one completely.
+    record.mcqs = await D.generateMcqs(db, {
+      record,
+      index: i,
+      count: 2,
+      model: args.model,
+      mcqPrompt,
+      checkPrompt,
+      seenHashes,
+      fallbackDate: edition.date,
+      onLog: say,
+    });
 
     const written = D.insertDrafted(db, { date: edition.date, drafted: [record], onLog: say });
     kept.push(record);

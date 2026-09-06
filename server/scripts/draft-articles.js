@@ -17,6 +17,9 @@
 //                        feeds — see mcqCountFor in src/lib/draft.js. Three of
 //                        the four APPSC papers are answered by ticking a box.
 //     --no-mcqs          draft the notes only, skip question generation
+//     --no-mcq-check     skip the second reading of each question. One call per
+//                        item cheaper, and nothing then checks that a question
+//                        can be answered from the notes it came from.
 //     --article ID,ID    redraft these specific articles, whatever they score
 //     --redraft          include articles that already produced an item
 //     --plan             print the SELECTION and stop — no model calls, no cost
@@ -111,6 +114,7 @@ function parseArgs(argv) {
     else if (a === '--model') args.model = argv[++i];
     else if (a === '--mcqs-per') args.mcqsPer = Number(argv[++i]);
     else if (a === '--no-mcqs') args.noMcqs = true;
+    else if (a === '--no-mcq-check') args.noMcqCheck = true;
     else if (a === '--redraft') args.redraft = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--plan') args.plan = true;
@@ -170,7 +174,16 @@ async function main() {
           const rows = SELECT.candidateRows(db, edition.id).filter(
             (r) => args.redraft || !db.prepare('SELECT item_id FROM np_articles WHERE id = ?').get(r.id).item_id
           );
+          // What this edition has already produced. The band is a budget for
+          // the DAY, so a resumed run has to spend it against the day's total
+          // rather than starting the floor again on the remainder.
+          const alreadyDrafted = db
+            .prepare(
+              'SELECT COUNT(*) AS n FROM np_articles WHERE edition_id = ? AND item_id IS NOT NULL'
+            )
+            .get(edition.id).n;
           selection = SELECT.selectForDrafting(rows, {
+            alreadyDrafted,
             ...(args.maxItems ? { maxItems: args.maxItems } : {}),
             ...(args.minItems ? { minItems: args.minItems } : {}),
           });
@@ -253,7 +266,30 @@ async function main() {
   // not a list of mistakes: it is the vocabulary's to-do list. Four of the ten
   // it currently rejects are genuinely examinable and unmatched only because
   // the syllabus map has a gap (a named Act, an inter-state water dispute).
-  if (selection) {
+  // The triage breakdown, printed whatever path chose the articles, because it
+  // is the honest account of what the edition yielded: what was written up in
+  // full, what was kept as bare facts, and — the number the old summary could
+  // not produce at all — what was let go and why.
+  const T = require(path.join(__dirname, '..', 'src', 'lib', 'triage'));
+  const triageCounts = T.counts(db, edition.id);
+  if (triageCounts.articles && !triageCounts.untriaged) {
+    say(`  triage: ${T.summaryLine(triageCounts)}`);
+  }
+
+  if (selection && selection.source === 'triage') {
+    const gaps = selection.picked.filter((r) => !r.units).length;
+    say(
+      `  selected by relevance triage: ${selection.picked.length} of ` +
+        `${selection.picked.length + selection.rejected.filter((r) => r.triage_class === 'partial').length}` +
+        ' kept articles go to full drafting; the rest become short entries.'
+    );
+    if (gaps) {
+      say(
+        `  ${gaps} of them match NO syllabus unit — examinable material the alias map ` +
+          'is missing. Worth adding, so they arrive matched next time.'
+      );
+    }
+  } else if (selection) {
     const anchored = selection.picked.filter((r) => r.units).length;
     say(
       `  selected adaptively: ${anchored} of ${selection.picked.length} feed a syllabus unit` +
@@ -301,6 +337,9 @@ async function main() {
   // touched the item. One file, read by both, is the fix.
   const prompt = `${L.readPrompt('prompt-draft.txt')}\n\n${L.readPrompt('prompt-static.txt')}`;
   const mcqPrompt = L.readPrompt('prompt-mcq.txt');
+  // The second reading. One extra call per item, and the only thing in the
+  // pipeline that reads a question after it is written — see mcqQuality.js.
+  const checkPrompt = args.noMcqCheck ? null : L.readPrompt('prompt-mcq-check.txt');
   // Shared across the whole run and across the whole corpus, so a question
   // already asked of another item is not asked again here.
   const seenHashes = L.existingQuestionHashes(db);
@@ -498,19 +537,27 @@ async function main() {
     // Questions, in the formats the PYQ evidence for this item's primary angle
     // actually asks for. Without these the Group-II lane gets notes and no
     // practice, which is half a lane.
-    record.mcqs =
-      args.noMcqs || Number(record.relevance_g2) === 0
-        ? []
-        : await D.generateMcqs(db, {
-            record,
-            index: i,
-            count: args.mcqsPer,
-            model: args.model,
-            mcqPrompt,
-            seenHashes,
-            fallbackDate: edition.date,
-            onLog: say,
-          });
+    // EVERY DRAFTED ITEM GETS QUESTIONS.
+    //
+    // This used to skip any item the model marked relevance_g2 = 0, which was
+    // the one path by which a drafted item could reach the queue with nothing
+    // to practise against. It is not a defensible exclusion: all three papers
+    // this app serves are answered by ticking a box, so "not relevant to Group
+    // II" does not mean "not testable" — it means the item is testable in the
+    // Group-I Prelims lane instead, and the questions are the point either way.
+    record.mcqs = args.noMcqs
+      ? []
+      : await D.generateMcqs(db, {
+          record,
+          index: i,
+          count: args.mcqsPer,
+          model: args.model,
+          mcqPrompt,
+          checkPrompt,
+          seenHashes,
+          fallbackDate: edition.date,
+          onLog: say,
+        });
 
     drafted.push(record);
     say(

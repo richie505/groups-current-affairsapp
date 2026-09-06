@@ -162,6 +162,35 @@ db.exec(schema);
       // — see server/scripts/export-compendium-json.js.
       ['hook', 'TEXT'],
       ['recap', 'TEXT'],
+
+      // ---- the blueprint-notes shape ------------------------------------
+      //
+      // The static subjects in this project are revised from blueprint notes,
+      // where a cell is a named question angle, an ANGLES line saying how the
+      // commission asks it, a tier by how hard that angle is pressed, facts
+      // grouped under headings, and the pairs a candidate confuses.
+      //
+      // A newspaper item already carried half of that — the angles are tagged
+      // from ref_keywords and the facts are bolded — and none of the rest, so
+      // a day's current affairs revised as a different kind of object from the
+      // standing material sitting next to it.
+      //
+      // `angle_line` is the composed line: "Post — Commission · Outlay · Date ·
+      // FIRST". The app has always stored the angle NAMES; it never composed
+      // the line that tells a student what shape the question takes.
+      ['angle_line', "TEXT NOT NULL DEFAULT ''"],
+      // CORE | HIGH | MED | '' — derived, free, from the PYQ bank. Distinct
+      // from `importance`, which is about recency and consequence: an item can
+      // be Tier 1 by importance and MED by blueprint pressure, and those are
+      // two different reasons to revise it. '' means the angles are UNTESTED
+      // rather than weakly tested, which on new material is often correct.
+      ['blueprint_tier', "TEXT NOT NULL DEFAULT ''"],
+      // "CEPA vs FTA — CEPA covers goods, services, investment and IPR", one
+      // per line. A revision aid in the blueprint notes, and here also the best
+      // distractor source there is: the wrong half of a real pair is plausible
+      // and clearly wrong, which is exactly what the MCQ brief asks for and
+      // what a model inventing distractors keeps failing to produce.
+      ['confusables', "TEXT NOT NULL DEFAULT ''"],
       // A FACT SALVAGED FROM AN ARTICLE THAT WAS NOT ITSELF EXAMINABLE.
       //
       // "Adani calls on Karnataka CM" is a routine political statement and the
@@ -317,6 +346,78 @@ db.exec(schema);
       // two were drafted; the signal is specific enough to be worth showing an
       // admin and nowhere near reliable enough to throw an article away on.
       ['bleed_suspect', 'INTEGER NOT NULL DEFAULT 0'],
+
+      // ---- the triage verdict ------------------------------------------
+      //
+      // WHAT THIS RECORDS THAT `score` AND `band` DO NOT.
+      //
+      // `score` is a five-factor composite computed from keyword and alias
+      // matches — deterministic, free, and blind to anything the vocabulary
+      // does not already contain. It answers "how much of the syllabus map
+      // does this article's text collide with". That is a useful question and
+      // it is not the question the pipeline actually needs answered, which is
+      // "is this examinable, and how much of it is worth writing down".
+      //
+      // The gap is measurable. Across the four stored editions, between 36 and
+      // 70 articles per edition matched no syllabus unit and were therefore
+      // never drafted, never salvaged, and never judged — the composite scored
+      // them, nothing read them, and no row said why. Some of those are genuine
+      // filler. Some are examinable material the alias map has a hole for. The
+      // score cannot tell them apart, by construction: it IS the alias map.
+      //
+      // So a model reads every article once, cheaply, in batches, and files a
+      // verdict here. Three columns rather than one, because a class with no
+      // score cannot be tuned and a score with no reason cannot be audited —
+      // and the whole point of keeping the drop pile is that somebody can go
+      // back and ask whether the line is in the right place.
+      //
+      // Empty string, not NULL, for `triage_class`: an edition processed before
+      // this existed has not been triaged, and '' reads as that everywhere
+      // without a three-valued comparison in every query.
+      ['triage_class', "TEXT NOT NULL DEFAULT ''"], // 'high' | 'partial' | 'drop'
+      // WHAT THE MODEL SAID, BEFORE THE APP'S OWN RULES TOUCHED IT.
+      //
+      // One rule currently overrides it: an article matching no syllabus unit
+      // cannot be drafted in full, whatever the model thinks, because that rule
+      // is what keeps "Cultural diversity highlight of gala dinner in Vizag"
+      // out of the digest. Such an article is demoted from `high` to `partial`
+      // and still yields its facts.
+      //
+      // Keeping both is the difference between a rule you can evaluate and one
+      // you have to believe. `triage_class <> triage_class_model` counts the
+      // overrides, and reading those rows is how anyone decides months from now
+      // whether the rule is still earning its place or is now just deleting
+      // good material because the alias map has a hole.
+      ['triage_class_model', "TEXT NOT NULL DEFAULT ''"],
+      ['triage_score', 'INTEGER'], // 0-100, the model's own, NOT the composite
+      ['triage_reason', "TEXT NOT NULL DEFAULT ''"], // one sentence, for the audit list
+      // The exam areas the model named — 'Andhra Pradesh, schemes', 'S&T'.
+      // Stored as a comma-joined string rather than a table: it is read as a
+      // label and never joined on, and a fifth derived table for a chip is a
+      // table somebody has to keep in step with the rest.
+      ['triage_areas', "TEXT NOT NULL DEFAULT ''"],
+      // Which model said so, and when. A verdict whose author is unknown cannot
+      // be compared against the next one, and the point of storing scores is to
+      // be able to move the threshold later on evidence.
+      ['triage_model', "TEXT NOT NULL DEFAULT ''"],
+      ['triaged_at', 'TEXT'],
+    ],
+
+    // The triage breakdown, denormalised onto the edition.
+    //
+    // Three COUNT(*)s over np_articles would give the same answer, and the
+    // editions list already runs six of those per row. This is the line the
+    // processing summary prints and the list shows on every edition, so it is
+    // read far more often than it is written — once per triage run.
+    np_editions: [
+      ['triage_high', 'INTEGER NOT NULL DEFAULT 0'],
+      ['triage_partial', 'INTEGER NOT NULL DEFAULT 0'],
+      ['triage_drop', 'INTEGER NOT NULL DEFAULT 0'],
+      // NULL until the edition has been triaged at all, which is what the
+      // screens test to decide whether to show the breakdown or a prompt to
+      // run it. The three counts above are 0 in both states and cannot
+      // distinguish "not triaged" from "triaged, nothing survived".
+      ['triaged_at', 'TEXT'],
     ],
   };
 

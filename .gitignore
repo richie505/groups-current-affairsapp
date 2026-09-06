@@ -25,3 +25,6 @@ server/data/uploads/
 # Database backups — see server/scripts/backup.js. Keep them off the machine
 # that holds the original, not in the repo that lives on it.
 server/data/backups/
+
+# Python bytecode from the layout extractor.
+content-pipeline/**/__pycache__/

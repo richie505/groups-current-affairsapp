@@ -146,7 +146,9 @@ router.post('/:id/process', (req, res) => {
 
 const DRAFTER = path.join(__dirname, '..', '..', 'scripts', 'draft-articles.js');
 const SALVAGER = path.join(__dirname, '..', '..', 'scripts', 'salvage-articles.js');
+const TRIAGER = path.join(__dirname, '..', '..', 'scripts', 'triage-edition.js');
 const SALVAGE = require('../lib/salvage');
+const TRIAGE = require('../lib/triage');
 
 // A LOCK THAT CAN BE HELD BY A PROCESS THAT NO LONGER EXISTS.
 //
@@ -226,7 +228,11 @@ router.get('/:id/plan', (req, res) => {
   );
 
   const rows = SELECT.candidateRows(db, id).filter((r) => redraft || !drafted.has(r.id));
-  const { picked, rejected, config } = SELECT.selectForDrafting(rows, opts);
+  // The preview has to agree with the run, so it counts what is drafted too.
+  const { picked, rejected, config, source } = SELECT.selectForDrafting(rows, {
+    ...opts,
+    alreadyDrafted: redraft ? 0 : drafted.size,
+  });
 
   // The evidence behind each pick, fetched in two queries rather than two per
   // article. This is what turns "25 articles" into something a person can audit:
@@ -264,6 +270,15 @@ router.get('/:id/plan', (req, res) => {
   res.json({
     edition: { id: ed.id, date: ed.date, publication: ed.publication },
     config,
+    // Which rule chose these. The screen has to say a different thing in each
+    // case, and it used to say only one — claiming "all of them feed a syllabus
+    // unit" on an edition where five of twelve do not, because that claim was
+    // true of the ranking it replaced.
+    source: source || 'deterministic',
+    // Articles going to full drafting with no unit behind them. Under the old
+    // rule this was impossible; under triage it is a vocabulary gap, and the
+    // number belongs where the claim about units used to be.
+    gaps: picked.filter((r) => !(unitsBy.get(r.id) || []).length).length,
     // Everything the selector considered, so the screen can say what was left.
     considered: rows.length,
     alreadyDrafted: drafted.size,
@@ -501,6 +516,124 @@ router.post('/:id/draft', (req, res) => {
 // A button rather than something drafting does automatically, for the same
 // reason drafting is a button: it costs money per article, and the number of
 // articles is decided by the paper rather than by anyone here.
+// ---------------------------------------------------------------------------
+// relevance triage
+// ---------------------------------------------------------------------------
+//
+// Normally nobody calls this: processing chains it. The routes exist for the
+// two cases that are not normal — an edition processed before triage existed,
+// and a re-run after the prompt or the band has been changed.
+
+router.post('/:id/triage', (req, res) => {
+  const id = Number(req.params.id);
+  const ed = db.prepare('SELECT id, status, date FROM np_editions WHERE id = ?').get(id);
+  if (!ed) return res.status(404).json({ error: 'No such edition.' });
+  if (ed.status !== 'processed') {
+    return res
+      .status(409)
+      .json({ error: 'Process the edition first — there are no articles to classify.' });
+  }
+
+  const redo = req.query.redo === '1';
+  const pending = TRIAGE.pendingRows(db, id, { redo }).length;
+  if (!pending) {
+    return res.status(409).json({
+      error: redo
+        ? 'This edition has no articles to classify.'
+        : 'Every article in this edition already carries a verdict. Pass redo=1 to classify them again.',
+    });
+  }
+
+  let runId;
+  try {
+    runId = L.startRun(db, {
+      windowStart: ed.date,
+      windowEnd: ed.date,
+      mode: `triage-${id}`,
+      model: String(req.query.model || process.env.OPENAI_SHORTLIST_MODEL || ''),
+    });
+  } catch (e) {
+    if (/UNIQUE constraint failed/i.test(e.message)) {
+      return res.status(409).json({ error: 'A triage run is already in progress.' });
+    }
+    throw e;
+  }
+
+  const argv = [TRIAGER, String(id), '--run-id', String(runId)];
+  if (redo) argv.push('--redo');
+  if (req.query.model) argv.push('--model', String(req.query.model));
+
+  const child = spawn(process.execPath, argv, {
+    detached: true,
+    stdio: 'ignore',
+    cwd: path.join(__dirname, '..', '..', '..'),
+  });
+  child.on('error', (e) => {
+    db.prepare(
+      `UPDATE ca_runs SET status = 'failed', finished_at = datetime('now'), log = ?
+        WHERE id = ? AND status = 'running'`
+    ).run(`Triage could not be started: ${e.message}`, runId);
+    console.error(`Could not start triage for edition ${id}: ${e.message}`);
+  });
+  child.unref();
+
+  res.status(202).json({ started: true, id, pending, runId });
+});
+
+// The breakdown, the last run, and the articles that need a look — the two
+// lists worth an admin's eye. Same shape as the drafting and salvage polls so
+// the client keeps one code path.
+router.get('/:id/triage', (req, res) => {
+  const id = Number(req.params.id);
+  const run = db
+    .prepare('SELECT * FROM ca_runs WHERE mode = ? ORDER BY id DESC LIMIT 1')
+    .get(`triage-${id}`);
+
+  const counts = TRIAGE.counts(db, id);
+
+  // THE DROP PILE, WHICH IS THE POINT OF STORING ANY OF THIS.
+  //
+  // A gate whose rejections nobody can see is a gate nobody can tune. Capped at
+  // 60 because a 90-article edition drops most of itself and the tail is
+  // uniform — the ones worth reading are the ones the deterministic scorer
+  // disagreed about, so they sort first.
+  const dropped = db
+    .prepare(
+      `SELECT id, page, headline, score, band, triage_score, triage_reason
+         FROM np_articles
+        WHERE edition_id = ? AND triage_class = 'drop' AND status <> 'duplicate'
+        ORDER BY score DESC, triage_score DESC
+        LIMIT 60`
+    )
+    .all(id);
+
+  // Articles going to full drafting with no syllabus unit behind them. Not
+  // errors — holes in the alias map, named so they get filled.
+  const gaps = db
+    .prepare(
+      `SELECT id, page, headline, triage_score, triage_areas, triage_reason
+         FROM np_articles a
+        WHERE a.edition_id = ? AND a.triage_class = 'high'
+          AND NOT EXISTS (
+                SELECT 1 FROM np_article_units u
+                  JOIN ref_units r ON r.unit_code = u.unit_code
+                 WHERE u.article_id = a.id
+                   AND r.format = 'objective' AND r.broad = 0 AND r.unfeedable = 0)
+        ORDER BY triage_score DESC`
+    )
+    .all(id);
+
+  res.json({
+    counts,
+    summary: TRIAGE.summaryLine(counts),
+    pending: TRIAGE.pendingRows(db, id).length,
+    dropped,
+    gaps,
+    run: run || null,
+    running: !!(run && run.status === 'running'),
+  });
+});
+
 router.post('/:id/salvage', (req, res) => {
   const id = Number(req.params.id);
   const ed = db.prepare('SELECT id, status, date FROM np_editions WHERE id = ?').get(id);
@@ -636,13 +769,26 @@ router.get('/:id', (req, res) => {
               COALESCE(bleed_suspect, 0) AS bleed_suspect,
               extraction, ocr_confidence, prominence, ap, status, discard_reason,
               merged_into, item_id, score, band, bucket, subjects, breakdown,
+              -- The triage verdict. triage_class is the route the article will
+              -- actually take; triage_class_model is what the model said before
+              -- the digest band moved the line, and the screen shows the
+              -- difference rather than hiding it.
+              triage_class, triage_class_model, triage_score, triage_reason, triage_areas,
               section, genre, genre_why, bylines, credits,
               substr(body, 1, 400) AS excerpt
          FROM np_articles
         WHERE edition_id = ?
-        -- Highest relevance first, which is the order the reviewer wants:
-        -- the point of scoring is that the list no longer has to be read whole.
-        ORDER BY (status = 'duplicate'), score DESC, ap DESC, page`
+        -- The route first, then the model's confidence in it. The point of
+        -- classifying is that the list no longer has to be read whole, and the
+        -- order that serves is "what is being written up, then what is being
+        -- kept as a fact, then what was let go".
+        --
+        -- An untriaged edition has '' in that column for every row and falls
+        -- back to the composite exactly as before.
+        ORDER BY (status = 'duplicate'),
+                 CASE triage_class WHEN 'high' THEN 0 WHEN 'partial' THEN 1
+                                   WHEN 'drop' THEN 2 ELSE 3 END,
+                 triage_score DESC, score DESC, ap DESC, page`
     )
     .all(ed.id);
 

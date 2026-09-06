@@ -32,6 +32,7 @@
 
 const { detect, isNoisePage } = require('./profiles');
 const G = require('./genre');
+const LIG = require('./ligatures');
 
 // ---------------------------------------------------------------------------
 // text cleanup
@@ -59,6 +60,15 @@ function clean(text) {
   t = t.replace(/­/g, '');            // soft hyphen
   t = t.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
   t = dehyphenate(t);
+  // AFTER de-hyphenation, and that ordering is the point.
+  //
+  // The table above handles the easy case — a real ligature CHARACTER in the
+  // text layer. This handles the hard one: a file whose font map sends every
+  // ligature back to a bare `f`, which layout.py detects by glyph width and
+  // marks. Resolving a marker means reading the letters that follow it, and
+  // column-set text breaks words at every line end, so "notifca- tion" has to
+  // be one word before anything can tell `fi` from `fl`.
+  t = LIG.resolve(t);
   return t.replace(/\s+/g, ' ').trim();
 }
 

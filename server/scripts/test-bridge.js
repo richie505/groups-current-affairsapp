@@ -110,6 +110,9 @@ const cleanup = () => {
 
 const checks = [];
 const check = (name, ok) => checks.push([name, !!ok]);
+// Asynchronous checks — the MCQ self-check is the only one, and it is
+// stubbed rather than calling a model. Awaited before the summary.
+const pending = [];
 
 // ---------------------------------------------------------------------------
 // fixtures
@@ -1283,13 +1286,547 @@ check('an empty digest renders rather than throwing', mdEmpty.includes('no publi
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// ligature repair — content-pipeline/np-daily/ligatures.js
+// ---------------------------------------------------------------------------
+//
+// The ePaper's font map returns every ff/fi/fl/ffi/ffl ligature as a bare "f".
+// layout.py finds them by glyph width and marks the two cases width cannot
+// settle; this resolves those from what follows. Tested here rather than
+// against a PDF because the decision is pure string work and the PDF is 10 MB.
+{
+  const LIG = require(path.join(__dirname, '..', '..', 'content-pipeline', 'np-daily', 'ligatures'));
+  const A = LIG.MARK_LIG2;
+  const B = LIG.MARK_LIG3;
+
+  const cases = [
+    // fi — the default, and right about four times in five
+    [`bene${A}ts`, 'benefits'],
+    [`${A}rst`, 'first'],
+    [`${A}nancial`, 'financial'],
+    [`identi${A}ed`, 'identified'],
+    [`noti${A}ed`, 'notified'],
+    [`scienti${A}c`, 'scientific'],
+    [`gasi${A}cation`, 'gasification'],
+    [`cease${A}re`, 'ceasefire'],
+    [`${A}ght`, 'fight'],
+    [`pro${A}le`, 'profile'],
+    // fl — only where the continuation says so
+    [`con${A}ict`, 'conflict'],
+    [`in${A}uence`, 'influence'],
+    [`${A}ood`, 'flood'],
+    [`${A}eet`, 'fleet'],
+    [`${A}ourish`, 'flourish'],
+    [`${A}ight`, 'flight'],
+    [`in${A}ation`, 'inflation'],
+    [`re${A}ect`, 'reflect'],
+    [`dragon${A}ies`, 'dragonflies'],
+    [`${A}ying`, 'flying'],
+    // ffi / ffl
+    [`o${B}ce`, 'office'],
+    [`o${B}cials`, 'officials'],
+    [`a${B}davit`, 'affidavit'],
+    [`tra${B}c`, 'traffic'],
+    [`insu${B}cient`, 'insufficient'],
+    [`reshu${B}e`, 'reshuffle'],
+    [`scu${B}e`, 'scuffle'],
+  ];
+  let ligBad = 0;
+  for (const [input, want] of cases) if (LIG.resolve(input) !== want) ligBad += 1;
+  check(`every ligature case resolves (${cases.length})`, ligBad === 0);
+
+  // THE ONE COLLISION IN THE SET, and the reason FL_AFTER_WORD_INITIAL exists.
+  // "fled" is fl+ed. Every other word ending that way is fi+ed, and there are
+  // eight of those in one edition against a single "fled".
+  check('"fled" resolves as fl when the ligature opens the word', LIG.resolve(`${A}ed`) === 'fled');
+  check('"filed" wins over "flled" — the continuation is not an fl one', LIG.resolve(`${A}led`) === 'filed');
+  check(
+    'and the same tail INSIDE a word reads as fi, not fl',
+    LIG.resolve(`identi${A}ed`) === 'identified' && LIG.resolve(`clari${A}ed`) === 'clarified'
+  );
+
+  check('capitals follow the word, not the marker', LIG.resolve(`${A}OOD ALERT`) === 'FLOOD ALERT');
+  check('a marker mid-sentence keeps its neighbours', LIG.resolve(`The ${A}ood hit`) === 'The flood hit');
+  // A marker that survives into the database is an invisible box in the middle
+  // of a word — worse than the broken spelling it replaced.
+  check('nothing is left behind', !LIG.hasMarkers(LIG.resolve(`a${A}b${B}c`)));
+  check('text with no markers is returned untouched', LIG.resolve('plain text') === 'plain text');
+
+  // The segmenter has to run the repair AFTER de-hyphenation, or a word broken
+  // across two column lines is judged on half its letters.
+  check(
+    'clean() resolves markers, after joining a word broken across lines',
+    SEG.clean(`noti${A}ca- tion issued`) === 'notification issued'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// relevance triage — server/src/lib/triage.js
+// ---------------------------------------------------------------------------
+//
+// The gate every article now passes before anything is spent on it. What is
+// tested here is the part that has to be right when the model is not: parsing a
+// reply, refusing a verdict about an article that was not in the batch, and
+// noticing the ones it forgot.
+{
+  const T = require(path.join(__dirname, '..', 'src', 'lib', 'triage'));
+
+  const good = JSON.stringify([
+    { id: 11, class: 'high', score: 84, reason: 'Cabinet decision with an outlay', areas: ['National', 'schemes'] },
+    { id: 12, class: 'partial', score: 45, reason: 'routine inauguration, but names the outlay' },
+    { id: 13, class: 'drop', score: 8, reason: 'road accident' },
+  ]);
+  const parsed = T.parseVerdicts(good, [11, 12, 13]);
+  check('a clean reply parses to three verdicts', parsed.verdicts.length === 3);
+  check('nothing is reported missing', parsed.missing.length === 0);
+  check('areas are flattened to a label', parsed.verdicts[0].areas === 'National, schemes');
+
+  // A verdict for an article that was not in the batch is a hallucinated id, and
+  // writing it would file one article's judgement onto another.
+  const stray = T.parseVerdicts(JSON.stringify([{ id: 999, class: 'high', score: 90 }]), [11]);
+  check('a verdict for an id outside the batch is refused', stray.verdicts.length === 0);
+  check('and the id that WAS asked about is reported missing', stray.missing.join() === '11');
+
+  // A silently missing verdict is an article nothing ever judged. It has to be
+  // visible, because it looks exactly like a deliberate drop otherwise.
+  const short = T.parseVerdicts(JSON.stringify([{ id: 11, class: 'high', score: 70 }]), [11, 12]);
+  check('a forgotten article is reported, not defaulted', short.missing.join() === '12');
+
+  check('an unparseable reply loses no ids', T.parseVerdicts('not json', [1, 2]).missing.length === 2);
+
+  // Models say "dropped", "reject" and "low" when asked for "drop". A strict
+  // match would throw those away silently.
+  check('class words are normalised', T.normaliseClass('Dropped') === 'drop' && T.normaliseClass('FULL') === 'high');
+  check('an unknown class is refused rather than guessed', T.normaliseClass('maybe') === '');
+  check('a missing score falls back by class', T.parseVerdicts(JSON.stringify([{ id: 1, class: 'high' }]), [1]).verdicts[0].score === 70);
+  check('a score outside 0-100 is clamped', T.parseVerdicts(JSON.stringify([{ id: 1, class: 'high', score: 480 }]), [1]).verdicts[0].score === 100);
+
+  // The no-syllabus-unit VETO is gone — it fired on 6 of the model's 9 high
+  // verdicts on the first real edition and every one was core material. What
+  // remains is the flag.
+  const gapRow = { unit_codes: null };
+  const routed = T.routeVerdict({ id: 1, class: 'high', score: 88, reason: '', areas: '' }, gapRow);
+  check('a high article with no syllabus unit is still high', routed.class === 'high');
+  check('and is flagged as a vocabulary gap', routed.vocabulary_gap === true);
+  check(
+    'an article that does match a unit is not flagged',
+    T.routeVerdict({ id: 2, class: 'high' }, { unit_codes: 'G2-P1-U7' }).vocabulary_gap === false
+  );
+
+  check('the article renders with its evidence, for the prompt', /units G2-P1-U7/.test(
+    T.renderArticle({ id: 5, page: 3, headline: 'H', body: 'B', score: 41, unit_codes: 'G2-P1-U7' })
+  ));
+  check('an unmatched article says so rather than omitting the line', /units none/.test(
+    T.renderArticle({ id: 6, page: 1, headline: 'H', body: 'B', score: 20, unit_codes: null })
+  ));
+}
+
+// ---------------------------------------------------------------------------
+// the digest band, over triage verdicts — server/src/lib/select.js
+// ---------------------------------------------------------------------------
+//
+// The model judges an article; the app decides how many articles a day yields.
+// Asked to do both, the model produced three `high` on a 93-article edition,
+// because each call sees twelve and cannot calibrate against the rest.
+{
+  const S = require(path.join(__dirname, '..', 'src', 'lib', 'select'));
+  const rows = [];
+  for (let i = 1; i <= 30; i += 1) {
+    rows.push({
+      id: i,
+      score: 50,
+      units: 1,
+      headlineUnits: 0,
+      bucket: 'national',
+      triage_class: i <= 26 ? 'partial' : 'drop',
+      triage_class_model: i <= 4 ? 'high' : i <= 26 ? 'partial' : 'drop',
+      triage_score: 100 - i,
+    });
+  }
+
+  const band = S.selectForDrafting(rows);
+  check('triage replaces the leverage ranking where it has run', band.source === 'triage');
+  check('a thin verdict set is lifted to the floor', band.picked.length === 12);
+  check('the best-scoring articles are the ones lifted', band.picked[0].id === 1);
+  check('dropped articles are never promoted to fill the band', band.picked.every((r) => r.triage_class !== 'drop'));
+  check('the rest become short entries rather than vanishing', band.rejected.length === 18);
+
+  check('a smaller dial re-draws the line with no model call', S.selectForDrafting(rows, { maxItems: 8, minItems: 8 }).picked.length === 8);
+  check('and a larger one reaches further down the ranking', S.selectForDrafting(rows, { minItems: 20 }).picked.length === 20);
+
+  const rich = rows.map((r) => ({ ...r, triage_class_model: r.triage_class === 'drop' ? 'drop' : 'high' }));
+  check('a rich day is held at the cap', S.selectForDrafting(rich, { maxItems: 15 }).picked.length === 15);
+
+  // An edition processed before triage existed has '' on every row and must
+  // take the original path untouched.
+  const old = rows.map(({ triage_class, triage_class_model, triage_score, ...r }) => ({ ...r, triage_class: '' }));
+  check('an untriaged edition still uses the deterministic ranking', S.selectForDrafting(old).source !== 'triage');
+}
+
+// ---------------------------------------------------------------------------
+// MCQ quality — server/src/lib/mcqQuality.js
+// ---------------------------------------------------------------------------
+//
+// validateMcq asks whether this is structurally a question. Every one of the
+// questions below passes that and is still unanswerable.
+{
+  const Q = require(path.join(__dirname, '..', 'src', 'lib', 'mcqQuality'));
+  const base = {
+    question: 'Which body was given the mandate to revise pay scales?',
+    option_a: 'The 12th Pay Revision Commission',
+    option_b: 'The 11th Pay Revision Commission',
+    option_c: 'The State Finance Commission',
+    option_d: 'The Public Accounts Committee',
+    correct_option: 'a',
+    explanation: 'The 12th PRC was announced on 6 September 2026.',
+    format: 'direct_recall',
+    fact_as_of: '2026-09-06',
+  };
+  const fatalOf = (over) => Q.inspect({ ...base, ...over }).fatal;
+
+  check('a sound question passes', Q.isSound(base));
+  check('and reports nothing soft either', Q.inspect(base).soft.length === 0);
+
+  check('"All of the above" is refused', fatalOf({ option_d: 'All of the above' }).length > 0);
+  check('"None of the above" too', fatalOf({ option_d: 'None of the above' }).length > 0);
+  check('and "Both (a) and (b)"', fatalOf({ option_d: 'Both (a) and (b)' }).length > 0);
+
+  check('a hedged stem is refused', fatalOf({ question: 'Which body is generally responsible for pay revision?' }).length > 0);
+  check(
+    'but the paper’s own house stems are not',
+    Q.isSound({ ...base, question: 'Which of the following best describes the mandate of the 12th PRC?' })
+  );
+
+  check('a stem that asks nothing is refused', fatalOf({ question: 'The 12th Pay Revision Commission was announced.' }).length > 0);
+
+  check(
+    'two options that differ only in punctuation are one option twice',
+    fatalOf({ option_b: 'the 12TH pay revision commission.' }).length > 0
+  );
+
+  check('a question with no explanation is refused', fatalOf({ explanation: '  ' }).length > 0);
+  check('a missing fact_as_of is a note, not a rejection', (() => {
+    const r = Q.inspect({ ...base, fact_as_of: '' });
+    return r.fatal.length === 0 && r.soft.some((s) => /fact_as_of/.test(s));
+  })());
+
+  // The length tell: a key written to be defensible acquires qualifiers the
+  // distractors never needed, and it can be picked without knowing anything.
+  check(
+    'a key far longer than every distractor is flagged',
+    Q.inspect({
+      ...base,
+      option_a: 'The 12th Pay Revision Commission, constituted by the State government in September 2026 to revise scales',
+    }).soft.some((s) => /length alone/.test(s))
+  );
+
+  // Assertion-Reason has four fixed options set by the paper, not by us.
+  const ar = {
+    ...base,
+    format: 'assertion_reason',
+    question: 'Assertion (A): The 12th PRC was constituted.\nReason (R): Two DAs were pending.',
+    option_a: 'Both A and R are true, and R correctly explains A',
+    option_b: 'Both A and R are true, but R does not correctly explain A',
+    option_c: 'A is true but R is false',
+    option_d: 'A is false but R is true',
+  };
+  check('a well-formed assertion-reason question passes', Q.isSound(ar));
+  check('one with free-form options is refused', fatalOf({ ...ar, option_d: 'None of these' }).length > 0);
+  check('and one whose stem states no Assertion is refused', fatalOf({ ...ar, question: 'Which is true of the PRC?' }).length > 0);
+
+  // A multi-statement question whose options count statements the stem does not
+  // list cannot be answered at all.
+  const multi = {
+    ...base,
+    format: 'multi_statement',
+    question: 'Consider the following statements:\n1. The 12th PRC was announced.\n2. Two DAs were released.\nWhich are correct?',
+    option_a: '1 only',
+    option_b: '2 only',
+    option_c: '1 and 2',
+    option_d: 'Neither 1 nor 2',
+  };
+  check('a well-formed multi-statement question passes', Q.isSound(multi));
+  check(
+    'options referring to a statement the stem never listed are refused',
+    fatalOf({ ...multi, option_c: '1, 2 and 3' }).length > 0
+  );
+  check('a multi-statement stem with no numbered statements is refused', fatalOf({ ...multi, question: 'Which are correct?' }).length > 0);
+  check('the statement counter reads the stem', Q.statementCount(multi.question) === 2);
+
+  // Combination options CONTAIN one another by design — that is the format, not
+  // a defect, and flagging it would make the check useless on the paper's most
+  // common shape.
+  check('a combination option inside another is not flagged in a multi-statement', Q.inspect(multi).soft.length === 0);
+}
+
 // ---------------------------------------------------------------------------
 
-let failed = 0;
-for (const [name, ok] of checks) {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
-  if (!ok) failed += 1;
+
+// ---------------------------------------------------------------------------
+// the MCQ self-check, with a stubbed model — server/src/lib/mcqQuality.js
+// ---------------------------------------------------------------------------
+//
+// The reject and rewrite paths are the ones that matter and the ones a real run
+// does not reliably exercise: on the two articles drafted from the 6 September
+// edition the model kept all twelve questions, which proves it runs and proves
+// nothing about what happens when it does not.
+{
+  const Q = require(path.join(__dirname, '..', 'src', 'lib', 'mcqQuality'));
+  const mk = (n) => ({
+    question: `Which body was given mandate ${n}?`,
+    option_a: 'The 12th Pay Revision Commission',
+    option_b: 'The 11th Pay Revision Commission',
+    option_c: 'The State Finance Commission',
+    option_d: 'The Public Accounts Committee',
+    correct_option: 'a',
+    explanation: 'Announced on 6 September 2026.',
+    format: 'direct_recall',
+    fact_as_of: '2026-09-06',
+  });
+  const record = { headline: 'H', notes_markdown: 'notes', prelims_facts: 'facts' };
+  const run = (reply) =>
+    Q.selfCheck({
+      record,
+      mcqs: [mk(1), mk(2), mk(3)],
+      model: 'stub',
+      prompt: 'stub',
+      complete: async () => reply,
+      parseJson: (raw) => JSON.parse(raw),
+    });
+
+  pending.push(
+    (async () => {
+      const keepAll = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          { n: 3, verdict: 'keep' },
+        ])
+      );
+      check('a clean second reading keeps every question', keepAll.kept.length === 3);
+
+      const rejected = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'reject', reason: 'the figure is not in the notes' },
+          { n: 3, verdict: 'keep' },
+        ])
+      );
+      check('a rejected question is dropped', rejected.kept.length === 2);
+      check('and its reason is kept, for the log', /not in the notes/.test(rejected.rejected[0].reason));
+
+      const rewritten = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          {
+            n: 3,
+            verdict: 'rewrite',
+            reason: 'two options were true',
+            question: 'Which body was constituted to revise pay scales in September 2026?',
+            option_a: 'The 12th Pay Revision Commission',
+            option_b: 'The State Finance Commission',
+            option_c: 'The Public Accounts Committee',
+            option_d: 'The Estimates Committee',
+            correct_option: 'a',
+            explanation: 'The 12th PRC, announced 6 September 2026.',
+          },
+        ])
+      );
+      check(
+        'a rewrite is applied rather than dropped',
+        rewritten.kept.length === 3 && rewritten.rewritten === 1
+      );
+      check('and the rewritten text replaces the original', /revise pay scales/.test(rewritten.kept[2].question));
+
+      // A REWRITE GOES BACK THROUGH THE FREE LAYER. Nothing else would catch a
+      // "fix" that reintroduces exactly what the first pass removed.
+      const badRewrite = await run(
+        JSON.stringify([
+          { n: 1, verdict: 'keep' },
+          { n: 2, verdict: 'keep' },
+          {
+            n: 3,
+            verdict: 'rewrite',
+            reason: 'tightened',
+            question: 'Which body was constituted in September 2026?',
+            option_a: 'The 12th Pay Revision Commission',
+            option_b: 'The State Finance Commission',
+            option_c: 'The Public Accounts Committee',
+            option_d: 'All of the above',
+            correct_option: 'a',
+            explanation: 'The 12th PRC.',
+          },
+        ])
+      );
+      check('a rewrite that reintroduces a banned option is dropped, not kept', badRewrite.kept.length === 2);
+
+      // A model that returned one verdict for three questions has not judged the
+      // other two. Dropping them would make an omission look like a decision.
+      const partial = await run(JSON.stringify([{ n: 1, verdict: 'reject', reason: 'x' }]));
+      check('questions the model did not judge are kept, not dropped', partial.kept.length === 2);
+
+      // And a failed call must not throw away questions that already passed the
+      // deterministic layer.
+      const broken = await Q.selfCheck({
+        record,
+        mcqs: [mk(1), mk(2)],
+        model: 'stub',
+        prompt: 'stub',
+        complete: async () => {
+          throw new Error('502 from the provider');
+        },
+        parseJson: JSON.parse,
+      });
+      check(
+        'a failed second reading keeps the questions and says so',
+        broken.kept.length === 2 && broken.checked === false
+      );
+    })()
+  );
 }
-console.log(`\n${checks.length - failed}/${checks.length} passed`);
-cleanup();
-process.exit(failed ? 1 : 0);
+
+
+
+// ---------------------------------------------------------------------------
+// the blueprint-notes layer — server/src/lib/blueprint.js
+// ---------------------------------------------------------------------------
+//
+// A drafted item is meant to be the same object as a blueprint-notes cell: a
+// named angle, the composed ANGLES line, a tier by PYQ pressure, grouped facts,
+// and the pairs a candidate confuses.
+{
+  const BP = require(path.join(__dirname, '..', 'src', 'lib', 'blueprint'));
+
+  // THE CUTS ARE OUR PERCENTILES, NOT THE BLUEPRINT'S INTEGERS. Their cells
+  // score 20-35 because a cell is a broad theme over a curated pool; our angles
+  // are finer-grained, so at their CORE >= 20 exactly 2 of 129 stored items
+  // qualify and the tier sorts nothing.
+  check('CORE starts at the p90 of our angle distribution', BP.TIER_CUTS.CORE === 7);
+  check('a heavily-tested angle is CORE', BP.tierOf(52) === 'CORE' && BP.tierOf(7) === 'CORE');
+  check('a middling one is HIGH', BP.tierOf(6) === 'HIGH' && BP.tierOf(3) === 'HIGH');
+  check('a lightly-tested one is MED', BP.tierOf(2) === 'MED' && BP.tierOf(1) === 'MED');
+  // An angle the commission has never asked is UNTESTED, not weakly tested —
+  // and on new current-affairs material that is often correct rather than
+  // damning. Collapsing the two would hide the distinction.
+  check('an untested angle gets no tier at all', BP.tierOf(0) === '' && BP.tierOf(null) === '');
+
+  // The tagger returned `Elected | Election | Elections | NOTA | System` on one
+  // item — three spellings of one angle taking three of its five slots.
+  const deduped = BP.dedupeAngles(['Elected', 'Election', 'Elections', 'NOTA', 'System']);
+  check('three spellings of one angle collapse to one', deduped.length === 3);
+  check('and the unrelated angles survive', deduped.includes('NOTA') && deduped.includes('System'));
+  check(
+    'the most-tested spelling wins',
+    BP.dedupeAngles(['Elections', 'Election'], (k) => (k === 'Elections' ? 9 : 1))[0] === 'Elections'
+  );
+  // "Local Self Government" and "Government" are not the same angle, and no
+  // stemmer should be allowed to say they are.
+  check(
+    'multi-word angles are never merged',
+    BP.dedupeAngles(['Local Self Government', 'Government']).length === 2
+  );
+  check('Scheme and Schemes are one angle', BP.dedupeAngles(['Scheme', 'Schemes']).length === 1);
+
+  // The punctuation is load-bearing: an em dash marks the pairing a
+  // list-matching question is built from, a '·' separates independent facets.
+  check(
+    'the ANGLES prefix is stripped',
+    BP.normaliseAngleLine('ANGLES: Country — Agreement · Date') === 'Country — Agreement · Date'
+  );
+  check(
+    'pipes and semicolons become facet separators',
+    BP.normaliseAngleLine('Country — Agreement | Date; FIRST') === 'Country — Agreement · Date · FIRST'
+  );
+  check(
+    'a hyphen pairing becomes an em dash',
+    BP.normaliseAngleLine('Post - Commission · Outlay') === 'Post — Commission · Outlay'
+  );
+  check('a trailing separator is trimmed', BP.normaliseAngleLine('Body — Members · ') === 'Body — Members');
+  check('an empty line stays empty', BP.normaliseAngleLine('') === '' && BP.normaliseAngleLine(null) === '');
+
+  const conf = BP.parseConfusables(
+    'CEPA vs FTA — CEPA covers goods, services, investment and IPR\nOPEC vs OPEC+ — OPEC was founded 1960'
+  );
+  check('confusables split into pair and point', conf.length === 2 && conf[0].pair === 'CEPA vs FTA');
+  check('the point survives whole', /investment and IPR/.test(conf[0].point));
+  check('a bullet marker is stripped', BP.parseConfusables('- A vs B — x')[0].pair === 'A vs B');
+  check('a plain hyphen separates too', BP.parseConfusables('A vs B - the point')[0].point === 'the point');
+  check('a pair with no point is still a pair', BP.parseConfusables('A vs B')[0].pair === 'A vs B');
+
+  // Three is a revision aid; ten is a second note.
+  check(
+    'confusables are capped at three',
+    BP.formatConfusables(['a — 1', 'b — 2', 'c — 3', 'd — 4']).split(/\r?\n/).length === 3
+  );
+  check(
+    'the object form the model returns is accepted',
+    BP.formatConfusables([{ pair: 'CEPA vs FTA', point: 'scope differs' }]) === 'CEPA vs FTA — scope differs'
+  );
+  check('an empty value formats to an empty string', BP.formatConfusables([]) === '' && BP.formatConfusables(null) === '');
+
+  // The whole reason confusables are worth storing twice over: they are the
+  // best distractor material there is.
+  const brief = BP.distractorBrief('CEPA vs FTA — scope differs');
+  check('the distractor brief names the pair', /CEPA vs FTA/.test(brief));
+  check('and says why it is being handed over', /distractor/i.test(brief));
+  check('no confusables means no brief at all', BP.distractorBrief('') === '');
+
+  // Pressure is the MAXIMUM across an item's angles, never the sum: the
+  // question is "how likely is this to be asked", which the strongest angle
+  // decides, not how many weak ones the item collected.
+  //
+  // Against a stub rather than the scratch database. The scratch file has no
+  // PYQ bank, seeding one means satisfying a foreign key into pyq_questions,
+  // and a test that asserts "Scheme has more than zero" would be a test of what
+  // happens to sit in a table rather than of the function.
+  const bank = { Scheme: 9, Committee: 2 };
+  const fakeDb = {
+    prepare: () => ({
+      get: (...args) => {
+        const hits = args
+          .map((k) => ({ keyword: k, n: bank[k] || 0 }))
+          .filter((r) => r.n > 0)
+          .sort((a, b) => b.n - a.n);
+        return hits[0];
+      },
+    }),
+  };
+
+  check('pressure is the strongest angle, not the total', BP.pressureOf(fakeDb, ['Scheme', 'Committee']) === 9);
+  check('the weaker angle alone gives its own count', BP.pressureOf(fakeDb, ['Committee']) === 2);
+  check('an item with no angles has no pressure', BP.pressureOf(fakeDb, []) === 0);
+  check('an angle nobody has asked has none either', BP.pressureOf(fakeDb, ['Nonesuch']) === 0);
+  check(
+    'and the tier follows from it',
+    BP.tierOf(BP.pressureOf(fakeDb, ['Scheme', 'Committee'])) === 'CORE' &&
+      BP.tierOf(BP.pressureOf(fakeDb, ['Committee'])) === 'MED'
+  );
+  // An install with no PYQ bank at all must get no tier, not an exception.
+  check(
+    'a missing PYQ bank leaves the tier empty rather than throwing',
+    BP.pressureOf(
+      { prepare: () => { throw new Error('no such table: pyq_question_keywords'); } },
+      ['Scheme']
+    ) === 0
+  );
+}
+
+
+Promise.all(pending)
+  .catch((e) => {
+    console.error('an asynchronous check threw:', e);
+    check('asynchronous checks completed', false);
+  })
+  .then(() => {
+    let failed = 0;
+    for (const [name, ok] of checks) {
+      console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
+      if (!ok) failed += 1;
+    }
+    console.log(`
+${checks.length - failed}/${checks.length} passed`);
+    cleanup();
+    process.exit(failed ? 1 : 0);
+  });

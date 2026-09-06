@@ -151,6 +151,54 @@ function selectForDrafting(rows, opts = {}) {
   // that makes a person stop trusting the flag.
   cfg.minItems = Math.min(cfg.minItems, cfg.maxItems);
 
+  // TRIAGE, WHERE IT HAS RUN, REPLACES EVERYTHING BELOW.
+  //
+  // The rest of this function is a proxy for a judgement nobody could make:
+  // leverage and composite score, weighted, because no model had read the
+  // article. One has now. It is a better instrument for the question "is this
+  // examinable" than a keyword collision count, and it says so with a reason
+  // per article rather than a number.
+  //
+  // What is NOT delegated is how many articles a day should yield. That is the
+  // same band as ever, applied here rather than at triage time so that moving
+  // the dial on the drafting screen re-draws it for free — the verdicts are
+  // already bought and paid for, and re-banding costs no model call at all.
+  //
+  // An edition processed before triage existed has no class on any row and
+  // falls through to the original path unchanged.
+  const triaged = rows.filter((r) => r.triage_class);
+  if (triaged.length) {
+    const pool = triaged
+      .filter((r) => r.triage_class !== 'drop')
+      .map((r) => ({ ...r, ...rankOf(r) }))
+      // The model's own score orders this, not the composite. The composite
+      // breaks ties, because two articles the model scored 55 are separated by
+      // the syllabus evidence — the one signal the model was not shown.
+      .sort((a, b) => (b.triage_score || 0) - (a.triage_score || 0) || b.score - a.score);
+
+    // How many the MODEL wanted, held inside the band. Not the pool size: the
+    // pool is everything worth keeping at all, most of which is worth a short
+    // entry rather than 250 words, and taking all of it would make `partial`
+    // mean nothing.
+    //
+    // THE BAND COUNTS WHAT IS ALREADY DRAFTED, and that matters the moment a
+    // run is resumed. Articles with an item are filtered out before they reach
+    // here, so on a second pass the floor of 12 would be applied to the
+    // REMAINDER — two drafted this morning plus twelve more this afternoon is
+    // fourteen, from a day the triage sized at twelve. The band is a budget for
+    // the day, so it has to be spent against the day's total.
+    const already = Math.max(0, Number(cfg.alreadyDrafted) || 0);
+    const wanted = pool.filter((r) => r.triage_class_model === 'high').length;
+    const target = Math.max(cfg.minItems, Math.min(cfg.maxItems, wanted + already));
+    const n = Math.min(pool.length, Math.max(0, target - already));
+    return {
+      picked: pool.slice(0, n),
+      rejected: [...pool.slice(n), ...triaged.filter((r) => r.triage_class === 'drop')],
+      config: cfg,
+      source: 'triage',
+    };
+  }
+
   const ranked = rows
     .map((r) => ({ ...r, ...rankOf(r) }))
     .sort((a, b) => b.rank - a.rank || b.score - a.score);
@@ -236,6 +284,7 @@ function candidateRows(db, editionId) {
       // scorer onto the article, so this is a read of a settled finding
       // rather than a second opinion about where an event happened.
       `SELECT a.id, a.score, a.headline, a.page, a.band, a.bucket,
+              a.triage_class, a.triage_class_model, a.triage_score,
               COUNT(DISTINCT au.unit_code) AS units,
               COALESCE(SUM(DISTINCT CASE WHEN au.in_headline THEN 1 ELSE 0 END), 0) AS headlineUnits
          FROM np_articles a

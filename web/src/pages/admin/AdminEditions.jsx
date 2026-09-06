@@ -419,6 +419,12 @@ function EditionList() {
                     {e.discarded ? <span>{e.discarded} discarded</span> : null}
                     {e.merged ? <span>{e.merged} merged</span> : null}
                     {e.drafted ? <span>{e.drafted} drafted</span> : null}
+                    {e.triaged_at ? (
+                      <span className="font-semibold text-slate-800">
+                        {e.triage_high} high · {e.triage_partial} partial ·{' '}
+                        {e.triage_drop} dropped
+                      </span>
+                    ) : null}
                   </>
                 ) : null}
                 {e.status === 'processing' ? <span>Working — this takes about 30 seconds…</span> : null}
@@ -535,6 +541,16 @@ function OneEdition({ id }) {
             ['Articles', live.length],
             ['Distinct events', e.events],
             ['Merged', e.merged],
+            // Only once the edition has been classified. A zero here before
+            // triage runs would read as "nothing was examinable" rather than
+            // "nothing has looked yet".
+            ...(e.triaged_at
+              ? [
+                  ['Full drafting', e.triage_high],
+                  ['Facts only', e.triage_partial],
+                  ['Dropped', e.triage_drop],
+                ]
+              : []),
           ].map(([label, value]) => (
             <div
               key={label}
@@ -562,6 +578,10 @@ function OneEdition({ id }) {
             {e.log}
           </pre>
         </details>
+      ) : null}
+
+      {e.status === 'processed' ? (
+        <TriagePanel editionId={id} onFinished={reload} />
       ) : null}
 
       {e.status === 'processed' ? (
@@ -747,6 +767,256 @@ function SalvagePanel({ editionId, onFinished }) {
             : 'Nothing left to salvage'}
       </button>
     </section>
+  );
+}
+
+// THE GATE, AND — more to the point — WHAT IT TURNED DOWN.
+//
+// Triage runs by itself when an edition is processed, so most of the time this
+// panel is a report rather than a control. It is here for the thing a number
+// cannot do: an automatic filter whose rejections nobody can see is a filter
+// nobody can correct, and this is the only screen where the 67 articles that
+// were let go can be read back.
+//
+// Two lists, and they answer different questions. The drop pile answers "is the
+// line in the right place" — sorted so the articles the deterministic scorer
+// disagreed about come first, because those are the ones worth an argument. The
+// vocabulary gaps answer "what is the syllabus map missing": articles going to
+// full drafting with no unit behind them, which is not a fault in the article.
+function TriagePanel({ editionId, onFinished }) {
+  const [state, setState] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [showDropped, setShowDropped] = useState(false);
+  const [showGaps, setShowGaps] = useState(false);
+
+  const running = !!state?.running;
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get(`/admin/editions/${editionId}/triage`);
+      setState(res);
+      return res.running;
+    } catch {
+      return false;
+    }
+  }, [editionId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // The worker is a separate process, so the only way this screen learns it
+  // finished is to ask — the same pattern as drafting and salvage above.
+  useEffect(() => {
+    if (!running) return undefined;
+    const t = setInterval(async () => {
+      const still = await load();
+      if (!still) onFinished?.();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [running, load, onFinished]);
+
+  async function start(redo) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.post(`/admin/editions/${editionId}/triage${redo ? '?redo=1' : ''}`, {});
+      setMsg({ kind: 'ok', text: 'Classifying — about a minute. You can leave this page.' });
+      await load();
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+  const c = state.counts || {};
+  const classified = c.high + c.partial + c.drop > 0;
+
+  return (
+    <section className="mb-5 rounded-lg border border-slate-300 bg-surface p-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+          Relevance triage
+        </h2>
+        {running ? (
+          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+            <IconSpinner className="animate-spin" /> classifying…
+          </span>
+        ) : null}
+      </div>
+
+      {classified ? (
+        <>
+          {/* The line the whole stage exists to produce. */}
+          <p className="mt-1.5 text-sm text-slate-900">
+            <strong>{c.articles}</strong> articles →{' '}
+            <strong className="text-green-700">{c.high} high</strong> ·{' '}
+            <strong className="text-violet-700">{c.partial} partial</strong> ·{' '}
+            <strong className="text-slate-600">{c.drop} dropped</strong>
+          </p>
+          <p className="mt-0.5 text-xs text-slate-600">
+            High goes through the full pipeline — notes, static background, questions. Partial
+            keeps only the examinable facts, as a Miscellaneous card. Dropped costs nothing and is
+            kept below so the line can be checked.
+          </p>
+          {c.untriaged ? (
+            <p className="mt-1 text-xs text-amber-800">
+              {c.untriaged} article(s) carry no verdict — the model did not return one for them
+              after two passes. They fall back to the older, deterministic routing.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-1.5 text-sm text-slate-600">
+          This edition has not been classified. Editions processed from now on are classified
+          automatically; this one predates that, or its run failed.
+        </p>
+      )}
+
+      {/* ---- articles going to full drafting with no syllabus unit ---- */}
+      {state.gaps?.length ? (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2.5">
+          <button
+            type="button"
+            onClick={() => setShowGaps((v) => !v)}
+            aria-expanded={showGaps}
+            className="flex w-full items-center justify-between text-left text-xs font-semibold text-amber-900"
+          >
+            <span>
+              {state.gaps.length} article(s) being drafted in full that match NO syllabus unit
+            </span>
+            <span className="text-amber-700">{showGaps ? 'Hide' : 'Show'}</span>
+          </button>
+          <p className="mt-1 text-[11px] text-amber-900">
+            Not a fault in the article — a hole in the syllabus vocabulary. Add the missing term and
+            they arrive matched next time, and the paper mapping in the digest stops being blank
+            for them.
+          </p>
+          {showGaps ? (
+            <ul className="mt-1.5 space-y-1">
+              {state.gaps.map((g) => (
+                <li key={g.id} className="text-[11px] text-slate-800">
+                  <span className="font-mono text-slate-500">{Math.round(g.triage_score)}</span>{' '}
+                  <span className="text-slate-400">p{g.page}</span>{' '}
+                  <RichText>{String(g.headline || '').slice(0, 74)}</RichText>
+                  {g.triage_areas ? (
+                    <span className="ml-1 text-slate-500">· {g.triage_areas}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ---- the drop pile ---- */}
+      {state.dropped?.length ? (
+        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+          <button
+            type="button"
+            onClick={() => setShowDropped((v) => !v)}
+            aria-expanded={showDropped}
+            className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-800"
+          >
+            <span>Dropped — {c.drop} article(s), with the reason</span>
+            <span className="text-slate-500">{showDropped ? 'Hide' : 'Show'}</span>
+          </button>
+          {showDropped ? (
+            <>
+              <p className="mt-1 text-[11px] text-slate-600">
+                Highest composite score first, so the articles the deterministic scorer rated well
+                and the model turned down are at the top. Those are the disagreements worth
+                reading — everything below them is the ordinary business of a newspaper being
+                mostly not exam material.
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {state.dropped.map((d) => (
+                  <li key={d.id} className="text-[11px] text-slate-700">
+                    <span className="font-mono text-slate-500">
+                      {Math.round(d.score)}/{Math.round(d.triage_score)}
+                    </span>{' '}
+                    <span className="text-slate-400">p{d.page}</span>{' '}
+                    <span className="text-slate-800">
+                      {String(d.headline || '').slice(0, 58)}
+                    </span>
+                    {d.triage_reason ? (
+                      <span className="text-slate-500"> — {d.triage_reason}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[10px] text-slate-500">
+                The two numbers are the deterministic composite and the model&rsquo;s own score.
+              </p>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {msg ? (
+        <p
+          className={`mt-2 rounded-md px-2.5 py-1.5 text-xs ${
+            msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'
+          }`}
+          role={msg.kind === 'error' ? 'alert' : undefined}
+        >
+          {msg.text}
+        </p>
+      ) : null}
+
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {state.pending ? (
+          <button
+            type="button"
+            onClick={() => start(false)}
+            disabled={busy || running}
+            className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60"
+          >
+            Classify {state.pending} article(s)
+          </button>
+        ) : null}
+        {classified ? (
+          <button
+            type="button"
+            onClick={() => start(true)}
+            disabled={busy || running}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Classify again
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+// The verdict, on the article row. Colour carries the route so the list can be
+// scanned rather than read, which is the same reason the band badge exists.
+function TriageChip({ article }) {
+  const cls = article.triage_class;
+  if (!cls) return null;
+  const tone = {
+    high: 'bg-green-600 text-slate-50',
+    partial: 'bg-violet-200 text-violet-900',
+    drop: 'bg-slate-200 text-slate-500',
+  }[cls];
+  const label = { high: 'FULL', partial: 'FACTS', drop: 'DROPPED' }[cls];
+  // The band moved this one. Worth showing: it is the difference between "the
+  // model thought this was ordinary" and "the model wanted it and the digest
+  // was already full".
+  const moved = article.triage_class_model && article.triage_class_model !== cls;
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[11px] font-bold uppercase ${tone}`}
+      title={article.triage_reason || ''}
+    >
+      {label}
+      {article.triage_score != null ? ` ${Math.round(article.triage_score)}` : ''}
+      {moved ? '*' : ''}
+    </span>
   );
 }
 
@@ -940,21 +1210,44 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
         </p>
       ) : (
         <>
-          {/* THE HEADLINE CLAIM, and the one number that matters: every article
-              selected connects to a published syllabus unit. */}
+          {/* THE HEADLINE CLAIM.
+              It used to read "all of them feed a syllabus unit" unconditionally,
+              which was true of the ranking it described and is false under
+              triage — on the first classified edition five of twelve picks have
+              no unit at all, and they are the Pay Revision Commission and the
+              Census schedule rather than junk. A screen that states a rule the
+              code no longer applies is worse than one that states nothing. */}
           <p className="mt-3 text-sm font-semibold text-slate-900">
             {picks.length} article{picks.length === 1 ? '' : 's'} selected
-            {picks.length ? ' — all of them feed a syllabus unit' : ''}
+            {picks.length && plan.source !== 'triage' ? ' — all of them feed a syllabus unit' : ''}
             {plan.alreadyDrafted ? (
               <span className="font-normal text-slate-500"> · {plan.alreadyDrafted} already drafted</span>
             ) : null}
           </p>
 
-          <p className="mt-1 text-xs text-slate-600">
-            Ranked by <strong>55% syllabus leverage + 45% relevance score</strong>. Leverage counts
-            the distinct syllabus units an article feeds, with a bonus when a unit is named in the
-            headline. Nothing that connects to no unit is drafted automatically.
-          </p>
+          {plan.source === 'triage' ? (
+            <p className="mt-1 text-xs text-slate-600">
+              Chosen by <strong>relevance triage</strong> — a model read every article in the
+              edition and scored it, and these are the highest-scoring ones the digest band admits.
+              The rest of what it kept becomes short fact cards through the salvage pass below.
+              {plan.gaps ? (
+                <>
+                  {' '}
+                  <strong className="text-amber-800">
+                    {plan.gaps} of them match no syllabus unit
+                  </strong>{' '}
+                  — examinable material the alias map is missing, listed under Relevance triage
+                  above.
+                </>
+              ) : null}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-600">
+              Ranked by <strong>55% syllabus leverage + 45% relevance score</strong>. Leverage
+              counts the distinct syllabus units an article feeds, with a bonus when a unit is named
+              in the headline. Nothing that connects to no unit is drafted automatically.
+            </p>
+          )}
 
           {picks.length ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
@@ -1114,7 +1407,7 @@ function DraftPanel({ editionId, articles, selected = [], onSelect, onClearSelec
       {/* THE VOCABULARY TO-DO LIST. Named rather than silently excluded: these
           are articles the scorer liked and the syllabus map could not place, and
           that is usually a missing alias rather than a worthless article. */}
-      {!picking && !advanced && unmatched.length ? (
+      {!picking && !advanced && plan?.source !== 'triage' && unmatched.length ? (
         <details className="mt-2">
           <summary className="cursor-pointer text-xs font-semibold text-amber-800">
             Turned down — scored 45+ but match no syllabus unit ({unmatched.length})
@@ -1287,6 +1580,7 @@ function ArticleList({ rows, muted, selected = [], onToggle }) {
                 />
               </label>
             ) : null}
+            <TriageChip article={a} />
             <BandBadge band={a.band} score={a.score} />
             <UnitChips units={a.units} />
             <span className="font-mono">p{a.page}</span>

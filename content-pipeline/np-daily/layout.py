@@ -101,10 +101,179 @@ def tesseract_langs(binary):
 
 
 # ---------------------------------------------------------------------------
+# ligatures the file's own font map threw away
+# ---------------------------------------------------------------------------
+#
+# The Hindu's ePaper embeds Publico with a ToUnicode map that sends every
+# ff/fi/fl/ffi/ffl ligature back to a bare "f", so the text layer reads "Staf",
+# "beneft", "ofce", "coal gasifcation" — 142 mangled words in one edition.
+#
+# It reads like a fault in one file and is not. The four August editions stored
+# in this database are clean, but re-extracting their PDFs here produces the
+# same damage: they were processed on the previous workstation, and it is that
+# machine's PyMuPDF, not those files, that got the ligatures out intact. Every
+# edition read on THIS machine needs the repair.
+#
+# The glyph itself is not lost, only its name — and a ligature glyph is far
+# wider than a plain "f". So the width is measured against the plain "f" of the
+# SAME font at the SAME size, which puts each one in a cluster:
+#
+#   1.00  plain f        1.81  fi or fl        1.93  ff        2.75  ffi or ffl
+#
+# Two of those are certain and are written out here. The other two are decided
+# in content-pipeline/np-daily/ligatures.js, from the letters that follow,
+# after the segmenter has rejoined words broken across lines — "notifca-tion"
+# has to become one word before anything can judge it.
+#
+# A file whose ligatures came through correctly is left alone: the check is per
+# span, and a map that expanded a ligature makes the text longer than the glyph
+# count, which span_text_with_ligatures treats as "nothing to do here".
+
+MARK_LIG2 = chr(0xE000)  # fi or fl — resolved downstream
+MARK_LIG3 = chr(0xE002)  # ffi or ffl — resolved downstream
+
+# Below this, treat the width as a plain "f". Well clear of both clusters: the
+# nearest measured values are 1.00 and 1.81.
+LIG2_MIN = 1.35
+LIG2_MAX = 1.87   # above this and it is ff, which needs no guess
+LIG3_MIN = 2.25
+
+# A font+size needs this many "f" glyphs before its narrowest one is trusted as
+# the plain-f reference. With three samples that all happen to be ligatures the
+# reference would BE a ligature, every ratio would come out at 1.0, and nothing
+# would be repaired — safe, but silent. The floor makes that explicit.
+LIG_MIN_SAMPLES = 12
+
+
+def plain_f_widths(doc, pages):
+    """The width of a plain "f", per (font, size), as a fraction of the size.
+
+    A first pass of its own because the reference has to come from the whole
+    document: a font that appears twice on page 3 and forty times on page 11
+    cannot calibrate itself from page 3.
+
+    The 5th percentile rather than the minimum — one clipped bounding box would
+    otherwise set the reference for every glyph in the font.
+    """
+    by_size = {}
+    by_font = {}
+    for pno in pages:
+        for block in doc[pno].get_text("rawdict").get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    size = float(span.get("size", 0)) or 1.0
+                    font = span.get("font", "")
+                    for ch in span.get("chars", []):
+                        if ch.get("c") != "f":
+                            continue
+                        bb = ch.get("bbox") or (0, 0, 0, 0)
+                        w = (bb[2] - bb[0]) / size
+                        by_size.setdefault((font, round(size, 1)), []).append(w)
+                        by_font.setdefault(font, []).append(w)
+
+    def reference(vals):
+        """The plain-f width, or None when the sample cannot support one."""
+        if len(vals) < LIG_MIN_SAMPLES:
+            return None
+        vals = sorted(vals)
+        # The 5th percentile rather than the minimum: one clipped bounding box
+        # would otherwise set the reference for every glyph in the font.
+        base = vals[int(len(vals) * 0.05)]
+        if base <= 0:
+            return None
+        # Only where the fault is actually PRESENT. A file whose ligatures came
+        # through correctly has nothing wider than a plain "f", and an empty
+        # answer is what lets the caller skip the per-character pass entirely.
+        if vals[-1] / base < LIG2_MIN:
+            return None
+        return base
+
+    # TWO REFERENCES, AND THE SECOND ONE IS NOT A REFINEMENT.
+    #
+    # Keyed on (font, size) the body text calibrates beautifully — 2,461 "f"
+    # glyphs in one bucket. Headlines do not: a masthead font is used at nine
+    # different sizes, a dozen glyphs at each, so every bucket falls under the
+    # sample floor and the headline is left broken while the story under it is
+    # repaired. That is the worst of both — "Staf to get PRC" above a paragraph
+    # that reads "staff" correctly.
+    #
+    # Pooling by font fixes it because the measurement is already scale-free:
+    # every width here is divided by its own point size, so a 25pt "f" and an
+    # 8.9pt "f" from the same family land on the same number.
+    ref = {}
+    for key, vals in by_size.items():
+        base = reference(vals)
+        if base:
+            ref[key] = base
+    for font, vals in by_font.items():
+        base = reference(vals)
+        if base:
+            ref[font] = base
+    return ref
+
+
+def span_text_with_ligatures(text, span, ref):
+    """`text` (from get_text("dict")) with lost ligatures marked.
+
+    THE TEXT COMES FROM "dict", NOT FROM THE CHARACTERS.
+    -----------------------------------------------------
+    This is the whole correctness argument and it cost a wrong turn to find.
+    "rawdict" reports one entry per GLYPH and gives only the FIRST character of
+    a glyph that maps to several — so on a healthy file, where the ligature maps
+    correctly to "ffi", "dict" says `Officer` and "rawdict" says `Ofcer`.
+    Building the text from the characters therefore BREAKS the files that were
+    never broken, which is the opposite of the job.
+
+    So "dict" stays the source of the text, and the characters are used only for
+    their geometry. The two are compared by length: where the glyph map expanded
+    a ligature correctly the strings differ in length and nothing is touched;
+    where they are the same length the map produced one character per glyph,
+    which is exactly the fault, and the widths can say which ones.
+    """
+    chars = span.get("chars", [])
+    # The map expanded something — this span is fine as it stands.
+    if len(chars) != len(text):
+        return text, 0
+
+    size = float(span.get("size", 0)) or 1.0
+    font = span.get("font", "")
+    # The size-specific reference first, the family-wide one second. See
+    # plain_f_widths for why both exist.
+    base = ref.get((font, round(size, 1))) or ref.get(font)
+    if not base:
+        return text, 0
+
+    # One character of `text` per glyph, checked above, so the two index
+    # together. The text is what is emitted; the glyph only says how wide it is.
+    out = []
+    repairs = 0
+    for i, c in enumerate(text):
+        if c != "f":
+            out.append(c)
+            continue
+        bb = chars[i].get("bbox") or (0, 0, 0, 0)
+        ratio = ((bb[2] - bb[0]) / size) / base
+        if ratio >= LIG3_MIN:
+            out.append(MARK_LIG3)
+            repairs += 1
+        elif ratio > LIG2_MAX:
+            out.append("ff")
+            repairs += 1
+        elif ratio >= LIG2_MIN:
+            out.append(MARK_LIG2)
+            repairs += 1
+        else:
+            out.append(c)
+    return "".join(out), repairs
+
+
+# ---------------------------------------------------------------------------
 # path A: the text layer
 # ---------------------------------------------------------------------------
 
-def blocks_from_text_layer(page):
+def blocks_from_text_layer(page, ligature_ref=None):
     """PyMuPDF blocks, each reduced to a dominant (font, size) plus its text.
 
     Block-level rather than span-level is a deliberate trade. The Hindu's
@@ -114,15 +283,35 @@ def blocks_from_text_layer(page):
     `fonts` summary is kept so the loss is visible rather than silent.
     """
     out = []
+    repairs = 0
     data = page.get_text("dict")
-    for b in data.get("blocks", []):
+    # "rawdict" alongside it, never instead of it — see span_text_with_ligatures
+    # for why the text has to come from "dict". Fetched only when there is a
+    # reference to measure against, because it carries a dict per CHARACTER and
+    # is several times the size.
+    raw = page.get_text("rawdict") if ligature_ref else None
+    raw_blocks = raw.get("blocks", []) if raw else []
+
+    for bi, b in enumerate(data.get("blocks", [])):
         if b.get("type") != 0:
             continue  # image block: geometry only, no text to route
+        # The two structures come from one layout analysis, so they agree block
+        # for block and span for span. Indexed defensively anyway: a mismatch
+        # must skip the repair, not raise, because an edition that fails to
+        # extract is worse than one with a broken word in it.
+        rb = raw_blocks[bi] if bi < len(raw_blocks) else None
+        rb_lines = rb.get("lines", []) if rb else []
         weights = Counter()
         pieces = []
-        for line in b.get("lines", []):
-            for span in line.get("spans", []):
+        for li, line in enumerate(b.get("lines", [])):
+            rl = rb_lines[li] if li < len(rb_lines) else None
+            rl_spans = rl.get("spans", []) if rl else []
+            for si, span in enumerate(line.get("spans", [])):
                 text = span.get("text", "")
+                rs = rl_spans[si] if si < len(rl_spans) else None
+                if rs is not None and text:
+                    text, n = span_text_with_ligatures(text, rs, ligature_ref)
+                    repairs += n
                 if not text:
                     continue
                 weights[(span.get("font", ""), round(float(span.get("size", 0)), 1))] += len(text)
@@ -149,7 +338,7 @@ def blocks_from_text_layer(page):
                 ),
             }
         )
-    return out
+    return out, repairs
 
 
 # ---------------------------------------------------------------------------
@@ -322,9 +511,19 @@ def main():
             "language cannot be read" % (args.lang, ", ".join(langs) or "none")
         )
 
-    for pno in parse_pages(args.pages, len(doc)):
+    pages = parse_pages(args.pages, len(doc))
+
+    # Does this file carry ligature glyphs at all? One extra pass to find out.
+    # A `None` answer skips the per-character work for the whole run, and even a
+    # positive answer only means the glyphs EXIST — whether any of them lost
+    # their letters is settled per span, by comparing the two extractions.
+    ligature_ref = plain_f_widths(doc, pages) or None
+    ligature_repairs = 0
+
+    for pno in pages:
         page = doc[pno]
-        native = blocks_from_text_layer(page)
+        native, repairs = blocks_from_text_layer(page, ligature_ref)
+        ligature_repairs += repairs
         native_chars = sum(len(b["text"]) for b in native)
 
         thin = native_chars < args.ocr_threshold
@@ -373,6 +572,16 @@ def main():
                 "image_count": len(page.get_images(full=True)),
                 "blocks": blocks,
             }
+        )
+
+    # Said out loud, with a count, because a silent repair is indistinguishable
+    # from no repair — and because the number is the thing worth watching. A
+    # file that suddenly needs 400 of these has changed how it is produced, and
+    # that is worth knowing before the drafting bill arrives.
+    if ligature_repairs:
+        result["warnings"].append(
+            "this file's font map returns ligatures as a bare 'f'; %d were measured "
+            "and restored from their glyph widths" % ligature_repairs
         )
 
     json.dump(result, sys.stdout, ensure_ascii=False)

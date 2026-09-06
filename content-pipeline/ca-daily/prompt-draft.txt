@@ -76,13 +76,61 @@ property that matters.
       Bare facts, one per line, no prose. The compact 'Label — value' shape:
       this is SCANNED at revision time, not read, and a label holds a fact in a
       third of the space a sentence takes.
+      GROUP THEM where the item has more than about six, using a '## Heading'
+      line — the blueprint notes' own shape, and the difference between a wall
+      of twelve pairs and three things a person can hold:
+
+        ## The Commission
+        Body — 12th Pay Revision Commission
+        Announced on — 5 September 2026
+        ## What was released
+        Dearness allowances cleared — 2 (due 1 Jul 2024, 1 Jan 2025)
+        Payable from — 1 October 2026
+
+      A heading is not a fact and does not count as one. Six or fewer facts need
+      no headings at all.
       What earns a line: a name with its post, a figure with its unit and date,
       a scheme with its ministry, a body with its parent Act and year, a first,
       a headquarters, a rank with its index and publisher.
       Be generous here. Every line is a question that can be written later, and
       a fact you leave out is a question that cannot be.",
 
-  "keywords": ["blueprint question angles — see the list supplied below"],
+  "keywords": ["blueprint question angles — see the list supplied below.
+      ONE spelling per angle. 'Elected', 'Election' and 'Elections' are one
+      angle, not three, and returning all of them spends three of an item's
+      slots saying the same thing."],
+
+  "angle_line": "HOW THE COMMISSION ASKS THIS, in the blueprint's own notation.
+      Not a topic and not a summary — the composed line a student reads to know
+      what shape the question will take.
+
+        Country — Agreement · Date · Quantity · FIRST
+        Body — Members · Article · Resolution — Year · Person elected
+        Post — Commission · Outlay · Effective date · FIRST
+
+      The punctuation carries meaning and is not decoration. An em dash joins a
+      PAIRING — the two halves a list-matching question puts in List-I and
+      List-II. A '·' separates independent facets, each of which could be asked
+      on its own. Write three to five facets, drawn from the angles you were
+      given and from what this item actually contains: do not promise 'FIRST'
+      unless the item names a first.",
+
+  "confusables": ["AT MOST THREE pairs a candidate would mix up, each written
+      'A vs B — the distinction, in one clause'. Examples of the form:
+
+        CEPA vs FTA — CEPA covers goods, services, investment and IPR; an FTA
+          mainly covers goods and tariffs.
+        OPEC vs OPEC+ — OPEC was founded 1960 at Baghdad by five members;
+          OPEC+ added ten non-OPEC exporters in 2016, led by Russia.
+
+      Both halves must be real and both must appear in, or be directly implied
+      by, this item. Do not invent a partner to pair against, and do not pair
+      two things nobody would confuse — 'India vs Pakistan' teaches nothing.
+
+      This is the single most useful field for question quality, because the
+      wrong half of a real pair is a distractor that is plausible AND clearly
+      wrong once the distinction is known. Return an empty array where the item
+      genuinely has no near-miss; a forced pair is worse than none."],
 
   "importance": 1 | 2 | 3,
       1 = recent, statutory, consequential, and falling between the last exam

@@ -402,6 +402,11 @@ const ITEM_FIELDS = [
   'static_linkage',
   'static_notes',
   'prelims_facts',
+  // The blueprint layer. `blueprint_tier` is NOT here: it is derived from the
+  // PYQ bank at draft time, and an editable copy of a derived value is a value
+  // that drifts from what derived it.
+  'angle_line',
+  'confusables',
   // The eight-section Group-I note template.
   'importance',
   'relevance_g2',
@@ -426,6 +431,8 @@ router.post('/items', (req, res) => {
     static_linkage: String(body.static_linkage || ''),
     static_notes: String(body.static_notes || ''),
     prelims_facts: String(body.prelims_facts || ''),
+    angle_line: String(body.angle_line || ''),
+    confusables: String(body.confusables || ''),
     importance: Number(body.importance) || 2,
     relevance_g2: body.relevance_g2 === 0 ? 0 : 1,
     needs_verify: body.needs_verify ? 1 : 0,
