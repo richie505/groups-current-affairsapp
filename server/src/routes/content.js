@@ -740,11 +740,36 @@ const foreignBlankIds = (ids) => {
 const CIRCULATION_DEFAULT = 12;
 const CIRCULATION_MAX = 40;
 
+/**
+ * How many topics the file carries. **0 means all of them.**
+ *
+ * `clamp` cannot express that: it returns the fallback for anything at or below
+ * zero, so `max=0` came back as 12 and there was no way to ask for the whole
+ * day. That was not theoretical — the 6 September digest had 25 topics against
+ * a dial that stopped at 20, so the last five could only be included by ticking
+ * them one at a time.
+ *
+ * `loadDigestData` has always read 0 as "no cap"; only this route stood in the
+ * way. Now it matches the questions dial, where 0 already means All, and the
+ * two controls finally mean the same thing by the same number.
+ *
+ * The 40-item ceiling still applies to an explicit number. It does NOT apply to
+ * "all": a day with 60 published items is a day somebody decided to publish 60
+ * items, and silently posting 40 of them would be the panel overruling that
+ * decision without saying so.
+ */
+function circulationMax(raw) {
+  if (raw === undefined || raw === null || raw === '') return CIRCULATION_DEFAULT;
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'all' || s === '0') return 0;
+  return clamp(raw, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
+}
+
 router.get('/days/:date/digest.pdf', (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required.' });
   }
-  const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
+  const max = circulationMax(req.query.max);
   const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 0, 10);
   const only = parseItemIds(req.query.items);
   const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });
@@ -811,7 +836,7 @@ router.get('/days/:date/digest-plan', (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required.' });
   }
-  const max = clamp(req.query.max, CIRCULATION_DEFAULT, 1, CIRCULATION_MAX);
+  const max = circulationMax(req.query.max);
   const qpi = clamp(req.query.questions, CIRCULATION_QUESTIONS_PER_ITEM, 0, 10);
   const only = parseItemIds(req.query.items);
   const data = loadDigestData(req.params.date, true, { max, questionsPerItem: qpi, only });

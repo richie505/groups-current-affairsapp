@@ -38,7 +38,17 @@ const BUCKET_CLASS = {
   dynamic: 'border-green-300 bg-green-100 text-green-800',
 };
 
-const ITEM_CHOICES = [8, 10, 12, 15, 20];
+// 0 IS "ALL", the same as it is on the questions dial beside it.
+//
+// The list used to stop at 20, which is fine on most days and wrong on the ones
+// that matter: the 6 September digest had 25 topics, so the last five could
+// only be included by ticking them one at a time. A dial whose largest setting
+// is smaller than the thing it measures is a dial that has to be worked around.
+//
+// The server already read 0 as "no cap" — `loadDigestData` has always done —
+// and only the route's clamp stood in the way. See circulationMax().
+const ITEM_CHOICES = [8, 10, 12, 15, 20, 0];
+const ITEM_LABEL = (n) => (n === 0 ? 'All' : String(n));
 // 0 IS "ALL", AND IT IS THE DEFAULT.
 //
 // The dial used to offer 2/3/4/6 with 4 preselected, and items carry up to ten
@@ -150,7 +160,13 @@ export default function CirculationPanel({ date, status }) {
       ) : null}
 
       <div className="mb-3 flex flex-wrap items-end gap-4">
-        <Dial label="Items" value={max} choices={ITEM_CHOICES} onChange={setDial(setMax)} />
+        <Dial
+          label="Items"
+          value={max}
+          choices={ITEM_CHOICES}
+          format={ITEM_LABEL}
+          onChange={setDial(setMax)}
+        />
         <Dial
           label="Questions each"
           value={perItem}
