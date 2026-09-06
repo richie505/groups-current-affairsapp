@@ -40,6 +40,39 @@ function leftovers(db, editionId) {
   const picked = new Set(
     SELECT.selectForDrafting(SELECT.candidateRows(db, editionId)).picked.map((r) => r.id)
   );
+
+  // WHERE TRIAGE HAS RUN, IT DEFINES THIS SET AND THE RULES BELOW DO NOT.
+  //
+  // A `partial` verdict means precisely what this pass exists for: not worth a
+  // note, plainly carries a fact. A `drop` means a model read it and found
+  // nothing, so it must not reach a lane that spends money on it.
+  //
+  // The syllabus-unit requirement below is dropped here for the same reason the
+  // drafting veto was: it was a proxy for a judgement, the judgement now exists,
+  // and on the first real edition the unit list covered 28% of the paper. Under
+  // the old rule the Pay Revision Commission and the Census schedule would have
+  // been neither drafted nor salvaged — thrown away by a vocabulary gap.
+  const triaged = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM np_articles
+        WHERE edition_id = ? AND status <> 'duplicate' AND triage_class <> ''`
+    )
+    .get(editionId).n;
+  if (triaged) {
+    return db
+      .prepare(
+        `SELECT a.id, a.headline, a.body, a.dateline, a.score, a.page
+           FROM np_articles a
+          WHERE a.edition_id = ?
+            AND a.item_id IS NULL
+            AND a.status <> 'duplicate'
+            AND a.triage_class NOT IN ('drop', '')
+          ORDER BY a.triage_score DESC, a.score DESC`
+      )
+      .all(editionId)
+      .filter((a) => !picked.has(a.id));
+  }
+
   // THE SAME NO-UNIT RULE THE DRAFTER APPLIES, FOR THE SAME REASON.
   //
   // selectForDrafting refuses an article that connects to no syllabus unit —

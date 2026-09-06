@@ -253,7 +253,30 @@ async function main() {
   // not a list of mistakes: it is the vocabulary's to-do list. Four of the ten
   // it currently rejects are genuinely examinable and unmatched only because
   // the syllabus map has a gap (a named Act, an inter-state water dispute).
-  if (selection) {
+  // The triage breakdown, printed whatever path chose the articles, because it
+  // is the honest account of what the edition yielded: what was written up in
+  // full, what was kept as bare facts, and — the number the old summary could
+  // not produce at all — what was let go and why.
+  const T = require(path.join(__dirname, '..', 'src', 'lib', 'triage'));
+  const triageCounts = T.counts(db, edition.id);
+  if (triageCounts.articles && !triageCounts.untriaged) {
+    say(`  triage: ${T.summaryLine(triageCounts)}`);
+  }
+
+  if (selection && selection.source === 'triage') {
+    const gaps = selection.picked.filter((r) => !r.units).length;
+    say(
+      `  selected by relevance triage: ${selection.picked.length} of ` +
+        `${selection.picked.length + selection.rejected.filter((r) => r.triage_class === 'partial').length}` +
+        ' kept articles go to full drafting; the rest become short entries.'
+    );
+    if (gaps) {
+      say(
+        `  ${gaps} of them match NO syllabus unit — examinable material the alias map ` +
+          'is missing. Worth adding, so they arrive matched next time.'
+      );
+    }
+  } else if (selection) {
     const anchored = selection.picked.filter((r) => r.units).length;
     say(
       `  selected adaptively: ${anchored} of ${selection.picked.length} feed a syllabus unit` +

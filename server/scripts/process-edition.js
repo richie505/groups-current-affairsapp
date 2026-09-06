@@ -46,6 +46,41 @@ try {
     `[edition ${id}] done: ${r.articles} articles, ${r.events} events, ` +
     `${r.merged} merged, ${r.pagesOcr} pages OCR'd, ${r.skipped} pages skipped`
   );
+
+  // RELEVANCE TRIAGE FOLLOWS, AUTOMATICALLY.
+  //
+  // Chained here rather than from the route, for the reason drafting chains
+  // salvage: a step that only runs when a particular caller remembers to ask is
+  // a step that stops running. However an edition was processed — the admin
+  // button, this command line, a future cron — it arrives already classified.
+  //
+  // This is the first model spend in the app that begins without somebody
+  // pressing a button for it, and that is a deliberate change of policy rather
+  // than an oversight. It is defensible because of the shape of the bill: seven
+  // cheap calls read the whole edition, and what they buy is not drafting
+  // anything, it is knowing what NOT to draft. The pass it replaces sent every
+  // article with a syllabus unit to the salvage lane at a call apiece.
+  //
+  // Detached and unref'd so this process can exit now. The triage worker owns
+  // its own run row and closes it however it dies; the articles are on disk and
+  // are unaffected either way.
+  if (!process.argv.includes('--no-triage')) {
+    try {
+      const { spawn } = require('child_process');
+      const child = spawn(
+        process.execPath,
+        [path.join(__dirname, 'triage-edition.js'), String(id)],
+        { detached: true, stdio: 'ignore', cwd: path.join(__dirname, '..', '..') }
+      );
+      child.unref();
+      console.log(`[edition ${id}] relevance triage started (--no-triage to skip).`);
+    } catch (e) {
+      // Worth a line, not worth failing the extraction for. The articles are
+      // stored; triage can be started again from the edition screen.
+      console.error(`[edition ${id}] could not start triage: ${e.message}`);
+    }
+  }
+
   process.exit(0);
 } catch (e) {
   // processEdition has already recorded 'failed' and the message on the row, so
