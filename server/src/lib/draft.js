@@ -50,6 +50,7 @@ const PIPELINE = path.join(ROOT, 'content-pipeline', 'ca-daily');
 const L = require(path.join(PIPELINE, 'lib'));
 const G = require(path.join(ROOT, 'content-pipeline', 'np-daily', 'genre'));
 const Q = require('./mcqQuality');
+const BP = require('./blueprint');
 
 // ---------------------------------------------------------------------------
 // the model input
@@ -901,15 +902,18 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       `INSERT INTO ca_items (day_id, headline, event_date, bucket, subject_tag,
          notes_markdown, static_linkage, static_notes, prelims_facts,
          importance, relevance_g2, needs_verify, verify_note, hook, recap,
+         angle_line, blueprint_tier, confusables,
          source_genre, source_author, order_index, salvaged, status)
        VALUES (@day_id, @headline, @event_date, @bucket, @subject_tag,
          @notes_markdown, @static_linkage, @static_notes, @prelims_facts,
          @importance, @relevance_g2, @needs_verify, @verify_note, @hook, @recap,
+         @angle_line, @blueprint_tier, @confusables,
          @source_genre, @source_author, @order_index, @salvaged, 'draft')`
     );
     const insKeyword = db.prepare(
       'INSERT OR IGNORE INTO ca_item_keywords (item_id, keyword) VALUES (?, ?)'
     );
+    const setTier = db.prepare('UPDATE ca_items SET blueprint_tier = ? WHERE id = ?');
     const insUnit = db.prepare(
       'INSERT OR IGNORE INTO ca_item_units (item_id, unit_code) VALUES (?, ?)'
     );
@@ -980,6 +984,13 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
         recap: Array.isArray(r.recap)
           ? r.recap.map((x) => String(x).trim()).filter(Boolean).slice(0, 3).join('\n')
           : String(r.recap || '').trim(),
+        // THE BLUEPRINT LAYER. `angle_line` and `confusables` are the model's;
+        // the tier is not asked for and is derived below from the PYQ bank,
+        // because "how hard is this angle pressed" is a fact about the bank and
+        // not an opinion anybody should be invited to hold.
+        angle_line: BP.normaliseAngleLine(r.angle_line),
+        confusables: BP.formatConfusables(r.confusables),
+        blueprint_tier: '',
         notes_markdown: r.notes_markdown || '',
         static_linkage: r.static_linkage || '',
         static_notes: r.static_notes || '',
@@ -1021,12 +1032,25 @@ function insertDrafted(db, { date, drafted = [], discarded = [], onLog = () => {
       const itemId = info.lastInsertRowid;
       itemIds.push(itemId);
 
+      // DEDUPED FIRST. The tagger returned `Elected | Election | Elections |
+      // NOTA | System` on one item — three spellings of one angle taking three
+      // of its five slots, which reads as three separate reasons the item is
+      // examinable when there is one.
+      const canonKeywords = [];
       for (const k of r.keywords || []) {
         const kw = keywordOf(k) || unbracket(codeOf(k));
         if (!kw) continue;
-        insKeyword.run(itemId, kw);
+        canonKeywords.push(kw);
         if (!refKeywords.has(kw)) offVocabKeywords.add(kw);
       }
+      const angles = BP.dedupeAngles(canonKeywords, (kw) => BP.pressureOf(db, [kw]));
+      for (const kw of angles) insKeyword.run(itemId, kw);
+
+      // The tier, from the strongest angle the item carries. Written after the
+      // insert rather than inside it because it is a property of the angles,
+      // and the angles are only settled once they have been canonicalised
+      // against ref_keywords and deduped.
+      setTier.run(BP.tierOf(BP.pressureOf(db, angles)), itemId);
       // THE SYLLABUS UNITS, TAKEN FROM THE SCORER RATHER THAN FROM THE MODEL.
       //
       // Every paper this app serves is objective, and for those the syllabus
@@ -1396,6 +1420,24 @@ async function generateMcqs(
     `KEYWORD ANGLES: ${(record.keywords || []).join(', ')}`,
     `FACTS TRUE AS OF: ${record.event_date || fallbackDate}`,
   ];
+
+  // THE ANGLE LINE, WHICH SAYS WHAT SHAPE THE QUESTION TAKES.
+  //
+  // The keyword angles above name WHAT is tested; this names HOW — an em dash
+  // marks the pairing a list-matching question is built from, and each '·'
+  // separates a facet that could be asked on its own. Handed to the writer
+  // because it is the difference between a question about the item and a
+  // question in the paper's own shape.
+  if (record.angle_line) {
+    lines.push('', `HOW THE COMMISSION ASKS THIS ANGLE: ${record.angle_line}`);
+  }
+
+  // The confusables, as distractor material. This is the field that most
+  // improves question quality: "real but wrong" is what the brief asks for and
+  // what a model inventing options keeps failing to produce, and the wrong half
+  // of a genuine pair is real but wrong by construction.
+  const distractors = BP.distractorBrief(BP.formatConfusables(record.confusables));
+  if (distractors) lines.push('', distractors);
 
   if (units.length) {
     lines.push(

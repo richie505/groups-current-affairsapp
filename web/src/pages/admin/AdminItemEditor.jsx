@@ -27,6 +27,11 @@ const BLANK = {
   // up — so the pipeline was writing six populated sections that no screen in
   // the app could display or edit. On a 28-item run that was roughly 2,250
   // characters per item of drafted content, invisible.
+  // The blueprint layer. `blueprint_tier` is deliberately absent: it is derived
+  // from the PYQ bank at draft time, and an editable copy of a derived value is
+  // a value that drifts from the thing that derived it.
+  angle_line: '',
+  confusables: '',
   importance: 2,
   relevance_g2: 1,
   needs_verify: 0,
@@ -146,6 +151,11 @@ function ItemRow({ item, meta, onEdit, onChanged, anchorId }) {
           {BUCKETS[item.bucket]?.label || item.bucket}
         </Chip>
         <Chip className="border-slate-300 bg-slate-100 text-slate-700">Tier {item.importance}</Chip>
+        {item.blueprint_tier ? (
+          <Chip className="border-brand-200 bg-brand-50 text-brand-700">
+            Blueprint {item.blueprint_tier}
+          </Chip>
+        ) : null}
         <span className="ml-auto text-xs text-slate-500">
           {item.mcqs.length} question{item.mcqs.length === 1 ? '' : 's'}
         </span>
@@ -383,9 +393,41 @@ function ItemForm({ initial, dayId, meta, onDone, onCancel }) {
             className={input}
           />
         </label>
+        <label className="mb-3 block">
+          <span className={label}>Angles — how the commission asks this</span>
+          <input
+            value={form.angle_line}
+            onChange={(e) => set('angle_line', e.target.value)}
+            placeholder="Post — Commission · Outlay · Effective date · FIRST"
+            className={`${input} font-mono text-xs`}
+          />
+          {/* The punctuation is load-bearing, so it is explained where it is
+              typed rather than only in the drafting prompt. */}
+          <span className="mt-1 block text-xs text-slate-500">
+            An em dash joins the pairing a list-matching question is built from; each
+            &ldquo;·&rdquo; separates a facet that could be asked on its own.
+          </span>
+        </label>
+
+        <label className="mb-3 block">
+          <span className={label}>Confusables — one pair per line</span>
+          <textarea
+            rows={3}
+            value={form.confusables}
+            onChange={(e) => set('confusables', e.target.value)}
+            placeholder={'CEPA vs FTA — CEPA covers goods, services, investment and IPR; an FTA mainly covers goods.'}
+            className={input}
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            The near-misses worth knowing — and the best distractors there are, because the
+            wrong half of a real pair is plausible and clearly wrong once the distinction is
+            known. These are handed to the question writer.
+          </span>
+        </label>
+
         <TagPicker
           label="Question angles"
-          hint="How APPSC would actually test this. Check the Current Affairs list first, then the home subject."
+          hint="How APPSC would actually test this. Check the Current Affairs list first, then the home subject. One spelling per angle — Election and Elections are one angle, not two."
           options={meta.keywords.map((k) => ({ value: k.keyword, group: k.subject }))}
           selected={form.keywords}
           onChange={(v) => set('keywords', v)}

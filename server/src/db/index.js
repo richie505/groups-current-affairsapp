@@ -162,6 +162,35 @@ db.exec(schema);
       // — see server/scripts/export-compendium-json.js.
       ['hook', 'TEXT'],
       ['recap', 'TEXT'],
+
+      // ---- the blueprint-notes shape ------------------------------------
+      //
+      // The static subjects in this project are revised from blueprint notes,
+      // where a cell is a named question angle, an ANGLES line saying how the
+      // commission asks it, a tier by how hard that angle is pressed, facts
+      // grouped under headings, and the pairs a candidate confuses.
+      //
+      // A newspaper item already carried half of that — the angles are tagged
+      // from ref_keywords and the facts are bolded — and none of the rest, so
+      // a day's current affairs revised as a different kind of object from the
+      // standing material sitting next to it.
+      //
+      // `angle_line` is the composed line: "Post — Commission · Outlay · Date ·
+      // FIRST". The app has always stored the angle NAMES; it never composed
+      // the line that tells a student what shape the question takes.
+      ['angle_line', "TEXT NOT NULL DEFAULT ''"],
+      // CORE | HIGH | MED | '' — derived, free, from the PYQ bank. Distinct
+      // from `importance`, which is about recency and consequence: an item can
+      // be Tier 1 by importance and MED by blueprint pressure, and those are
+      // two different reasons to revise it. '' means the angles are UNTESTED
+      // rather than weakly tested, which on new material is often correct.
+      ['blueprint_tier', "TEXT NOT NULL DEFAULT ''"],
+      // "CEPA vs FTA — CEPA covers goods, services, investment and IPR", one
+      // per line. A revision aid in the blueprint notes, and here also the best
+      // distractor source there is: the wrong half of a real pair is plausible
+      // and clearly wrong, which is exactly what the MCQ brief asks for and
+      // what a model inventing distractors keeps failing to produce.
+      ['confusables', "TEXT NOT NULL DEFAULT ''"],
       // A FACT SALVAGED FROM AN ARTICLE THAT WAS NOT ITSELF EXAMINABLE.
       //
       // "Adani calls on Karnataka CM" is a routine political statement and the

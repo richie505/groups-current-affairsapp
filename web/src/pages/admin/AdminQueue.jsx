@@ -232,6 +232,23 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
         <BucketBadge bucket={item.bucket} />
         <ImportanceBadge importance={item.importance} />
         <GenreBadge genre={item.source_genre} author={item.source_author} />
+        {/* How hard the commission presses this item's strongest angle, from
+            the PYQ bank. Distinct from the tier badge beside it, which is about
+            recency and consequence — an item can be Tier 1 and blueprint-MED,
+            and those are two different reasons to revise it. */}
+        {item.blueprint_tier ? (
+          <Chip
+            className={
+              item.blueprint_tier === 'CORE'
+                ? 'border-brand-400 bg-brand-100 text-brand-800'
+                : item.blueprint_tier === 'HIGH'
+                  ? 'border-brand-200 bg-brand-50 text-brand-700'
+                  : 'border-slate-300 bg-slate-100 text-slate-600'
+            }
+          >
+            Blueprint {item.blueprint_tier}
+          </Chip>
+        ) : null}
         {item.needs_verify ? (
           <Chip className="border-amber-400 bg-amber-100 text-amber-900">⚠ Needs verify</Chip>
         ) : null}
@@ -244,6 +261,16 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
       </div>
 
       <h3 className="mb-1 font-semibold leading-snug text-slate-900">{item.headline}</h3>
+
+      {/* HOW the commission asks this, in the blueprint notes' own notation.
+          An em dash joins the pairing a list-matching question is built from;
+          each '·' is a facet that could be asked on its own. */}
+      {item.angle_line ? (
+        <p className="mb-2 text-xs text-brand-800">
+          <span className="font-semibold uppercase tracking-wide">Angles</span>{' '}
+          <span className="font-mono">{item.angle_line}</span>
+        </p>
+      ) : null}
 
       {/* This draft is a redraft of an item a student can ALREADY read. Shown
           on the card rather than only in the publish dialog, because the
@@ -357,6 +384,23 @@ function QueueItem({ item, busy, onPublish, onDiscard, defaultOpen = true }) {
               <div className="prose-notes text-sm">
                 <Markdown>{item.static_notes}</Markdown>
               </div>
+            </div>
+          ) : null}
+          {item.confusables ? (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                Confusables — the near-misses, and the distractors written from them
+              </p>
+              <ul className="mt-0.5 space-y-0.5 text-sm text-slate-700">
+                {String(item.confusables)
+                  .split(/\r?\n/)
+                  .filter(Boolean)
+                  .map((line) => (
+                    <li key={line}>
+                      <RichText>{line}</RichText>
+                    </li>
+                  ))}
+              </ul>
             </div>
           ) : null}
           {item.prelims_facts ? (

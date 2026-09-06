@@ -1688,6 +1688,132 @@ check('an empty digest renders rather than throwing', mdEmpty.includes('no publi
 }
 
 
+
+// ---------------------------------------------------------------------------
+// the blueprint-notes layer — server/src/lib/blueprint.js
+// ---------------------------------------------------------------------------
+//
+// A drafted item is meant to be the same object as a blueprint-notes cell: a
+// named angle, the composed ANGLES line, a tier by PYQ pressure, grouped facts,
+// and the pairs a candidate confuses.
+{
+  const BP = require(path.join(__dirname, '..', 'src', 'lib', 'blueprint'));
+
+  // THE CUTS ARE OUR PERCENTILES, NOT THE BLUEPRINT'S INTEGERS. Their cells
+  // score 20-35 because a cell is a broad theme over a curated pool; our angles
+  // are finer-grained, so at their CORE >= 20 exactly 2 of 129 stored items
+  // qualify and the tier sorts nothing.
+  check('CORE starts at the p90 of our angle distribution', BP.TIER_CUTS.CORE === 7);
+  check('a heavily-tested angle is CORE', BP.tierOf(52) === 'CORE' && BP.tierOf(7) === 'CORE');
+  check('a middling one is HIGH', BP.tierOf(6) === 'HIGH' && BP.tierOf(3) === 'HIGH');
+  check('a lightly-tested one is MED', BP.tierOf(2) === 'MED' && BP.tierOf(1) === 'MED');
+  // An angle the commission has never asked is UNTESTED, not weakly tested —
+  // and on new current-affairs material that is often correct rather than
+  // damning. Collapsing the two would hide the distinction.
+  check('an untested angle gets no tier at all', BP.tierOf(0) === '' && BP.tierOf(null) === '');
+
+  // The tagger returned `Elected | Election | Elections | NOTA | System` on one
+  // item — three spellings of one angle taking three of its five slots.
+  const deduped = BP.dedupeAngles(['Elected', 'Election', 'Elections', 'NOTA', 'System']);
+  check('three spellings of one angle collapse to one', deduped.length === 3);
+  check('and the unrelated angles survive', deduped.includes('NOTA') && deduped.includes('System'));
+  check(
+    'the most-tested spelling wins',
+    BP.dedupeAngles(['Elections', 'Election'], (k) => (k === 'Elections' ? 9 : 1))[0] === 'Elections'
+  );
+  // "Local Self Government" and "Government" are not the same angle, and no
+  // stemmer should be allowed to say they are.
+  check(
+    'multi-word angles are never merged',
+    BP.dedupeAngles(['Local Self Government', 'Government']).length === 2
+  );
+  check('Scheme and Schemes are one angle', BP.dedupeAngles(['Scheme', 'Schemes']).length === 1);
+
+  // The punctuation is load-bearing: an em dash marks the pairing a
+  // list-matching question is built from, a '·' separates independent facets.
+  check(
+    'the ANGLES prefix is stripped',
+    BP.normaliseAngleLine('ANGLES: Country — Agreement · Date') === 'Country — Agreement · Date'
+  );
+  check(
+    'pipes and semicolons become facet separators',
+    BP.normaliseAngleLine('Country — Agreement | Date; FIRST') === 'Country — Agreement · Date · FIRST'
+  );
+  check(
+    'a hyphen pairing becomes an em dash',
+    BP.normaliseAngleLine('Post - Commission · Outlay') === 'Post — Commission · Outlay'
+  );
+  check('a trailing separator is trimmed', BP.normaliseAngleLine('Body — Members · ') === 'Body — Members');
+  check('an empty line stays empty', BP.normaliseAngleLine('') === '' && BP.normaliseAngleLine(null) === '');
+
+  const conf = BP.parseConfusables(
+    'CEPA vs FTA — CEPA covers goods, services, investment and IPR\nOPEC vs OPEC+ — OPEC was founded 1960'
+  );
+  check('confusables split into pair and point', conf.length === 2 && conf[0].pair === 'CEPA vs FTA');
+  check('the point survives whole', /investment and IPR/.test(conf[0].point));
+  check('a bullet marker is stripped', BP.parseConfusables('- A vs B — x')[0].pair === 'A vs B');
+  check('a plain hyphen separates too', BP.parseConfusables('A vs B - the point')[0].point === 'the point');
+  check('a pair with no point is still a pair', BP.parseConfusables('A vs B')[0].pair === 'A vs B');
+
+  // Three is a revision aid; ten is a second note.
+  check(
+    'confusables are capped at three',
+    BP.formatConfusables(['a — 1', 'b — 2', 'c — 3', 'd — 4']).split(/\r?\n/).length === 3
+  );
+  check(
+    'the object form the model returns is accepted',
+    BP.formatConfusables([{ pair: 'CEPA vs FTA', point: 'scope differs' }]) === 'CEPA vs FTA — scope differs'
+  );
+  check('an empty value formats to an empty string', BP.formatConfusables([]) === '' && BP.formatConfusables(null) === '');
+
+  // The whole reason confusables are worth storing twice over: they are the
+  // best distractor material there is.
+  const brief = BP.distractorBrief('CEPA vs FTA — scope differs');
+  check('the distractor brief names the pair', /CEPA vs FTA/.test(brief));
+  check('and says why it is being handed over', /distractor/i.test(brief));
+  check('no confusables means no brief at all', BP.distractorBrief('') === '');
+
+  // Pressure is the MAXIMUM across an item's angles, never the sum: the
+  // question is "how likely is this to be asked", which the strongest angle
+  // decides, not how many weak ones the item collected.
+  //
+  // Against a stub rather than the scratch database. The scratch file has no
+  // PYQ bank, seeding one means satisfying a foreign key into pyq_questions,
+  // and a test that asserts "Scheme has more than zero" would be a test of what
+  // happens to sit in a table rather than of the function.
+  const bank = { Scheme: 9, Committee: 2 };
+  const fakeDb = {
+    prepare: () => ({
+      get: (...args) => {
+        const hits = args
+          .map((k) => ({ keyword: k, n: bank[k] || 0 }))
+          .filter((r) => r.n > 0)
+          .sort((a, b) => b.n - a.n);
+        return hits[0];
+      },
+    }),
+  };
+
+  check('pressure is the strongest angle, not the total', BP.pressureOf(fakeDb, ['Scheme', 'Committee']) === 9);
+  check('the weaker angle alone gives its own count', BP.pressureOf(fakeDb, ['Committee']) === 2);
+  check('an item with no angles has no pressure', BP.pressureOf(fakeDb, []) === 0);
+  check('an angle nobody has asked has none either', BP.pressureOf(fakeDb, ['Nonesuch']) === 0);
+  check(
+    'and the tier follows from it',
+    BP.tierOf(BP.pressureOf(fakeDb, ['Scheme', 'Committee'])) === 'CORE' &&
+      BP.tierOf(BP.pressureOf(fakeDb, ['Committee'])) === 'MED'
+  );
+  // An install with no PYQ bank at all must get no tier, not an exception.
+  check(
+    'a missing PYQ bank leaves the tier empty rather than throwing',
+    BP.pressureOf(
+      { prepare: () => { throw new Error('no such table: pyq_question_keywords'); } },
+      ['Scheme']
+    ) === 0
+  );
+}
+
+
 Promise.all(pending)
   .catch((e) => {
     console.error('an asynchronous check threw:', e);
