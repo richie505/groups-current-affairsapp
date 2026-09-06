@@ -223,6 +223,50 @@ export default function CirculationPanel({ date, status }) {
             </div>
           ) : null}
 
+          {/* WHICH EXAM SUBJECTS THE DAY REACHED, AND WHICH IT DID NOT.
+              The bucket warning above catches a missing REGION; this catches a
+              missing SUBJECT, which is the thing somebody reads the index and
+              notices — the 6 September file printed six sections and nothing
+              said History and Society were absent.
+
+              Not an alarm. Measured over 490 articles in five editions, the
+              paper carried exactly one genuine heritage feature, and the mapper
+              caught it and drafted it: history is a static subject and a daily
+              paper rarely touches it. So an empty section is usually the honest
+              answer, and what this does is make it a stated fact and separate
+              the two causes — nothing drafted, which no dial can fix, from
+              drafted and not selected, which this screen can. */}
+          {plan.section_coverage?.some((c) => c.in_digest === 0) ? (
+            <div className="mb-3 rounded-md border border-slate-200 bg-surface p-2.5">
+              <p className="text-[11px] font-semibold text-slate-800">
+                {plan.section_coverage.filter((c) => c.in_digest > 0).length} of{' '}
+                {plan.section_coverage.length} exam sections in this file
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {plan.section_coverage
+                  .filter((c) => c.in_digest === 0)
+                  .map((c) => (
+                    <li key={c.key} className="text-[11px] text-slate-600">
+                      <span className="font-mono text-slate-400">{c.numeral}</span>{' '}
+                      <span className="text-slate-700">{c.title}</span> —{' '}
+                      {c.in_day > 0 ? (
+                        <span className="font-semibold text-amber-800">
+                          {c.in_day} in the day but not in the file; raise the item count or tick
+                          one below
+                        </span>
+                      ) : (
+                        <span>nothing in today&rsquo;s paper</span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-1 text-[10px] text-slate-500">
+                An absent section is not padded into the file. A heading with nothing under it
+                tells a student the day covered more than it did.
+              </p>
+            </div>
+          ) : null}
+
           {/* ---- the running order, exactly as the file will have it ---- */}
           <div className="mb-3 space-y-3">
             {(() => {

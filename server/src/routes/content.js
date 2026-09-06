@@ -908,6 +908,66 @@ router.get('/days/:date/digest-plan', (req, res) => {
         )
         .get(day.id, bucket).n,
     })),
+    // THE SAME QUESTION, ASKED OF THE EIGHT EXAM SECTIONS.
+    //
+    // The bucket coverage above catches a missing REGION. It cannot catch a
+    // missing SUBJECT, and that is the gap somebody reads the index and
+    // notices: the 6 September file printed six sections and nothing said that
+    // History, Art & Culture and Society were absent.
+    //
+    // Absent is often correct. Measured across 490 articles in five editions,
+    // the paper carried exactly one genuine heritage feature — "Beyond the
+    // walls of Siddhavatam Fort" — which the mapper matched to five culture
+    // units and drafted. History is a static subject and a daily newspaper
+    // rarely touches it. So this is NOT a warning that something is broken.
+    //
+    // What it is for is making the absence a stated fact rather than an
+    // unnoticed one, and separating the two causes the way the bucket report
+    // already does: nothing drafted, versus drafted and not selected. The
+    // second is fixable from this screen; the first is not fixable at all on a
+    // day the paper had no such story, and knowing which is which is the whole
+    // value.
+    //
+    // Deliberately NOT padded into the file. A section heading with nothing
+    // under it is padding, and a compendium that prints eight headings for six
+    // subjects tells a student the day covered more than it did.
+    section_coverage: (() => {
+      const inDigest = new Map();
+      for (const s of groupIntoSections(items)) inDigest.set(s.title, s.items.length);
+
+      // Every item in the DAY with its units, so an absent section can say
+      // whether the material exists and was not selected, or does not exist.
+      // One query with the units rolled up rather than one per item: a day is
+      // sixty rows and this runs on every keystroke of the item dial.
+      const dayItems = db
+        .prepare(
+          `SELECT i.id, i.salvaged,
+                  (SELECT GROUP_CONCAT(iu.unit_code) FROM ca_item_units iu
+                    WHERE iu.item_id = i.id) AS unit_codes
+             FROM ca_items i
+            WHERE i.day_id = ?
+              AND i.status IN (${draft ? "'draft', 'published'" : "'published'"})`
+        )
+        .all(day.id);
+      const inDay = new Map();
+      for (const row of dayItems) {
+        const key = sectionOf({
+          units: String(row.unit_codes || '').split(',').filter(Boolean),
+          salvaged: row.salvaged,
+        });
+        const section = SECTIONS.find((s) => s.key === key);
+        if (!section) continue;
+        inDay.set(section.title, (inDay.get(section.title) || 0) + 1);
+      }
+
+      return SECTIONS.map((s) => ({
+        key: s.key,
+        numeral: s.numeral,
+        title: s.title,
+        in_digest: inDigest.get(s.title) || 0,
+        in_day: inDay.get(s.title) || 0,
+      }));
+    })(),
     // Grouped the way the FILE will group them, not the way the app does.
     // The panel is a preview, and a preview that shows a different running
     // order from the document is worse than no preview.
