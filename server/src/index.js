@@ -244,6 +244,12 @@ app.use(
     },
   })
 );
+// An API path nothing claimed. Answered in JSON, because every API client
+// here parses the body as JSON and Express's stock HTML "Cannot GET" turns a
+// typo in a route into a parse error two layers away from the cause.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `No such route: ${req.method} ${req.originalUrl.split('?')[0]}` });
+});
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return next();
   res.sendFile(path.join(webDist, 'index.html'), (err) => {
